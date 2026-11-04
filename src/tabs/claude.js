@@ -943,7 +943,9 @@ const ClaudeFeatures = {
     },
 
     // × once arms it ("Remove?" for 3 s), a second click runs `action`.
-    _armOrRun(btn, action) {
+    // `label` / `icon`: the armed text and the icon it goes back to (the Dev
+    // tab's stop buttons use them).
+    _armOrRun(btn, action, { label = 'Remove?', icon = 'window-close-symbolic' } = {}) {
         let r = this._claude.rules;
         if (r.armed?.btn === btn) {
             this._disarmClaudeRule();
@@ -951,9 +953,9 @@ const ClaudeFeatures = {
             return;
         }
         this._disarmClaudeRule();
-        btn.set_child(new St.Label({ text: 'Remove?', y_align: Clutter.ActorAlign.CENTER }));
+        btn.set_child(new St.Label({ text: label, y_align: Clutter.ActorAlign.CENTER }));
         btn.add_style_class_name('nook-danger');
-        let armed = { btn, id: 0, sig: 0 };
+        let armed = { btn, id: 0, sig: 0, icon };
         armed.id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, CONFIRM_MS, () => {
             armed.id = 0;
             this._disarmClaudeRule();
@@ -978,7 +980,7 @@ const ClaudeFeatures = {
         if (a.id)
             GLib.Source.remove(a.id);
         a.btn.disconnect(a.sig);
-        a.btn.set_child(new St.Icon({ icon_name: 'window-close-symbolic', icon_size: 14 }));
+        a.btn.set_child(new St.Icon({ icon_name: a.icon, icon_size: 14 }));
         a.btn.remove_style_class_name('nook-danger');
     },
 

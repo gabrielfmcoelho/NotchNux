@@ -153,6 +153,55 @@ export class CrashTracker {
     }
 }
 
+// ---- Ports ----
+
+// Bound to this computer only (vs. every interface / the network).
+const isLocalHost = host => /^(127\.|\[?::1\]?$|localhost$)/.test(host);
+
+// `ss -ltnpH` → [{ port, local, name, pid }], one per port and process
+// (IPv4 and IPv6 bindings merged; local only if every binding is). Sockets
+// of other users (root's docker-proxy, cups) come without name or pid.
+export function parseSs(text) {
+    let out = new Map();
+    for (let line of String(text ?? '').split('\n')) {
+        let cols = line.trim().split(/\s+/);
+        if (cols[0] !== 'LISTEN' || cols.length < 5)
+            continue;
+        let m = cols[3].match(/^(.*):(\d+)$/);
+        if (!m)
+            continue;
+        let host = m[1].replace(/%.*$/, '');   // 127.0.0.53%lo
+        let proc = line.match(/users:\(\("((?:[^"\\]|\\.)*)",pid=(\d+)/);
+        let row = { port: Number(m[2]), local: isLocalHost(host), name: proc?.[1] ?? '', pid: proc ? Number(proc[2]) : null };
+        let key = `${row.port}/${row.pid}`;
+        let prev = out.get(key);
+        out.set(key, prev ? { ...prev, local: prev.local && row.local } : row);
+    }
+    return [...out.values()].sort((a, b) => a.port - b.port);
+}
+
+// What the Ports view lists: this user's processes, and Docker's published
+// ports (root's docker-proxy, so no process: matched by port to the
+// container) → { rows: [{ port, local, name, pid, container }], hidden }.
+export function portRows(sockets, containers = []) {
+    let published = new Map();
+    for (let c of containers.filter(c => c.state === 'running')) {
+        for (let p of c.ports.filter(p => p.proto === 'tcp'))
+            published.set(p.port, { c, local: p.local });
+    }
+    let rows = [], hidden = 0;
+    for (let s of sockets) {
+        let pub = s.pid === null ? published.get(s.port) : null;
+        if (s.pid !== null)
+            rows.push({ ...s, container: null });
+        else if (pub && !rows.some(r => r.container === pub.c.name && r.port === s.port))
+            rows.push({ port: s.port, local: pub.local, name: pub.c.name, pid: null, container: pub.c.name });
+        else if (!pub)
+            hidden++;
+    }
+    return { rows, hidden };
+}
+
 // What a failed docker command said, in a line.
 export function dockerError(r) {
     if (!r.started)
