@@ -25,7 +25,7 @@ import St from 'gi://St';
 
 import { run, killAll, watchRecords, findProgram } from '../helpers/proc.js';
 import {
-    terminalArgv, parseDockerPs, visibleContainers, groupByProject, parseDockerEvent, CrashTracker, dockerError,
+    terminalLaunch, parseDockerPs, visibleContainers, groupByProject, parseDockerEvent, CrashTracker, dockerError,
     parseSs, portRows, findRepos, parseGitStatus,
 } from '../helpers/dev.js';
 import { claudeBinary } from '../helpers/claude.js';
@@ -620,19 +620,44 @@ const DevFeatures = {
 
     // ================================================================ launching
 
-    // Open the default terminal in `dir` running `cmd`.
+    // Open the terminal picked in Preferences in `dir` running `cmd`.
     _openTerminal(dir, cmd = [], opts = {}) {
-        let argv = terminalArgv(dir, cmd, opts);
-        if (!argv) {
+        let how = terminalLaunch(this._config.devTerminal, dir, cmd, opts);
+        if (!how) {
             logError('No terminal launcher (xdg-terminal-exec) found');
             return;
         }
         this._collapseImmediately();
-        try {
-            Gio.Subprocess.new(argv, Gio.SubprocessFlags.NONE);
-        } catch (e) {
-            logError('Couldn’t open a terminal', e);
+        if (how.argv) {
+            try {
+                Gio.Subprocess.new(how.argv, Gio.SubprocessFlags.NONE);
+            } catch (e) {
+                logError('Couldn’t open a terminal', e);
+            }
+            return;
         }
+        if (!how.file) {
+            this._openUrl(how.uri);
+            return;
+        }
+        // Warp runs a command from a Tab Config file: write it, then open it.
+        let file = Gio.File.new_for_path(how.file);
+        try {
+            file.get_parent().make_directory_with_parents(null);
+        } catch (e) {
+            // already there
+        }
+        file.replace_contents_bytes_async(new GLib.Bytes(new TextEncoder().encode(how.text)), null, false,
+            Gio.FileCreateFlags.REPLACE_DESTINATION, null, (f, res) => {
+                try {
+                    f.replace_contents_finish(res);
+                } catch (e) {
+                    logError('Couldn’t write the Warp tab config', e);
+                    return;
+                }
+                if (!this._destroyed)
+                    this._openUrl(how.uri);
+            });
     },
 
     _openUrl(url) {

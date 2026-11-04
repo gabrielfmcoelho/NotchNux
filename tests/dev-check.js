@@ -2,7 +2,7 @@
 // Exits non-zero on the first failure.
 
 import {
-    terminalArgv, exitedRecently, parsePorts, parseDockerPs, visibleContainers, groupByProject, parseDockerEvent, CrashTracker,
+    terminalLaunch, TERMINALS, exitedRecently, parsePorts, parseDockerPs, visibleContainers, groupByProject, parseDockerEvent, CrashTracker,
     dockerError, parseSs, portRows, findRepos, parseGitStatus,
 } from '../src/helpers/dev.js';
 import GLib from 'gi://GLib';
@@ -20,10 +20,18 @@ const eq = (a, b, what) => ok(JSON.stringify(a) === JSON.stringify(b), `${what}:
 const cfg = obj => new ConfigStore({ contents: new TextEncoder().encode(JSON.stringify(obj)) });
 
 // ---- Terminal ----
-let t = terminalArgv('/tmp', ['docker', 'logs', '-f', 'x'], { hold: true });
-ok(t === null || (t[1] === '--dir=/tmp' && t[2] === '--hold' && t.slice(3).join(' ') === '-- docker logs -f x'), 'terminal argv');
-t = terminalArgv('/tmp');
-ok(t === null || t.length === 2, 'terminal with no command');
+let t = terminalLaunch('', '/tmp', ['docker', 'logs', '-f', 'x'], { hold: true });
+ok(t === null || (t.argv[1] === '--dir=/tmp' && t.argv[2] === '--hold' && t.argv.slice(3).join(' ') === '-- docker logs -f x'),
+    'system default: xdg-terminal-exec argv');
+t = terminalLaunch('', '/tmp');
+ok(t === null || t.argv.length === 2, 'system default with no command');
+eq(terminalLaunch('warp', '/home/me/My Projects/ação'), { uri: 'warp://action/new_tab?path=/home/me/My%20Projects/a%C3%A7%C3%A3o' },
+    'Warp, no command: a new tab in the folder');
+t = terminalLaunch('warp', '/home/me/it\'s "x"', ['docker', 'logs', '-f', 'api 1']);
+ok(t.uri === 'warp://tab_config/notchnux' && t.file.endsWith('/warp-terminal/tab_configs/notchnux.toml'), 'Warp, a command: a tab config');
+ok(t.text.includes('directory = "/home/me/it\'s \\"x\\""\n') && t.text.includes(`commands = [${JSON.stringify("docker logs -f 'api 1'")}]`),
+    `tab config quotes the folder and the command: ${t.text}`);
+eq(TERMINALS.map(x => x[0]), ['warp'], 'terminal ids');
 
 // ---- Ports ----
 eq(parsePorts('0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp, 8080/tcp'),
@@ -138,6 +146,8 @@ eq(dockerError({ started: true, err: 'Cannot connect to the Docker daemon at uni
 eq(dockerError({ started: true, err: '', timedOut: true }), 'Docker took too long', 'timeout');
 
 // ---- config ----
+eq([cfg({}).devTerminal, cfg({ devTerminal: 'warp' }).devTerminal, cfg({ devTerminal: 'xterm -e rm' }).devTerminal], ['', 'warp', ''],
+    'terminal: system default unless a known one');
 ok(!cfg({}).visibleTabs.includes('dev'), 'Dev tab is opt-in');
 ok(cfg({ tabs: { dev: true } }).visibleTabs.includes('dev'), 'Dev tab can be turned on');
 

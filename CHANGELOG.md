@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — pick the Dev tab's terminal (Warp)
+- Preferences → *Dev tab* → **Terminal**: the system default
+  (`xdg-terminal-exec`, named in the list) or **Warp**, when installed. The
+  Dev tab's terminal, logs and claude buttons open there. Warp takes no
+  command line, so a folder opens as a new tab (`warp://action/new_tab`),
+  and a command (`docker logs -f …`, `claude`) runs through a Tab Config
+  NotchNux writes to `~/.local/share/warp-terminal/tab_configs/notchnux.toml`
+  and opens with `warp://tab_config/notchnux`.
+
 ### Added — Dev tab: containers, ports and projects
 - A **Dev** tab (opt-in, Preferences → Tabs) with a **Containers** view:
   Docker containers grouped by compose project — running, restarting,

@@ -21,6 +21,7 @@ import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/
 
 import { ConfigStore, TAB_DEFS, FEATURE_DEFS, WALLPAPER_DEFAULTS, ENHANCE_AUTO, ENHANCE_RANGE, normalizeHex, BLUR_PRESETS, BLUR_RADIUS_RANGE, BLUR_DEFAULTS, MAX_PINNED } from './src/helpers/config.js';
 import { discoverHwmon, pickSensors, pickFan, fanUsable, SENSOR_KINDS, FAN_GUARD_C } from './src/helpers/sensors.js';
+import { TERMINALS } from './src/helpers/dev.js';
 import {
     SETTINGS_PATH, isConnected, connectStatusLine, disconnectStatusLine,
     isApproveConnected, connectApproveHook, disconnectApproveHook,
@@ -888,10 +889,30 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
     // ---- Dev tab: the folders Projects searches for git repos ----
     _addDevGroup(page, config, window) {
         const group = new Adw.PreferencesGroup({
-            title: 'Dev tab · Projects',
-            description: 'Turn on the Dev tab in Tabs. Projects lists the git repositories in these folders, up to 3 levels down, most recently used first.',
+            title: 'Dev tab',
+            description: 'Turn on the Dev tab in Tabs. Projects lists the git repositories in the folders below, up to 3 levels down, most recently used first.',
         });
         page.add(group);
+
+        // The terminal its buttons open (logs, a folder, claude).
+        let defaultName = 'system default';
+        try {
+            const [, out] = GLib.spawn_sync(null, ['xdg-terminal-exec', '--print-id'], null, GLib.SpawnFlags.SEARCH_PATH, null);
+            const id = new TextDecoder().decode(out).trim().split(':')[0];
+            defaultName = GioUnix.DesktopAppInfo.new(id)?.get_name() ?? defaultName;
+        } catch (e) {}
+        const terms = [['', `System default (${defaultName})`],
+            ...TERMINALS.filter(([, , desktop]) => GioUnix.DesktopAppInfo.new(desktop)).map(([id, name]) => [id, name])];
+        if (terms.length > 1) {
+            const termRow = new Adw.ComboRow({
+                title: 'Terminal',
+                subtitle: 'What the Dev tab’s terminal, logs and claude buttons open',
+                model: Gtk.StringList.new(terms.map(t => t[1])),
+                selected: Math.max(0, terms.findIndex(t => t[0] === config.devTerminal)),
+            });
+            termRow.connect('notify::selected', () => config.setDevTerminal(terms[termRow.selected]?.[0] ?? ''));
+            group.add(termRow);
+        }
         let rows = [];
         const fill = () => {
             rows.forEach(r => group.remove(r));

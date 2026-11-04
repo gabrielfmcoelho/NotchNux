@@ -1,6 +1,6 @@
-// The Dev tab's pure logic: Docker containers (and, later, ports and
-// projects). No actors here, so tests/dev-check.js runs it under plain
-// `gjs -m`.
+// The Dev tab's pure logic: the terminal it opens, Docker containers,
+// ports and projects. No actors here, so tests/dev-check.js runs it under
+// plain `gjs -m`.
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -9,14 +9,38 @@ import { findProgram } from './proc.js';
 
 // ---- Terminal ----
 
-// argv that opens the user's default terminal in `dir` running `cmd` (a
-// list), or null without xdg-terminal-exec. `hold` keeps the window open
-// after the command ends.
-export function terminalArgv(dir, cmd = [], { hold = false } = {}) {
+// Terminals the Dev tab can use besides the system default
+// (xdg-terminal-exec): [config id, name, desktop id]. Warp takes no
+// command line: a tab in a folder is a warp:// link, and a tab that runs a
+// command is a Tab Config file it opens by name.
+export const TERMINALS = [['warp', 'Warp', 'dev.warp.Warp.desktop']];
+const WARP_TAB = 'notchnux';
+
+// A word for a shell command line, quoted only when it needs to be (Warp
+// shows the command as typed).
+const shellWord = a => (/^[\w@%+=:,./-]+$/.test(a) ? a : GLib.shell_quote(a));
+
+// How to open `terminal` ('' = the system default, 'warp') in `dir` running
+// `cmd` (a list): { argv } to spawn, { uri } to open, or { uri, file, text }
+// (write `text` to `file`, then open `uri`); null without a way. `hold`
+// keeps an xdg-terminal-exec window open after the command ends (a Warp
+// tab stays anyway).
+export function terminalLaunch(terminal, dir, cmd = [], { hold = false } = {}) {
+    dir ||= GLib.get_home_dir();
+    if (terminal === 'warp') {
+        if (!cmd.length)
+            return { uri: `warp://action/new_tab?path=${GLib.Uri.escape_string(dir, '/', false)}` };
+        // A TOML basic string takes JSON's escapes.
+        let text = '# Written by NotchNux for the last terminal it opened in Warp; safe to delete.\n' +
+            'name = "NotchNux"\n\n[[panes]]\nid = "main"\ntype = "terminal"\n' +
+            `directory = ${JSON.stringify(dir)}\ncommands = [${JSON.stringify(cmd.map(shellWord).join(' '))}]\n`;
+        return { uri: `warp://tab_config/${WARP_TAB}`, text,
+            file: `${GLib.get_user_data_dir()}/warp-terminal/tab_configs/${WARP_TAB}.toml` };
+    }
     let bin = findProgram('xdg-terminal-exec');
     if (!bin)
         return null;
-    return [bin, `--dir=${dir || GLib.get_home_dir()}`, ...(hold ? ['--hold'] : []), ...(cmd.length ? ['--', ...cmd] : [])];
+    return { argv: [bin, `--dir=${dir}`, ...(hold ? ['--hold'] : []), ...(cmd.length ? ['--', ...cmd] : [])] };
 }
 
 // ---- Docker ----
