@@ -39,6 +39,7 @@ const RELOAD_S = { containers: 30, ports: 5, projects: 60 };   // re-read an ope
 const PROJECTS_SHOWN = 20;   // newest repos listed (and git-status'd)
 const GIT_JOBS = 4;          // git status runs at once
 const EVENT_DEBOUNCE_MS = 300;
+const WATCH_RETRY_MAX_S = 60;
 const ALERT_MS = 5000;
 const DOCKER_EVENTS = ['start', 'die', 'kill', 'stop', 'destroy'];
 const STATE_COLOR = { running: SYS.green, restarting: SYS.orange, paused: SYS.yellow };
@@ -53,8 +54,8 @@ const DevFeatures = {
             tabOpen: false,
             containers: { list: null, error: '', loading: false, at: 0 },
             ports: { list: null, error: '', loading: false, at: 0 },
-            projects: { list: null, status: new Map(), error: '', loading: false, at: 0 },
-            updateId: 0,
+            projects: { list: null, status: new Map(), error: '', loading: false, at: 0, gen: 0 },
+            updateId: 0, portsId: 0,
             busy: new Set(),       // container names with an action running
         };
         this._syncDevWatch();
@@ -64,7 +65,7 @@ const DevFeatures = {
         let d = this._dev;
         d.watch?.stop();
         d.watch = null;
-        for (let id of ['restartId', 'debounceId', 'updateId']) {
+        for (let id of ['restartId', 'debounceId', 'updateId', 'portsId']) {
             if (d[id])
                 GLib.Source.remove(d[id]);
             d[id] = 0;
@@ -89,11 +90,12 @@ const DevFeatures = {
                 if (d.watch !== watch)
                     return;
                 d.watch = null;
-                // Daemon restarted, or Docker unusable: a few tries, then give up.
-                if (d.restarts >= 5 || this._destroyed)
+                // Daemon restarted or stopped: retry soon, then every minute
+                // (a `docker events` that exits at once costs one spawn).
+                if (this._destroyed)
                     return;
                 d.restarts++;
-                d.restartId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 5 * d.restarts, () => {
+                d.restartId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, Math.min(5 * d.restarts, WATCH_RETRY_MAX_S), () => {
                     d.restartId = 0;
                     this._syncDevWatch();
                     return GLib.SOURCE_REMOVE;
@@ -122,8 +124,13 @@ const DevFeatures = {
                 color, title: alert.name, value: loop ? 'keeps restarting' : `exited (${alert.exitCode})`,
                 valueColor: color, ms: ALERT_MS, onClick: () => this._openDevView('containers') });
         }
-        // The open list follows (one re-read per burst of events).
-        if (!d.tabOpen || d.debounceId)
+        // The open list follows (one re-read per burst of events); a closed
+        // tab re-reads when it opens.
+        if (!d.tabOpen) {
+            d.containers.at = 0;
+            return;
+        }
+        if (d.debounceId)
             return;
         d.debounceId = GLib.timeout_add(GLib.PRIORITY_LOW, EVENT_DEBOUNCE_MS, () => {
             d.debounceId = 0;
@@ -461,9 +468,11 @@ const DevFeatures = {
             if (this._destroyed)
                 return;
             // Give it a moment to close its socket.
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
-                if (!this._destroyed)
-                    this._loadPorts();
+            if (d.portsId)
+                GLib.Source.remove(d.portsId);
+            d.portsId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+                d.portsId = 0;
+                this._loadPorts();
                 return GLib.SOURCE_REMOVE;
             });
         });
@@ -474,6 +483,7 @@ const DevFeatures = {
     // Preferences changed the folders: forget what was found.
     _onDevRootsChanged() {
         let st = this._dev.projects;
+        st.gen++;   // a scan still running is for the old folders
         Object.assign(st, { list: null, at: 0 });
         st.status.clear();
         if (this._dev.tabOpen && this._devView === 'projects')
@@ -486,6 +496,7 @@ const DevFeatures = {
         if (st.loading)
             return;
         st.loading = true;
+        let gen = st.gen;
         let roots = this._config.devProjectRoots;
         let list = [];
         try {
@@ -496,6 +507,11 @@ const DevFeatures = {
         st.loading = false;
         if (this._destroyed)
             return;
+        if (gen !== st.gen) {
+            if (this._dev.tabOpen && this._devView === 'projects')
+                this._loadProjects();
+            return;
+        }
         Object.assign(st, { list, at: Date.now() });
         this._updateDevTab();
         this._loadGitStatus(list.slice(0, PROJECTS_SHOWN));
@@ -503,6 +519,10 @@ const DevFeatures = {
 
     // `git status` for each shown repo, GIT_JOBS at a time. --no-optional-locks:
     // never take the index lock (a commit running in a terminal could fail).
+    // core.fsmonitor=false: a repo's own .git/config can name a program for
+    // git status to run; a folder nobody opened mustn't run anything.
+    // ponytail: clean/smudge filters a repo configures can still run on a
+    // stat-dirty file, as with any shell prompt that shows git status.
     _loadGitStatus(repos) {
         let d = this._dev;
         let git = findProgram('git');
@@ -513,7 +533,7 @@ const DevFeatures = {
             let r = queue.shift();
             if (!r || this._destroyed)
                 return;
-            run([git, '--no-optional-locks', '-C', r.path, 'status', '--porcelain=v2', '--branch'],
+            run([git, '--no-optional-locks', '-c', 'core.fsmonitor=false', '-C', r.path, 'status', '--porcelain=v2', '--branch'],
                 { timeoutS: 10, procs: d.procs }, res => {
                     if (this._destroyed)
                         return;

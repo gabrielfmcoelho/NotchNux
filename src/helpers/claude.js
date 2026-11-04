@@ -361,6 +361,23 @@ function oneLine(text) {
     return line.length > ACTIVITY_CHARS ? `${line.slice(0, ACTIVITY_CHARS - 1).trimEnd()}…` : line;
 }
 
+// A PreToolUse body too big to parse on the compositor thread (a Write of a
+// large file) → the few fields describeActivity needs, read from its start
+// (Claude Code puts session_id, tool_name and the file path before the
+// content). Missing ones stay undefined.
+export function activityFromPrefix(text) {
+    let get = key => text.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`))?.[1];
+    let unescape = s => {
+        try {
+            return s === undefined ? undefined : JSON.parse(`"${s}"`);
+        } catch (e) {
+            return undefined;
+        }
+    };
+    return { session_id: unescape(get('session_id')), tool_name: unescape(get('tool_name')),
+        tool_input: { file_path: unescape(get('file_path')), description: unescape(get('description')) } };
+}
+
 // A PreToolUse hook input → what the session is doing, in a few words:
 // "Run the tests" (Bash's own description), "Editing tray.js", "gestor ·
 // buscar_tarefas". Shown in the Claude tab only, never logged.

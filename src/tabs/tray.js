@@ -747,7 +747,10 @@ const TrayFeatures = {
             systemd(SYSTEMD[1], SYSTEMD[2], on ? 'StartUnit' : 'StopUnit', new GLib.Variant('(ss)', [FORTI_UNIT, 'replace']),
                 '(o)', Gio.DBusCallFlags.ALLOW_INTERACTIVE_AUTHORIZATION, 60000).then(
                 () => done(null),
-                e => done({ kind: 'other', line: Gio.DBusError.strip_remote_error(e) || e.message, url: null, suggest: null }));
+                e => {
+                    Gio.DBusError.strip_remote_error(e);   // edits e.message; returns a boolean
+                    done({ kind: 'other', line: e.message, url: null, suggest: null });
+                });
         }
     },
 
