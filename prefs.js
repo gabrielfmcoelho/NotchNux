@@ -772,7 +772,7 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         group.add(fanRow);
         const guardRow = new Adw.SwitchRow({ title: 'Back to Auto when hot', use_markup: false, active: config.fanGuard,
             visible: false,
-            subtitle: `A level you set goes back to Auto at ${FAN_GUARD_C} °C CPU, or when the CPU can’t be read. Off: it stays until you change it (the processor still slows itself down when it gets too hot).` });
+            subtitle: `A level you set goes back to Auto at ${FAN_GUARD_C} °C CPU, when the CPU can’t be read, and when the screen locks. Off: it stays until you change it, and comes back when you unlock or log in (the processor still slows itself down when it gets too hot). With the ThinkPad fan watchdog on, the fan still returns to Auto 2 minutes into a lock, until you unlock: run the fan setup with --no-watchdog to keep it then too.` });
         guardRow.connect('notify::active', () => config.setFanGuard(guardRow.active));
         group.add(guardRow);
 
@@ -795,7 +795,7 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
             copy.visible = !usable;
             guardRow.visible = usable;
             fanRow.subtitle = usable
-                ? 'Auto · Low · Med · High · Max · Off in Tray. Back to Auto when NotchNux stops or the screen locks.'
+                ? 'Auto · Low · Med · High · Max · Off in Tray.'
                 : `Locked until a one-time setup lets your user set the fan level. Run this in a terminal (the button copies it): ${setup}`;
         }).catch(e => {
             filling = false;

@@ -167,9 +167,9 @@ Then turn on **Fan control (beta)** in Preferences → *Temperatures & fan*. The
 
 - It adds a udev rule (`/etc/udev/rules.d/90-notchnux-fan.rules`) that gives your user the fan's `pwm` files, and nothing else.
 - On a ThinkPad it also turns on the firmware's fan watchdog: a manual level nobody re-sends for 2 minutes goes back to Auto (NotchNux re-sends it every minute). This applies to levels set any other way too, such as `echo level 0 > /proc/acpi/ibm/fan`. If `thinkpad_acpi` has fan control off, the script turns it on in `/etc/modprobe.d/notchnux-fan.conf` and asks for one reboot.
-- `--no-watchdog` sets up without the ThinkPad watchdog; `--remove` undoes everything.
+- `--no-watchdog` sets up without the ThinkPad watchdog (and turns it off if an earlier setup turned it on); `--remove` undoes everything.
 
-NotchNux puts the fan back to Auto when the CPU reaches 85 °C or can't be read, when you turn the setting off, and when it stops (screen lock, logout). It never restores a manual level at login. Turn off **Back to Auto when hot** (under Fan control) to keep the level you set however warm it gets; the processor still slows itself down when it gets too hot, and screen lock and logout still hand the fan back.
+NotchNux puts the fan back to Auto when the CPU reaches 85 °C or can't be read, when you turn the setting off, and when it stops (screen lock, logout). It never restores a manual level at login. Turn off **Back to Auto when hot** (under Fan control) to keep the level you set: however warm it gets, and across screen lock, suspend and login (NotchNux puts it back the moment it starts again, since GNOME stops extensions while the screen is locked). The processor still slows itself down when it gets too hot. While the screen is locked nothing re-sends the level, so with the ThinkPad watchdog on the fan returns to Auto after 2 minutes until you unlock; set up with `--no-watchdog` to avoid that. Resuming from suspend can also reset it in the firmware until you unlock.
 
 ### VPN (optional)
 The Tray's **VPN** row needs nothing extra to show Tailscale (when installed) and the Forti VPN (when `openfortivpn` and its config, `/etc/openfortivpn/config`, exist). Connecting them from the notch without a password needs a one-time setup that you run yourself (NotchNux never runs it):

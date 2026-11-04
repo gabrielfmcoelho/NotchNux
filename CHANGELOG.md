@@ -181,9 +181,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added — keep the fan level you set
 - Preferences → *Temperatures & fan* → **Back to Auto when hot** (on by
   default). Off: a manual fan level stays when the CPU reaches 85 °C or
-  can't be read, instead of going back to Auto. NotchNux still re-sends it
-  every minute (so a ThinkPad's fan watchdog keeps it), and screen lock and
-  logout still hand the fan back to Auto.
+  can't be read, instead of going back to Auto, and NotchNux no longer
+  hands the fan back when it stops (closing the lid locks the screen, and
+  GNOME stops extensions on the lock screen). The level is remembered and
+  put back as NotchNux starts again (unlock, login), since the firmware may
+  reset it on resume. NotchNux still re-sends it every minute while it
+  runs, so a ThinkPad's fan watchdog keeps it.
+- `fan-setup.sh --no-watchdog` also turns the ThinkPad fan watchdog off at
+  once, so a kept level lasts while the screen is locked too.
 
 ### Added — header shortcuts, 1 to 8
 - Preferences → Tabs → **Header shortcuts** sets how many tabs sit beside

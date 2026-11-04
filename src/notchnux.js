@@ -184,6 +184,8 @@ export const NotchNux = GObject.registerClass({
         this._initLedge();
         // VPN state for the Tray's VPN row and the pill's VPN icon.
         this._initVpn();
+        // A fan level kept across lock and login ("Back to Auto when hot" off).
+        this._restoreFan();
         // Claude Code sessions + usage (the pill's dots and the Claude tab).
         this._initClaude();
         // Dev tab: Docker containers (and their crash alerts), ports, projects.
