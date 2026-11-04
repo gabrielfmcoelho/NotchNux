@@ -14,6 +14,8 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
+import { findProgram } from './proc.js';
+
 const HOME = GLib.get_home_dir();
 // gnome-shell never sees a shell-rc $CLAUDE_CONFIG_DIR, so the default it is.
 export const CLAUDE_DIR = `${HOME}/.claude`;
@@ -514,8 +516,7 @@ export function mcpSummary(auth, check) {
 
 // The claude binary, or null. gnome-shell's PATH may lack ~/.local/bin.
 export function claudeBinary() {
-    let local = `${HOME}/.local/bin/claude`;
-    return GLib.find_program_in_path('claude') ?? (GLib.file_test(local, GLib.FileTest.IS_EXECUTABLE) ? local : null);
+    return findProgram('claude');
 }
 
 // ---- Permission rules + default mode ----

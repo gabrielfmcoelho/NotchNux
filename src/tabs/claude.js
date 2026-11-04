@@ -49,6 +49,7 @@ import {
     mcpCheckOutcome, MANAGED_SETTINGS_PATH, effectiveSkill, skillEdit,
     CLAUDE_DIR, remoteAtStartup, setRemoteAtStartup, editorApp,
 } from '../helpers/claude.js';
+import { run, killAll } from '../helpers/proc.js';
 import { readTextAsync } from '../helpers/productivity.js';
 import { fmt } from '../helpers/format.js';
 import { addPressFeedback } from '../helpers/motion.js';
@@ -161,12 +162,7 @@ const ClaudeFeatures = {
         // No timer may outlive disable(): close now. Held replies can be cut
         // off then (Claude Code reads that as no decision too).
         this._closeClaudeServer();
-        for (let [proc, entry] of this._claude.procs) {
-            if (entry.id)
-                GLib.Source.remove(entry.id);
-            proc.force_exit();
-        }
-        this._claude.procs.clear();
+        killAll(this._claude.procs);
         this._disarmClaudeRule();
         this._stopClaudeMonitor();
     },
@@ -1371,45 +1367,14 @@ const ClaudeFeatures = {
             done(null, 'Claude Code (claude) isn\u2019t on this computer\u2019s PATH');
             return;
         }
-        let launcher = new Gio.SubprocessLauncher({ flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE });
-        launcher.set_cwd(cwd || GLib.get_home_dir());
-        if (env?.length)
-            launcher.set_environ(env);
-        let proc;
-        try {
-            proc = launcher.spawnv([bin, ...args]);
-        } catch (e) {
-            done(null, `Couldn\u2019t run claude (${e.message})`);
-            return;
-        }
-        let procs = this._claude.procs;
-        let entry = { id: 0, timedOut: false };
-        procs.set(proc, entry);
-        entry.id = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, timeoutS, () => {
-            entry.timedOut = true;
-            proc.send_signal(15);
-            entry.id = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 5, () => {
-                entry.id = 0;
-                proc.force_exit();
-                return GLib.SOURCE_REMOVE;
-            });
-            return GLib.SOURCE_REMOVE;
-        });
-        proc.communicate_utf8_async(null, null, (p, res) => {
-            if (entry.id)
-                GLib.Source.remove(entry.id);
-            entry.id = 0;
-            procs.delete(p);
-            let out = null;
-            try {
-                [, out] = p.communicate_utf8_finish(res);
-            } catch (e) {
-                // killed or failed: out stays null
-            }
+        run([bin, ...args], { cwd, env, timeoutS, procs: this._claude.procs }, r => {
             if (this._destroyed)
                 return;
-            done(out, entry.timedOut ? `claude ${args.join(' ')} took too long`
-                : (p.get_successful() ? null : `claude ${args.join(' ')} failed`), entry.timedOut);
+            if (!r.started)
+                done(null, `Couldn\u2019t run claude (${r.err})`);
+            else
+                done(r.out, r.timedOut ? `claude ${args.join(' ')} took too long`
+                    : (r.ok ? null : `claude ${args.join(' ')} failed`), r.timedOut);
         });
     },
 
