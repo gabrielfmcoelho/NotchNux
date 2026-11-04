@@ -5,7 +5,7 @@
 import GLib from 'gi://GLib';
 import {
     discoverHwmon, pickSensors, parseMilliC, tempLevel, pickFan, fanLevelOf, fanWrites, FAN_LEVELS,
-    writeSysfs, canWrite, fmtRpm, readTemp,
+    writeSysfs, canWrite, fmtRpm, readTemp, parsePowerProfiles,
 } from '../src/helpers/sensors.js';
 import { ConfigStore } from '../src/helpers/config.js';
 
@@ -132,6 +132,19 @@ async function main() {
 }
 
 // ---- config keys (read-only: never saves) ----
+// ---- power mode ----
+const offered = ids => ids.map(Profile => ({ Profile, Driver: 'multiple' }));
+eq(parsePowerProfiles({ ActiveProfile: 'power-saver', Profiles: offered(['performance', 'power-saver', 'balanced']),
+    PerformanceDegraded: '' }), { active: 'power-saver', profiles: ['power-saver', 'balanced', 'performance'], note: '' },
+'profiles in Saver / Balanced / Performance order');
+eq(parsePowerProfiles({ ActiveProfile: 'balanced', Profiles: offered(['power-saver', 'balanced']) }).profiles,
+    ['power-saver', 'balanced'], 'no performance profile on this machine');
+eq(parsePowerProfiles({ ActiveProfile: 'performance', Profiles: offered(['balanced', 'performance']),
+    PerformanceDegraded: 'lap-detected' }).note, 'Performance is limited while the laptop is on your lap', 'degraded: lap');
+eq(parsePowerProfiles({ ActiveProfile: 'performance', Profiles: offered(['performance']), PerformanceDegraded: 'odd-reason' }).note,
+    'Performance is limited (odd-reason)', 'degraded: unknown reason');
+ok(parsePowerProfiles({ ActiveProfile: 'balanced', Profiles: [] }) === null && parsePowerProfiles(null) === null, 'no profiles: null');
+
 const cfg = obj => new ConfigStore({ contents: new TextEncoder().encode(JSON.stringify(obj)) });
 eq([cfg({}).pillTemp, cfg({ pillTemp: 'ssd' }).pillTemp, cfg({ pillTemp: 'bogus' }).pillTemp], ['off', 'ssd', 'off'], 'pill temperature');
 eq([cfg({}).trayTemps, cfg({ trayTemps: 1 }).trayTemps, cfg({}).fanControl, cfg({ fanControl: true }).fanControl],

@@ -77,6 +77,29 @@ export async function discoverHwmon(root = HWMON_DIR) {
     }));
 }
 
+// ---- Power mode (power-profiles-daemon) ----
+
+// The profiles power-profiles-daemon knows, in the order the Tray shows them.
+export const POWER_PROFILES = [['power-saver', 'Saver'], ['balanced', 'Balanced'], ['performance', 'Performance']];
+
+const DEGRADED_TEXT = {
+    'lap-detected': 'Performance is limited while the laptop is on your lap',
+    'high-operating-temperature': 'Performance is limited while it runs hot',
+};
+
+// Its D-Bus properties (deep-unpacked) → { active, profiles, note } or null:
+// `profiles` are the ones this computer offers, in POWER_PROFILES order;
+// `note` says why Performance is held back ('' when it isn't).
+export function parsePowerProfiles(props) {
+    let offered = new Set((Array.isArray(props?.Profiles) ? props.Profiles : []).map(p => p?.Profile));
+    let profiles = POWER_PROFILES.map(([id]) => id).filter(id => offered.has(id));
+    if (!profiles.length || typeof props.ActiveProfile !== 'string')
+        return null;
+    let why = typeof props.PerformanceDegraded === 'string' ? props.PerformanceDegraded : '';
+    let note = !why ? '' : why.split(',').map(w => DEGRADED_TEXT[w]).find(Boolean) ?? `Performance is limited (${why})`;
+    return { active: props.ActiveProfile, profiles, note };
+}
+
 // ---- Temperatures ----
 
 export const SENSOR_KINDS = [['cpu', 'CPU'], ['ssd', 'SSD'], ['gpu', 'GPU']];

@@ -34,6 +34,7 @@ import {
 } from '../helpers/vpn.js';
 import {
     discoverHwmon, pickSensors, pickFan, readText, readTemp, tempLevel, SENSOR_KINDS, FAN_LEVELS, FAN_GUARD_C,
+    POWER_PROFILES, parsePowerProfiles,
     fanLevelOf, fanWrites, writeSysfs, fanUsable, fmtRpm,
 } from '../helpers/sensors.js';
 
@@ -52,6 +53,9 @@ const VPN_FOLLOW_TICKS = 15;
 const VPN_SETUP = `sudo sh ${GLib.shell_quote(Gio.File.new_for_uri(import.meta.url).get_parent().get_parent()
     .get_child('tools').get_child('vpn-setup.sh').get_path())}`;
 const SYSTEMD = ['org.freedesktop.systemd1', '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager'];
+// power-profiles-daemon: its current name, then the one before 0.20.
+const POWER_DAEMONS = [['org.freedesktop.UPower.PowerProfiles', '/org/freedesktop/UPower/PowerProfiles'],
+    ['net.hadess.PowerProfiles', '/net/hadess/PowerProfiles']];
 
 function label(text, cls, props = {}) {
     let l = new St.Label({ text, style_class: cls, y_align: Clutter.ActorAlign.CENTER, ...props });
@@ -201,6 +205,11 @@ const TrayFeatures = {
             this._addTrayTemps(sysCard, this._trayMeters);
         lower.add_child(sysCard);
         panel.add_child(lower);
+
+        // ---- Row 3a: power mode, when power-profiles-daemon runs ----
+        let powerSlot = new St.BoxLayout({ vertical: true, x_expand: true });
+        panel.add_child(powerSlot);
+        this._addTrayPower(powerSlot, ui);
 
         // ---- Row 3b: fan levels (beta), once the one-time setup ran ----
         if (this._config.fanControl) {
@@ -389,8 +398,105 @@ const TrayFeatures = {
         m.net.up.set_text(this._system.getNetUpLabel());
         this._updateTrayTemps(m, animate);
         this._updateTrayFan();
+        this._updateTrayPower();
         this._syncTraySliders();
         this._refreshVpn();
+    },
+
+    // ---- Power mode (power-profiles-daemon, as GNOME's own Power Mode) ----
+
+    // One Properties call on the daemon → a Promise of its reply.
+    _powerCall(method, params, type, flags = Gio.DBusCallFlags.NONE) {
+        let [name, path] = POWER_DAEMONS[this._powerDaemon ?? 0];
+        return new Promise((resolve, reject) => Gio.DBus.system.call(name, path, 'org.freedesktop.DBus.Properties',
+            method, params, type ? new GLib.VariantType(type) : null, flags, 5000, null, (c, res) => {
+                try {
+                    resolve(c.call_finish(res));
+                } catch (e) {
+                    reject(e);
+                }
+            }));
+    },
+
+    // → { active, profiles, note } or null (no daemon). Finds which name
+    // the daemon answers to the first time.
+    async _readPower() {
+        for (let i = this._powerDaemon ?? 0; i < POWER_DAEMONS.length; i++) {
+            this._powerDaemon = i;
+            try {
+                let [props] = (await this._powerCall('GetAll', new GLib.Variant('(s)', [POWER_DAEMONS[i][0]]), '(a{sv})'))
+                    .recursiveUnpack();
+                return parsePowerProfiles(props);
+            } catch (e) {
+                // not this name (or no daemon): try the next
+            }
+        }
+        this._powerDaemon = 0;
+        return null;
+    },
+
+    async _addTrayPower(slot, ui) {
+        let st = await this._readPower();
+        if (!st || this._destroyed || this._trayUi !== ui)
+            return;
+        let card = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-list nn-cc-fan', vertical: true, x_expand: true });
+        card.add_child(label('POWER MODE', 'nook-card-eyebrow'));
+        let seg = new St.BoxLayout({ style_class: 'nook-segmented', x_expand: true });
+        let btns = {};
+        for (let [id, text] of POWER_PROFILES.filter(([id]) => st.profiles.includes(id))) {
+            let b = new St.Button({ style_class: 'nook-segment', label: text, can_focus: true, x_expand: true,
+                accessible_name: `Power mode ${text}` });
+            b.connect('clicked', () => this._setPowerProfile(id));
+            seg.add_child(b);
+            btns[id] = b;
+        }
+        card.add_child(seg);
+        let note = label('', 'nook-card-meta nn-cc-fan-note', { visible: false });
+        card.add_child(note);
+        slot.add_child(card);
+        ui.power = { btns, note };
+        this._showPower(st);
+        this._refitTray();
+    },
+
+    async _updateTrayPower() {
+        let ui = this._trayUi?.power;
+        if (!ui)
+            return;
+        let st = await this._readPower();
+        if (st && !this._destroyed && this._trayUi?.power === ui)
+            this._showPower(st);
+    },
+
+    _showPower(st) {
+        let ui = this._trayUi?.power;
+        if (!ui)
+            return;
+        for (let [id, b] of Object.entries(ui.btns)) {
+            if (id === st.active)
+                b.add_style_class_name('nook-segment-active');
+            else
+                b.remove_style_class_name('nook-segment-active');
+        }
+        ui.note.set_text(st.note);
+        if (ui.note.visible !== !!st.note) {
+            ui.note.visible = !!st.note;
+            this._refitTray();
+        }
+    },
+
+    // Set like GNOME's Power Mode does; polkit lets the active session do it.
+    async _setPowerProfile(id) {
+        let iface = POWER_DAEMONS[this._powerDaemon ?? 0][0];
+        try {
+            await this._powerCall('Set', new GLib.Variant('(ssv)', [iface, 'ActiveProfile', new GLib.Variant('s', id)]),
+                null, Gio.DBusCallFlags.ALLOW_INTERACTIVE_AUTHORIZATION);
+        } catch (e) {
+            Gio.DBusError.strip_remote_error(e);
+            logError(`Couldn’t set the power mode (${e.message})`);
+        }
+        if (!this._destroyed)
+            this._updateTrayPower();
     },
 
     // ---- Temperatures (Tray SYSTEM card) and fan levels (beta) ----
