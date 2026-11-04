@@ -31,6 +31,7 @@ import { installProductivity } from './tabs/productivity.js';
 import { installLedge, swapContent } from './tabs/ledge.js';
 import { installTray } from './tabs/tray.js';
 import { installClaude } from './tabs/claude.js';
+import { installDev } from './tabs/dev.js';
 import { logError } from './helpers/log.js';
 
 // Configuration constants
@@ -185,6 +186,8 @@ export const NotchNux = GObject.registerClass({
         this._initVpn();
         // Claude Code sessions + usage (the pill's dots and the Claude tab).
         this._initClaude();
+        // Dev tab: Docker containers (and their crash alerts), ports, projects.
+        this._initDev();
         // Recolour the active-state chrome to match the persisted accent.
         this._applyAccentStyles();
         // Shoulders + the (hidden unless enabled) glass backdrop.
@@ -468,6 +471,7 @@ export const NotchNux = GObject.registerClass({
             this._tabOrder = this._config.visibleTabs;
             this._rebuildDashboard();
             this._syncClipboardWatch();
+            this._syncDevWatch();
         } else if (next.pinnedKey !== prev.pinnedKey) {
             this._syncRail();
         }
@@ -516,6 +520,7 @@ export const NotchNux = GObject.registerClass({
         this._releaseFan(true);
         this._destroyVpn();
         this._destroyClaude();
+        this._destroyDev();
         this._destroyProductivity();
         stopSpring(this);
         this._railTimeline?.stop();
@@ -2003,6 +2008,8 @@ export const NotchNux = GObject.registerClass({
             this._launcherEdit = false;
         if (tab === 'claude')
             this._leaveClaudeTab();
+        if (tab === 'dev')
+            this._leaveDevTab();
         this._releaseKeyboard?.();
     }
 
@@ -2051,6 +2058,7 @@ export const NotchNux = GObject.registerClass({
             case 'shelf': this._renderShelfTab(); break;
             case 'wallpaper': this._renderWallpaperTab(); break;
             case 'claude': this._renderClaudeTab(); break;
+            case 'dev': this._renderDevTab(); break;
             }
         } finally {
             this._mountTarget = null;
@@ -2115,6 +2123,9 @@ export const NotchNux = GObject.registerClass({
             break;
         case 'claude':
             this._claudeTabShown();
+            break;
+        case 'dev':
+            this._devTabShown();
             break;
         case 'calendar':
         case 'weather':
@@ -2217,6 +2228,7 @@ export const NotchNux = GObject.registerClass({
             clipboard: ['_clipUi'],
             notes: ['_notesUi'],
             claude: ['_claudeUi'],
+            dev: ['_devUi'],
         };
         for (let ref of REFS[tab] ?? [])
             this[ref] = null;
@@ -6566,6 +6578,8 @@ export const NotchNux = GObject.registerClass({
                 // the Alerts list only rebuilds when the queue actually changed.
                 if (this._activeTab === 'system') {
                     this._updateSystemTabMeters();
+                } else if (this._activeTab === 'dev') {
+                    this._devTick();
                 } else if (this._activeTab === 'notifications') {
                     let sig = this._notificationsSignature(this._collectNotifications());
                     if (sig !== this._notifSignature)
@@ -6627,3 +6641,4 @@ installProductivity(NotchNux.prototype);
 installLedge(NotchNux.prototype);
 installTray(NotchNux.prototype);
 installClaude(NotchNux.prototype);
+installDev(NotchNux.prototype);

@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Dev tab: containers
+- A **Dev** tab (opt-in, Preferences → Tabs) with a **Containers** view:
+  Docker containers grouped by compose project — running, restarting,
+  paused, and those that exited with an error in the last day (clean exits
+  and old crashes, like a reboot's exit 255, are left out). A row opens its
+  logs in your default terminal (`docker logs -f`); its buttons restart it
+  and stop or start it; port chips open `http://localhost:PORT`.
+- Crash alerts: while the tab is enabled, `docker events` runs in the
+  background (it prints only when a container starts, dies or stops). A
+  container that dies with an error — not one you stopped — raises an
+  alert; if it keeps dying (3 times in 2 minutes) a second one says so, and
+  then it stays quiet until it has been up for 5 minutes.
+- The long-running reader behind the privacy dots now lives in
+  `helpers/proc.js` (`watchRecords`) and is shared with the Docker watcher.
+  Its retry limit now counts deaths in a row (it used to retry forever).
+
 ### Added — VPN in the Tray
 - A **VPN** row in the Tray's connectivity card, shown when Tailscale or the
   Forti VPN (`openfortivpn` with `/etc/openfortivpn/config`) is installed.

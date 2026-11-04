@@ -39,7 +39,8 @@ export const TAB_DEFS = [
     { id: 'clipboard',     label: 'Clipboard', icon: 'edit-paste-symbolic' },
     { id: 'studio',        label: 'Studio',   icon: 'camera-web-symbolic' },
     { id: 'wallpaper',     label: 'Wallpaper', icon: 'preferences-desktop-wallpaper-symbolic' },
-    { id: 'claude',        label: 'Claude',   icon: 'utilities-terminal-symbolic' }
+    { id: 'claude',        label: 'Claude',   icon: 'utilities-terminal-symbolic' },
+    { id: 'dev',           label: 'Dev',      icon: 'applications-engineering-symbolic' }
 ];
 
 // Auto-enhancement strengths — the tuned defaults used when the user leaves
@@ -278,6 +279,8 @@ export class ConfigStore {
         tabs.clipboard = false;
         // Claude Code monitor: only useful to Claude Code users, so opt-in too.
         tabs.claude = false;
+        // Dev (containers, ports, projects): a developer's tab, opt-in.
+        tabs.dev = false;
         let features = {};
         for (let f of FEATURE_DEFS)
             features[f.id] = f.default;

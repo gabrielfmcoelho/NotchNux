@@ -101,20 +101,20 @@ function stateColor(state) {
     return state === 'working' ? accentHex() : state === 'done' ? DONE_GREY : SYS.orange;
 }
 
-function text(t, cls, props = {}) {
+export function text(t, cls, props = {}) {
     let l = new St.Label({ text: t, style_class: cls, y_align: Clutter.ActorAlign.CENTER, ...props });
     l.clutter_text.ellipsize = Pango.EllipsizeMode.END;
     return l;
 }
 
-function dot(color) {
+export function dot(color) {
     return new St.Widget({ style_class: 'nn-claude-dot', style: `background-color: ${color};`,
         y_align: Clutter.ActorAlign.CENTER });
 }
 
 const read = (path, cancellable) => new Promise(resolve => readTextAsync(path, cancellable, resolve));
 
-function scrolled(child) {
+export function scrolled(child) {
     let scroll = new St.ScrollView({ style_class: 'nn-claude-scroll', x_expand: true });
     scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
     scroll.set_overlay_scrollbars(true);
