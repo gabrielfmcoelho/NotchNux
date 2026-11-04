@@ -230,6 +230,7 @@ export function disconnectStatusLine(settings) {
 // disabled) nothing else — another user, a container, a sandboxed app — can
 // take its place and approve prompts.
 export const APPROVE_PATH = '/claude/permission';
+export const ACTIVITY_PATH = '/claude/activity';
 export const SOCKET_NAME = 'notchnux-claude.sock';
 export const approveSocketPath = () => `${GLib.get_user_runtime_dir()}/${SOCKET_NAME}`;
 // How long Claude Code waits for the hook (and curl for the shell).
@@ -241,6 +242,15 @@ export const HOOK_TIMEOUT_S = 600;
 export function approveCommand(socketPath) {
     return `curl -sf --max-time ${HOOK_TIMEOUT_S} --unix-socket ${GLib.shell_quote(socketPath)} ` +
         `-H 'Content-Type: application/json' --data-binary @- http://notchnux${APPROVE_PATH} || true`;
+}
+
+// "What sessions are doing": a PreToolUse hook that posts each tool call to
+// the same socket and never waits on it — `async: true` runs it in the
+// background, so Claude Code doesn't wait for the notch, and its exit code
+// can't block a tool. Nothing listening: curl fails quietly.
+export function activityCommand(socketPath) {
+    return `curl -s -o /dev/null --max-time 2 --unix-socket ${GLib.shell_quote(socketPath)} ` +
+        `-H 'Content-Type: application/json' --data-binary @- http://notchnux${ACTIVITY_PATH} || true`;
 }
 
 // Answered at once with no decision, so only the terminal handles them:
@@ -343,6 +353,47 @@ export function describeRequest(req, name = '') {
     return { title: `${who} wants to ${action}`, body: shown.body, exact, always: exact ? alwaysRules(req, tool) : null };
 }
 
+const ACTIVITY_CHARS = 80;
+
+// One line, hidden characters masked, cut at ACTIVITY_CHARS.
+function oneLine(text) {
+    let line = String(text ?? '').replace(HIDDEN, '\uFFFD').split('\n').map(l => l.trim()).find(Boolean) ?? '';
+    return line.length > ACTIVITY_CHARS ? `${line.slice(0, ACTIVITY_CHARS - 1).trimEnd()}…` : line;
+}
+
+// A PreToolUse hook input → what the session is doing, in a few words:
+// "Run the tests" (Bash's own description), "Editing tray.js", "gestor ·
+// buscar_tarefas". Shown in the Claude tab only, never logged.
+export function describeActivity(req) {
+    let tool = String(req?.tool_name ?? '');
+    let input = req?.tool_input && typeof req.tool_input === 'object' ? req.tool_input : {};
+    let m;
+    if (tool === 'Bash')
+        return oneLine(input.description) || oneLine(input.command) || 'Running a command';
+    if (EDIT_TOOLS.has(tool))
+        return `Editing ${base(input.file_path ?? input.notebook_path) || 'a file'}`;
+    if (tool === 'Read')
+        return `Reading ${base(input.file_path) || 'a file'}`;
+    if (tool === 'Grep' || tool === 'Glob')
+        return oneLine(`Searching ${input.pattern ?? ''}`);
+    if (tool === 'WebFetch') {
+        let host = '';
+        try {
+            host = GLib.Uri.parse(String(input.url), GLib.UriFlags.NONE).get_host() ?? '';
+        } catch (e) {}
+        return `Fetching ${host || 'a page'}`;
+    }
+    if (tool === 'WebSearch')
+        return oneLine(`Searching the web: ${input.query ?? ''}`);
+    if (tool === 'Task' || tool === 'Agent')
+        return oneLine(`Subagent: ${input.description ?? ''}`);
+    if (tool === 'TodoWrite')
+        return 'Updating its to-do list';
+    if ((m = /^mcp__(.+?)__(.+)$/.exec(tool)))
+        return oneLine(`${m[1]} · ${m[2]}`);
+    return oneLine(tool) || 'Working';
+}
+
 // The hook's HTTP response body for 'allow' | 'always' | 'deny' | 'none'.
 // "Always allow" sends Claude Code's own suggestions back unchanged, so the
 // rule lands where the terminal's option 2 would put it.
@@ -362,17 +413,18 @@ export function decisionBody(kind, req) {
 // restores the file exactly.
 const isOurHook = h => h?.type === 'command' && typeof h.command === 'string' && h.command.includes(SOCKET_NAME);
 
-export function isApproveConnected(settings) {
-    let list = settings?.hooks?.PermissionRequest;
+// Per hook event (PermissionRequest for approvals, PreToolUse for activity).
+export function isHookConnected(settings, event) {
+    let list = settings?.hooks?.[event];
     return Array.isArray(list) && list.some(m => Array.isArray(m?.hooks) && m.hooks.some(isOurHook));
 }
 
-export function disconnectApproveHook(settings) {
-    if (!isApproveConnected(settings))
+export function disconnectHook(settings, event) {
+    if (!isHookConnected(settings, event))
         return settings;
     // Only groups holding our hook change; anything else stays as it was.
     let kept = [];
-    for (let m of settings.hooks.PermissionRequest) {
+    for (let m of settings.hooks[event]) {
         if (!Array.isArray(m?.hooks) || !m.hooks.some(isOurHook)) {
             kept.push(m);
             continue;
@@ -385,9 +437,9 @@ export function disconnectApproveHook(settings) {
     // empty before Connect goes too — same meaning to Claude Code.
     let hooks = { ...settings.hooks };
     if (kept.length)
-        hooks.PermissionRequest = kept;
+        hooks[event] = kept;
     else
-        delete hooks.PermissionRequest;
+        delete hooks[event];
     let out = { ...settings };
     if (Object.keys(hooks).length)
         out.hooks = hooks;
@@ -397,13 +449,23 @@ export function disconnectApproveHook(settings) {
 }
 
 // Connecting again replaces our entry (keeps the socket path current).
-export function connectApproveHook(settings, socketPath = approveSocketPath()) {
-    let s = disconnectApproveHook(settings);
+export function connectHook(settings, event, hook) {
+    let s = disconnectHook(settings, event);
     let hooks = s.hooks ?? {};
-    let list = Array.isArray(hooks.PermissionRequest) ? hooks.PermissionRequest : [];
-    let entry = { hooks: [{ type: 'command', command: approveCommand(socketPath), timeout: HOOK_TIMEOUT_S }] };
-    return { ...s, hooks: { ...hooks, PermissionRequest: [...list, entry] } };
+    let list = Array.isArray(hooks[event]) ? hooks[event] : [];
+    return { ...s, hooks: { ...hooks, [event]: [...list, { hooks: [hook] }] } };
 }
+
+export const isApproveConnected = settings => isHookConnected(settings, 'PermissionRequest');
+export const disconnectApproveHook = settings => disconnectHook(settings, 'PermissionRequest');
+export const connectApproveHook = (settings, socketPath = approveSocketPath()) => connectHook(settings, 'PermissionRequest',
+    { type: 'command', command: approveCommand(socketPath), timeout: HOOK_TIMEOUT_S });
+
+// No matcher: every tool. async: Claude Code doesn't wait for it.
+export const isActivityConnected = settings => isHookConnected(settings, 'PreToolUse');
+export const disconnectActivityHook = settings => disconnectHook(settings, 'PreToolUse');
+export const connectActivityHook = (settings, socketPath = approveSocketPath()) => connectHook(settings, 'PreToolUse',
+    { type: 'command', command: activityCommand(socketPath), async: true, timeout: 5 });
 
 // How a settings file is laid out, so a rewrite changes only what we
 // changed: the first indented line's indent ('' for one-line JSON), its

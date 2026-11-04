@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — what Claude Code sessions are doing
+- Preferences → Claude Code → **Show what sessions are doing**: a working
+  session's row in the Claude tab says what it's doing right now — Bash's
+  own description ("Run the tests") or the command, "Editing tray.js",
+  "Reading sensors.js", "Searching …", "Fetching code.claude.com", an MCP
+  server and tool, a subagent's task. Its folder comes back when the
+  session stops working. The pill is unchanged.
+- Connect adds a `PreToolUse` hook with `"async": true` to
+  `~/.claude/settings.json`: Claude Code runs it in the background and
+  never waits for it, and its exit code can't block a tool. It posts each
+  tool call to NotchNux through the same private socket as approvals
+  (which now runs while either is connected); with NotchNux off, curl
+  fails quietly. Disconnect removes only that entry.
+
 ### Added — Dev tab: containers
 - A **Dev** tab (opt-in, Preferences → Tabs) with a **Containers** view:
   Docker containers grouped by compose project — running, restarting,

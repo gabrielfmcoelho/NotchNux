@@ -9,6 +9,7 @@ import {
     SETTINGS_PATH, fmtAge, wrapCommand, unwrapCommand, isConnected, connectStatusLine, disconnectStatusLine,
     SOCKET_NAME, approveSocketPath, approveCommand, passThrough, asksAtOnce, describeRequest, decisionBody,
     isApproveConnected, connectApproveHook, disconnectApproveHook,
+    isActivityConnected, connectActivityHook, disconnectActivityHook, activityCommand, describeActivity, ACTIVITY_PATH,
     HOOK_TIMEOUT_S, settingsLayout, formatSettings,
     parseNeedsAuth, newAuthNames, parseMcpList, mcpSummary,
     SAFE_MODES, rulesOf, removeRule, setDefaultMode, claudeSettingsFiles, readSettingsAsync, writeSettingsAsync,
@@ -193,6 +194,47 @@ eq(hooked.hooks.PermissionRequest[0].hooks[0].timeout, HOOK_TIMEOUT_S, 'hook tim
 const emptyGroup = { hooks: { PermissionRequest: [{ matcher: 'X', hooks: [] }] } };
 eq(text(disconnectApproveHook(JSON.parse(text(connectApproveHook(emptyGroup, sock))))), text(emptyGroup),
     'a foreign group that was already empty survives');
+
+// ---- what sessions are doing: the activity hook ----
+ok(activityCommand(sock).includes("--unix-socket '/run/user/1000/notchnux-claude.sock'") && activityCommand(sock).endsWith('|| true')
+    && activityCommand(sock).includes(ACTIVITY_PATH) && activityCommand(sock).includes('--max-time 2 '), `activity command: ${activityCommand(sock)}`);
+let act = connectActivityHook(original, sock);
+ok(isActivityConnected(act) && !isActivityConnected(original) && !isApproveConnected(act), 'isActivityConnected, separate from approvals');
+eq(act.hooks.PreToolUse, [{ hooks: [{ type: 'command', command: activityCommand(sock), async: true, timeout: 5 }] }],
+    'activity entry: every tool, async');
+eq(text(disconnectActivityHook(JSON.parse(text(act)))), text(original), 'activity: connect → disconnect exact');
+eq(connectActivityHook(act, sock), act, 'activity connect is idempotent');
+let bothOn = connectApproveHook(connectActivityHook(foreign, sock), sock);
+ok(isApproveConnected(bothOn) && isActivityConnected(bothOn), 'both connected');
+eq(disconnectApproveHook(bothOn).hooks.PreToolUse, bothOn.hooks.PreToolUse, 'disconnecting approvals leaves activity');
+eq(disconnectActivityHook(bothOn).hooks.PermissionRequest, bothOn.hooks.PermissionRequest, 'disconnecting activity leaves approvals');
+eq(text(disconnectActivityHook(disconnectApproveHook(JSON.parse(text(bothOn))))), text(foreign), 'both off → exact restore');
+const userPre = { hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'audit.sh' }] }] } };
+eq(text(disconnectActivityHook(JSON.parse(text(connectActivityHook(userPre, sock))))), text(userPre), 'a user PreToolUse hook survives');
+
+const tool = (tool_name, tool_input = {}) => ({ session_id: 's1', hook_event_name: 'PreToolUse', tool_name, tool_input });
+for (let [input, want] of [
+    [tool('Bash', { command: 'npm test -- --watch=false', description: 'Run the tests' }), 'Run the tests'],
+    [tool('Bash', { command: 'git status\ngit diff' }), 'git status'],
+    [tool('Bash', { command: 'x'.repeat(200) }), `${'x'.repeat(79)}…`],
+    [tool('Bash', {}), 'Running a command'],
+    [tool('Edit', { file_path: '/a/b/tray.js' }), 'Editing tray.js'],
+    [tool('Write', { file_path: '/a/new.md' }), 'Editing new.md'],
+    [tool('NotebookEdit', { notebook_path: '/a/n.ipynb' }), 'Editing n.ipynb'],
+    [tool('Read', { file_path: '/a/sensors.js' }), 'Reading sensors.js'],
+    [tool('Grep', { pattern: 'readTemp\\(' }), 'Searching readTemp\\('],
+    [tool('Glob', { pattern: 'src/**/*.js' }), 'Searching src/**/*.js'],
+    [tool('WebFetch', { url: 'https://code.claude.com/docs/en/hooks' }), 'Fetching code.claude.com'],
+    [tool('WebSearch', { query: 'gnome 50 headless' }), 'Searching the web: gnome 50 headless'],
+    [tool('Task', { description: 'Map the tray code' }), 'Subagent: Map the tray code'],
+    [tool('Agent', { description: 'Review' }), 'Subagent: Review'],
+    [tool('TodoWrite', { todos: [] }), 'Updating its to-do list'],
+    [tool('mcp__gestor__buscar_tarefas', { q: 1 }), 'gestor · buscar_tarefas'],
+    [tool('Skill', { skill: 'x' }), 'Skill'],
+    [tool('Bash', { description: 'Hide\u202Eme' }), 'Hide\uFFFDme'],
+    [{}, 'Working'],
+])
+    eq(describeActivity(input), want, `describeActivity(${input.tool_name})`);
 
 // ---- settings.json layout survives Connect / Disconnect ----
 for (let [what, raw] of [
@@ -404,6 +446,7 @@ GLib.spawn_command_line_sync(`rm -rf ${GLib.shell_quote(io)}`);
 const cfg = obj => new ConfigStore({ contents: new TextEncoder().encode(JSON.stringify(obj)) });
 eq(cfg({}).claudeApprove, false, 'approvals off by default');
 eq(cfg({ claudeApprove: true }).claudeApprove, true, 'approvals on');
+eq([cfg({}).claudeActivity, cfg({ claudeActivity: 1 }).claudeActivity], [false, true], 'activity off by default, on when set');
 
 // ---- run the wrapped command for real, in a scratch HOME ----
 let home = GLib.dir_make_tmp('nn-claude-XXXXXX');
@@ -449,6 +492,31 @@ let hookIn = JSON.stringify(req('Bash', { command: "echo 'it''s' \"$HOME\"" }));
 eq(runHook(hookIn), [decisionBody('allow'), 0], 'hook prints the server decision');
 eq(seen, ['POST', hookIn], 'server got the hook input verbatim');
 server.disconnect();
+
+// The activity hook prints nothing and exits 0 with or without a listener.
+const activityServer = new Soup.Server();
+let activitySeen = null;
+activityServer.add_handler(ACTIVITY_PATH, (srv, msg) => {
+    activitySeen = new TextDecoder().decode(msg.get_request_body().flatten().get_data());
+    msg.set_status(204, null);
+});
+function runActivity(input) {
+    let proc = Gio.Subprocess.new(['sh', '-c', activityCommand(sockPath)], Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE);
+    let loop = new GLib.MainLoop(null, false), result;
+    proc.communicate_utf8_async(input, null, (p, res) => {
+        result = [p.communicate_utf8_finish(res)[1], p.get_exit_status()];
+        loop.quit();
+    });
+    loop.run();
+    return result;
+}
+GLib.unlink(sockPath);
+eq(runActivity('{"x":1}'), ['', 0], 'activity: nothing listening → no output, exit 0');
+activityServer.listen(Gio.UnixSocketAddress.new(sockPath), 0);
+let actIn = JSON.stringify(tool('Read', { file_path: '/a/b.js' }));
+eq(runActivity(actIn), ['', 0], 'activity: 204 → no output, exit 0');
+eq(activitySeen, actIn, 'activity: server got the hook input');
+activityServer.disconnect();
 GLib.spawn_command_line_sync(`rm -rf ${GLib.shell_quote(home)}`);
 
 print(`claude-check: ${n} checks passed`);

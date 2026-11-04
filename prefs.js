@@ -23,7 +23,8 @@ import { ConfigStore, TAB_DEFS, FEATURE_DEFS, WALLPAPER_DEFAULTS, ENHANCE_AUTO, 
 import { discoverHwmon, pickSensors, pickFan, fanUsable, SENSOR_KINDS, FAN_GUARD_C } from './src/helpers/sensors.js';
 import {
     SETTINGS_PATH, isConnected, connectStatusLine, disconnectStatusLine,
-    isApproveConnected, connectApproveHook, disconnectApproveHook, settingsLayout, formatSettings, parseSettings,
+    isApproveConnected, connectApproveHook, disconnectApproveHook,
+    isActivityConnected, connectActivityHook, disconnectActivityHook, settingsLayout, formatSettings, parseSettings,
     installedEditors,
 } from './src/helpers/claude.js';
 
@@ -854,6 +855,13 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
                 : [connectApproveHook(s), () => config.setClaudeApprove(true)],
             'Connected. Permission prompts show Allow / Deny on the notch; the terminal prompt keeps working.',
             'Allow or deny Claude Code’s permission prompts from the notch. Adds a hook to ~/.claude/settings.json that hands each prompt to NotchNux through a private socket only your user can reach (needs curl). The terminal prompt keeps working.');
+
+        addRow('Show what sessions are doing', s => isActivityConnected(s) && config.claudeActivity,
+            (s, on) => on
+                ? [disconnectActivityHook(s), () => config.setClaudeActivity(false)]
+                : [connectActivityHook(s), () => config.setClaudeActivity(true)],
+            'Connected. A working session’s row in the Claude tab says what it’s doing.',
+            'A working session’s row in the Claude tab says what it’s doing (“Editing tray.js”, “Run the tests”). Adds a background (async) hook to ~/.claude/settings.json that tells NotchNux each tool call through the same private socket; Claude Code never waits for it.');
 
         // Which editor the Claude tab's open button uses. Only installed
         // ones are offered; none installed hides the row (and the button).

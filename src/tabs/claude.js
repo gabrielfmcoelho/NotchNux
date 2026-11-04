@@ -26,6 +26,10 @@
 // request until a button on a sticky banner answers it, or the terminal
 // answers first (seen as the session leaving its waiting state).
 //
+// What sessions are doing: while connected, the same server takes Claude
+// Code's PreToolUse hook (async, never waited on) and a working session's
+// row says what it's doing ("Editing tray.js"). The tab only, not the pill.
+//
 // Methods mixed into the NotchNux actor, like tabs/tray.js.
 
 import Clutter from 'gi://Clutter';
@@ -42,7 +46,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {
     SESSIONS_DIR, USAGE_PATH, SESSION_FILE, parseSession, procStat, isLive, alertFor,
     parseUsage, sortSessions, pillDots, fmtAge,
-    APPROVE_PATH, HOOK_TIMEOUT_S, approveSocketPath, passThrough, asksAtOnce, describeRequest, decisionBody,
+    APPROVE_PATH, HOOK_TIMEOUT_S, approveSocketPath, passThrough, asksAtOnce, describeRequest, decisionBody, describeActivity, ACTIVITY_PATH,
     MCP_AUTH_PATH, parseNeedsAuth, newAuthNames, parseMcpList, mcpSummary, claudeBinary,
     SAFE_MODES, rulesOf, removeRule, setDefaultMode, claudeSettingsFiles, readSettingsAsync, writeSettingsAsync,
     SETTINGS_PATH, parsePluginList, parseSkillMeta, setSkillOverride, skillSources, parseEnviron,
@@ -151,6 +155,7 @@ const ClaudeFeatures = {
             edits: Promise.resolve(),   // settings edits run one after another
             procs: new Map(),      // running `claude` commands → { id: timeout source, timedOut }
             requests: [],          // held approvals, FIFO; the head is the one on screen
+            activity: new Map(),   // sessionId → what it's doing (PreToolUse), while working
             server: null, socketPath: '', closing: null, listenLogged: false, starting: false, startSeq: 0,
         };
         this._buildPillClaude();
@@ -172,17 +177,28 @@ const ClaudeFeatures = {
         this._updateTuck();
     },
 
+    // The socket server runs for approvals or for activity.
+    _claudeListens() {
+        return this._config.claudeApprove || this._config.claudeActivity;
+    },
+
     _syncClaudeMonitor() {
         // Approvals need the monitor too: it's how a terminal answer is seen.
-        let approve = this._config.claudeApprove;
-        if (this._config.isFeatureEnabled('claudeMonitor') || this._claude.tabOpen || approve)
+        let listen = this._claudeListens();
+        if (this._config.isFeatureEnabled('claudeMonitor') || this._claude.tabOpen || listen)
             this._startClaudeMonitor();
         else
             this._stopClaudeMonitor();
-        if (approve)
+        if (listen)
             this._startClaudeApprove();
         else
             this._stopClaudeApprove();
+        // Approvals off while activity stays on: the server keeps running,
+        // the held prompts go back to the terminal.
+        if (!this._config.claudeApprove)
+            this._flushClaudeRequests();
+        if (!this._config.claudeActivity)
+            this._claude.activity.clear();
         this._syncPillClaude();
     },
 
@@ -316,8 +332,14 @@ const ClaudeFeatures = {
                 title: fresh.length === 1 ? fresh[0] : `${fresh.length} MCP servers`,
                 value: fresh.length === 1 ? 'needs /mcp' : 'need /mcp', valueColor: SYS.orange, ms: ALERT_MS,
                 onClick: () => this._openClaudeView('mcp') });
+        // Activity is only shown while a session works.
+        let working = new Set([...next.values()].filter(s => s.state === 'working').map(s => s.sessionId));
+        for (let id of c.activity.keys()) {
+            if (!working.has(id))
+                c.activity.delete(id);
+        }
         // A socket that couldn't be opened is retried with every read.
-        if (this._config.claudeApprove)
+        if (this._claudeListens())
             this._startClaudeApprove();
         this._sweepClaudeRequests();
         this._syncPillClaude();
@@ -394,7 +416,7 @@ const ClaudeFeatures = {
                 // nothing listening: stale or missing
             }
             c.starting = false;
-            if (this._destroyed || seq !== c.startSeq || !this._config.claudeApprove)
+            if (this._destroyed || seq !== c.startSeq || !this._claudeListens())
                 return;
             if (live) {
                 if (!c.listenLogged)
@@ -410,6 +432,7 @@ const ClaudeFeatures = {
         let c = this._claude;
         let server = new Soup.Server();
         server.add_handler(APPROVE_PATH, (srv, msg) => this._onClaudeRequest(msg));
+        server.add_handler(ACTIVITY_PATH, (srv, msg) => this._onClaudeActivity(msg));
         try {
             GLib.unlink(path);   // left behind by a crash; Soup won't reuse it
             server.listen(Gio.UnixSocketAddress.new(path), 0);
@@ -426,6 +449,20 @@ const ClaudeFeatures = {
     },
 
     // Every held request gets "no decision", so the terminal dialogs carry on.
+    _flushClaudeRequests() {
+        let c = this._claude;
+        if (!c?.requests.length)
+            return;
+        let pending = c.requests;
+        c.requests = [];
+        let shown = c.shown;
+        c.shown = null;
+        for (let r of pending)
+            this._replyClaude(r.msg, 200, decisionBody('none'));
+        if (shown && this._peekSticky && !this._destroyed)
+            this._hideNotificationPeek();
+    },
+
     _stopClaudeApprove() {
         let c = this._claude;
         if (!c)
@@ -433,15 +470,12 @@ const ClaudeFeatures = {
         c.startSeq++;   // a start still asking about the socket gives up
         if (!c.server)
             return;
-        let pending = c.requests;
-        c.requests = [];
-        c.shown = null;
-        for (let r of pending)
-            this._replyClaude(r.msg, 200, decisionBody('none'));
+        this._flushClaudeRequests();
         // Closing the sockets at once would cut those replies off: stop taking
         // requests (gone socket / 404 = no decision too), close a moment later.
         GLib.unlink(c.socketPath);
         c.server.remove_handler(APPROVE_PATH);
+        c.server.remove_handler(ACTIVITY_PATH);
         let server = c.server;
         c.server = null;
         c.closing = {
@@ -477,24 +511,53 @@ const ClaudeFeatures = {
         }
     },
 
-    _onClaudeRequest(msg) {
-        if (msg.get_method() !== 'POST')
-            return this._replyClaude(msg, 405);
+    // A hook's JSON body, or null after replying 405 / 413 / 400.
+    _readClaudeJson(msg) {
+        if (msg.get_method() !== 'POST') {
+            this._replyClaude(msg, 405);
+            return null;
+        }
         // ponytail: only this user's processes can reach the socket, so the
         // size check after Soup buffered the body is enough; an early handler
         // would be needed if it ever listens anywhere wider.
         let bytes = msg.get_request_body().flatten().get_data() ?? new Uint8Array();
-        if (bytes.length > MAX_REQUEST_BYTES)
-            return this._replyClaude(msg, 413);
+        if (bytes.length > MAX_REQUEST_BYTES) {
+            this._replyClaude(msg, 413);
+            return null;
+        }
         let req = null;
         try {
             req = JSON.parse(new TextDecoder().decode(bytes));
         } catch (e) {
             // answered below
         }
-        if (!req || typeof req !== 'object')
-            return this._replyClaude(msg, 400);
-        if (passThrough(req))
+        if (!req || typeof req !== 'object') {
+            this._replyClaude(msg, 400);
+            return null;
+        }
+        return req;
+    },
+
+    // PreToolUse (async): note what the session is doing, answer at once.
+    _onClaudeActivity(msg) {
+        let req = this._readClaudeJson(msg);
+        if (!req)
+            return;
+        this._replyClaude(msg, 204);
+        let id = String(req.session_id ?? '');
+        if (!this._config.claudeActivity || !id)
+            return;
+        this._claude.activity.set(id, describeActivity(req));
+        if (this._claudeUi)
+            this._updateClaudeMetas(this._claudeUi);
+    },
+
+    _onClaudeRequest(msg) {
+        let req = this._readClaudeJson(msg);
+        if (!req)
+            return;
+        // Approvals off (activity keeps the server up): the terminal decides.
+        if (passThrough(req) || !this._config.claudeApprove)
             return this._replyClaude(msg, 200, decisionBody('none'));
 
         let c = this._claude;
@@ -822,6 +885,7 @@ const ClaudeFeatures = {
             ui.sig = sig;
             ui.list.destroy_all_children();
             ui.ages = [];
+            ui.metas = [];
             if (sessions.length === 0) {
                 let empty = new St.BoxLayout({ style_class: 'nook-empty', vertical: true, x_expand: true });
                 empty.add_child(new St.Icon({ icon_name: 'utilities-terminal-symbolic', icon_size: 22,
@@ -837,6 +901,7 @@ const ClaudeFeatures = {
         let now = Date.now();
         for (let { label, since } of ui.ages)
             label.set_text(fmtAge(now - since));
+        this._updateClaudeMetas(ui);
 
         this._updateClaudeMcp(ui.mcp);
         // Load on open, and again when the live folders change (sessions
@@ -1388,8 +1453,10 @@ const ClaudeFeatures = {
         row.add_child(dot(stateColor(s.state)));
         let col = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'nn-claude-col' });
         col.add_child(text(s.name, 'nn-claude-name'));
-        if (s.folder && s.folder !== s.name)
-            col.add_child(text(s.folder, 'nook-card-meta'));
+        // The folder, or while it works and activity is connected, what it's doing.
+        let meta = text('', 'nook-card-meta', { visible: false });
+        col.add_child(meta);
+        (ui.metas ??= []).push({ label: meta, s });
         row.add_child(col);
         row.add_child(text(STATE_TEXT[s.state], 'nn-claude-state', { style: `color: ${stateColor(s.state)};` }));
         let age = text('', 'nn-claude-age');
@@ -1405,6 +1472,26 @@ const ClaudeFeatures = {
                 `Copy ${cmd.trim()} and open ${s.name}’s terminal to ${what}`));
         }
         return line;
+    },
+
+    // Each row's second line: what a working session is doing (accent), else
+    // its folder. In place, so a tool call never rebuilds the list.
+    _updateClaudeMetas(ui) {
+        let c = this._claude;
+        let resized = false;
+        for (let { label, s } of ui.metas ?? []) {
+            let act = s.state === 'working' ? c.activity.get(s.sessionId) : null;
+            let t = act ?? (s.folder && s.folder !== s.name ? s.folder : '');
+            if (label.text !== t)
+                label.set_text(t);
+            label.set_style(act ? `color: ${accentHex()};` : null);
+            if (label.visible !== !!t) {
+                label.visible = !!t;
+                resized = true;
+            }
+        }
+        if (resized)
+            this._resizeClaudeTab();
     },
 
     // A running session only takes /rc and /rename at its own prompt: put
