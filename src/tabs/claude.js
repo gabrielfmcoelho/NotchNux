@@ -1429,10 +1429,11 @@ const ClaudeFeatures = {
     },
 
     // Open `paths` (a folder, then files) in the editor from Preferences.
+    // → false when no editor is installed.
     _openInEditor(paths) {
         let app = editorApp(this._config.claudeEditor, lookupApp);
         if (!app)
-            return;
+            return false;
         if (this.isExpanded)
             this._collapseImmediately();
         try {
@@ -1440,6 +1441,7 @@ const ClaudeFeatures = {
         } catch (e) {
             logError(`Couldn’t open ${app.get_name()}`, e);
         }
+        return true;
     },
 };
 

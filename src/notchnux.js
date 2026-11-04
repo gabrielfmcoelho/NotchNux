@@ -389,6 +389,7 @@ export const NotchNux = GObject.registerClass({
             pillTemp: this._config.pillTemp,
             trayTemps: this._config.trayTemps,
             fanControl: this._config.fanControl,
+            devRootsKey: JSON.stringify(this._config.devProjectRoots),
         };
     }
 
@@ -488,6 +489,8 @@ export const NotchNux = GObject.registerClass({
         }
         if (next.fanControl !== prev.fanControl && !next.fanControl)
             this._releaseFan();
+        if (next.devRootsKey !== prev.devRootsKey)
+            this._onDevRootsChanged();
         if ((next.trayTemps !== prev.trayTemps || next.fanControl !== prev.fanControl) && this._invalidateTab('system'))
             this._renderActiveTab();
 

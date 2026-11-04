@@ -3,8 +3,9 @@
 
 import {
     terminalArgv, exitedRecently, parsePorts, parseDockerPs, visibleContainers, groupByProject, parseDockerEvent, CrashTracker,
-    dockerError, parseSs, portRows,
+    dockerError, parseSs, portRows, findRepos, parseGitStatus,
 } from '../src/helpers/dev.js';
+import GLib from 'gi://GLib';
 import { ConfigStore } from '../src/helpers/config.js';
 
 let n = 0;
@@ -108,6 +109,14 @@ eq(pr.rows.map(r => [r.port, r.name, r.container]), [[5173, 'node', null], [5432
 eq(pr.hidden, 2, 'system ports counted as hidden');
 eq(parseSs(''), [], 'no sockets');
 
+// ---- git status ----
+eq(parseGitStatus(['# branch.oid abc', '# branch.head dev', '# branch.upstream fork/dev', '# branch.ab +2 -1',
+    '1 .M N... 100644 100644 100644 a b src/x.js', '2 R. N... 100644 100644 100644 a b R100 new.js\told.js',
+    'u UU N... 1 2 3 4 a b c f.js', '? notes.txt', '! ignored.log', ''].join('\n')),
+{ branch: 'dev', ahead: 2, behind: 1, changed: 4, upstream: true }, 'branch, ahead/behind, changes (ignored not counted)');
+eq(parseGitStatus('# branch.oid abc\n# branch.head (detached)\n'), { branch: null, ahead: 0, behind: 0, changed: 0, upstream: false },
+    'detached, clean, no upstream');
+
 // ---- errors ----
 eq(dockerError({ started: false }), 'Docker isn’t installed', 'not installed');
 eq(dockerError({ started: true, err: 'permission denied while trying to connect to the Docker daemon socket' }),
@@ -120,4 +129,43 @@ eq(dockerError({ started: true, err: '', timedOut: true }), 'Docker took too lon
 ok(!cfg({}).visibleTabs.includes('dev'), 'Dev tab is opt-in');
 ok(cfg({ tabs: { dev: true } }).visibleTabs.includes('dev'), 'Dev tab can be turned on');
 
-print(`dev-check: ${n} checks passed`);
+// ---- repo walk (async, on a scratch tree) ----
+async function walkChecks() {
+    let tmp = GLib.dir_make_tmp('nn-repos-XXXXXX');
+    let mk = (rel, file = null) => {
+        GLib.mkdir_with_parents(`${tmp}/${rel}`, 0o755);
+        if (file)
+            GLib.file_set_contents(`${tmp}/${rel}/${file}`, 'x');
+    };
+    mk('a/.git');                              // a repo
+    mk('a/sub/b/.git');                        // nested inside it
+    mk('c/d/e/f/.git');                        // too deep (4 levels)
+    mk('wt', '.git');                          // a worktree: .git is a file
+    mk('node_modules/pkg/.git');               // skipped folder
+    mk('.hidden/g/.git');                      // hidden folder
+    mk('plain/notes');                         // no repo
+    GLib.file_set_contents(`${tmp}/a/.git/HEAD`, 'ref');
+    let repos = await findRepos([tmp, `${tmp}/`]);
+    eq(repos.map(r => r.path.slice(tmp.length + 1)).sort(), ['a', 'a/sub/b', 'wt'], 'repos found, nested kept, deep/skipped/hidden left out');
+    let b = repos.find(r => r.name === 'b');
+    eq([b.rel, repos.find(r => r.name === 'a').rel], ['a/sub', ''], 'rel is the parent path under the root');
+    ok(repos.every(r => r.at > 0), 'activity time read');
+    eq(await findRepos(['/no/such/folder']), [], 'missing root: nothing');
+    GLib.spawn_command_line_sync(`rm -rf ${GLib.shell_quote(tmp)}`);
+}
+
+// ---- config ----
+ok(Array.isArray(cfg({}).devProjectRoots) && cfg({}).devProjectRoots.length === 0, 'no project folders by default');
+eq(cfg({ devProjectRoots: ['/home/x/P', 'relative', 7, '/home/x/P', null] }).devProjectRoots, ['/home/x/P'],
+    'project folders: absolute paths only, no duplicates');
+eq(cfg({ devProjectRoots: 'nope' }).devProjectRoots, [], 'project folders: not a list');
+
+let loop = new GLib.MainLoop(null, false);
+walkChecks().then(() => {
+    print(`dev-check: ${n} checks passed`);
+    loop.quit();
+}, e => {
+    print(`FAIL: ${e}\n${e.stack}`);
+    imports.system.exit(1);
+});
+loop.run();

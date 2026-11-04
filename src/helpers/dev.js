@@ -2,6 +2,7 @@
 // projects). No actors here, so tests/dev-check.js runs it under plain
 // `gjs -m`.
 
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 
 import { findProgram } from './proc.js';
@@ -200,6 +201,96 @@ export function portRows(sockets, containers = []) {
             hidden++;
     }
     return { rows, hidden };
+}
+
+// ---- Projects ----
+
+// Folders never worth walking into for repos.
+const SKIP_DIRS = new Set(['node_modules', 'venv', 'vendor', '__pycache__', 'site-packages', 'dist', 'build', 'target']);
+
+const enumerate = (dir, attrs) => new Promise(resolve => dir.enumerate_children_async(attrs,
+    Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, GLib.PRIORITY_LOW, null, (d, res) => {
+        let iter;
+        try {
+            iter = d.enumerate_children_finish(res);
+        } catch (e) {
+            resolve([]);
+            return;
+        }
+        let all = [];
+        let next = () => iter.next_files_async(64, GLib.PRIORITY_LOW, null, (it, r) => {
+            let infos;
+            try {
+                infos = it.next_files_finish(r);
+            } catch (e) {
+                infos = [];
+            }
+            if (!infos.length) {
+                iter.close_async(GLib.PRIORITY_LOW, null, null);
+                resolve(all);
+                return;
+            }
+            all.push(...infos);
+            next();
+        });
+        next();
+    }));
+
+// Last change time (ms) of a path, 0 when missing.
+const mtime = path => new Promise(resolve => Gio.File.new_for_path(path).query_info_async('time::modified',
+    Gio.FileQueryInfoFlags.NONE, GLib.PRIORITY_LOW, null, (f, res) => {
+        try {
+            resolve(f.query_info_finish(res).get_modification_date_time().to_unix() * 1000);
+        } catch (e) {
+            resolve(0);
+        }
+    }));
+
+// Git repositories under `roots`, `depth` levels down at most (a repo's own
+// folders are searched too: repos nest) → [{ path, root, name, rel, at }],
+// most recently used first (newest change to .git's index, HEAD or
+// FETCH_HEAD). Hidden folders, symlinks and SKIP_DIRS are skipped. `.git`
+// may be a file (a worktree).
+export async function findRepos(roots, depth = 3) {
+    let repos = [];
+    let walk = async (root, path, level) => {
+        let infos = await enumerate(Gio.File.new_for_path(path), 'standard::name,standard::type');
+        if (infos.some(i => i.get_name() === '.git'))
+            repos.push({ path, root });
+        if (level >= depth)
+            return;
+        await Promise.all(infos.filter(i => i.get_file_type() === Gio.FileType.DIRECTORY && !i.get_name().startsWith('.')
+            && !SKIP_DIRS.has(i.get_name())).map(i => walk(root, `${path}/${i.get_name()}`, level + 1)));
+    };
+    await Promise.all([...new Set(roots)].map(r => walk(r.replace(/\/+$/, ''), r.replace(/\/+$/, ''), 0)));
+    let seen = new Set();
+    repos = repos.filter(r => !seen.has(r.path) && seen.add(r.path));
+    await Promise.all(repos.map(async r => {
+        let times = await Promise.all(['.git/index', '.git/HEAD', '.git/FETCH_HEAD', '.git'].map(f => mtime(`${r.path}/${f}`)));
+        r.at = Math.max(...times);
+        r.name = GLib.path_get_basename(r.path);
+        // "SEAD/gestor" for ~/Projetos/SEAD/gestor/api-mcp-gestor; '' at the top.
+        r.rel = r.path === r.root ? '' : GLib.path_get_dirname(r.path.slice(r.root.length + 1)).replace(/^\.$/, '');
+    }));
+    return repos.sort((a, b) => b.at - a.at || a.path.localeCompare(b.path));
+}
+
+// `git status --porcelain=v2 --branch` → { branch, ahead, behind, changed,
+// upstream } (branch null when detached).
+export function parseGitStatus(text) {
+    let st = { branch: null, ahead: 0, behind: 0, changed: 0, upstream: false };
+    for (let line of String(text ?? '').split('\n')) {
+        let m;
+        if ((m = line.match(/^# branch\.head (.+)$/)))
+            st.branch = m[1] === '(detached)' ? null : m[1];
+        else if ((m = line.match(/^# branch\.ab \+(\d+) -(\d+)$/)))
+            [st.ahead, st.behind] = [Number(m[1]), Number(m[2])];
+        else if (line.startsWith('# branch.upstream '))
+            st.upstream = true;
+        else if (/^[12u?] /.test(line))
+            st.changed++;
+    }
+    return st;
 }
 
 // What a failed docker command said, in a line.

@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   *network* (every interface). A row opens `http://localhost:PORT`; the
   stop button asks once ("Stop?"), then sends the process SIGTERM (or runs
   `docker stop`). Other users' ports (cups, DNS) are only counted.
+- A **Projects** view: the git repositories in the folders you pick in
+  Preferences → *Dev tab · Projects* (searched 3 levels down, repos inside
+  repos included, hidden folders and `node_modules` & co. skipped), most
+  recently used first. The newest 20 show their branch, changed files and
+  ahead/behind (`git --no-optional-locks status`, so a commit running in a
+  terminal never meets a lock). A row opens the repo in your editor (the
+  Claude Code one from Preferences, or the file manager); its buttons open
+  a terminal there or start `claude` in it.
+- Text buttons beside rows ("claude", port chips) and armed confirm buttons
+  ("Remove?", "Stop?") size to their word instead of the round button's.
 - The long-running reader behind the privacy dots now lives in
   `helpers/proc.js` (`watchRecords`) and is shared with the Docker watcher.
   Its retry limit now counts deaths in a row (it used to retry forever).

@@ -1685,6 +1685,11 @@
     color: #ff8a80;
     background-color: rgba(255, 92, 92, 0.14);
 }
+/* An armed round button ("Remove?", "Stop?") grows to fit its word. */
+.nook-mini-btn.nook-danger {
+    width: auto;
+    padding: 0 10px;
+}
 
 /* Small round icon buttons (transport on Home, reset/skip on Focus). */
 .nook-mini-btn,
@@ -2603,9 +2608,20 @@
     font-weight: bold;
     font-feature-settings: "tnum";
 }
+/* Text buttons beside a row (":5432", "claude"), shaped like .nook-mini-btn. */
 .nn-dev-chip {
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 999px;
     font-size: 11px;
     font-feature-settings: "tnum";
+    color: rgba(255, 255, 255, 0.8);
+    background-color: rgba(255, 255, 255, 0.06);
+    transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+.nn-dev-chip:hover {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.12);
 }
 .nn-claude-age {
     width: 52px;
