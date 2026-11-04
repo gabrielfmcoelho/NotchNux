@@ -188,6 +188,8 @@ const DEFAULT_ACCENT = '#7aa2ff';
 export const MAX_PINNED = 8;
 export const DEFAULT_PINNED_MAX = 5;
 export const DEFAULT_PINNED = ['media', 'tasks', 'calendar', 'weather', 'system'];
+// Which sensor the pill shows (helpers/sensors.js SENSOR_KINDS), or off.
+export const PILL_TEMPS = ['off', 'cpu', 'ssd', 'gpu'];
 
 // A stored shortcut limit → an integer in 1–MAX_PINNED (default when unset).
 export function clampPinnedMax(n) {
@@ -295,6 +297,12 @@ export class ConfigStore {
             // the first pinnedMax shown.
             pinnedTabs: [...DEFAULT_PINNED],
             pinnedMax: DEFAULT_PINNED_MAX,
+            // Temperature in the pill stats ('off' or a sensor kind), and
+            // every sensor in the Tray SYSTEM card.
+            pillTemp: 'off',
+            trayTemps: false,
+            // Fan levels in Tray (beta); usable only after tools/fan-setup.sh.
+            fanControl: false,
             // Keep Awake survives a lock/unlock (the extension is re-enabled).
             keepAwake: false,
             // Music tab shows synced lyrics in place of the vinyl + knob.
@@ -349,6 +357,9 @@ export class ConfigStore {
                 data.accent = normalizeHex(parsed.accent) ?? DEFAULT_ACCENT;
                 data.pinnedTabs = this._cleanPinned(parsed.pinnedTabs ?? DEFAULT_PINNED);
                 data.pinnedMax = clampPinnedMax(parsed.pinnedMax);
+                data.pillTemp = PILL_TEMPS.includes(parsed.pillTemp) ? parsed.pillTemp : 'off';
+                data.trayTemps = !!parsed.trayTemps;
+                data.fanControl = !!parsed.fanControl;
                 data.keepAwake = !!parsed.keepAwake;
                 data.musicLyrics = !!parsed.musicLyrics;
                 data.tabOrder = this._reconcileOrder(parsed.tabOrder);
@@ -483,6 +494,32 @@ export class ConfigStore {
     setPinnedMax(n) {
         this._refresh();
         this._data.pinnedMax = clampPinnedMax(n);
+        this._save();
+    }
+
+    // ---- Temperatures and fan (helpers/sensors.js) ----
+    get pillTemp() {
+        return PILL_TEMPS.includes(this._data.pillTemp) ? this._data.pillTemp : 'off';
+    }
+    setPillTemp(kind) {
+        this._refresh();
+        this._data.pillTemp = PILL_TEMPS.includes(kind) ? kind : 'off';
+        this._save();
+    }
+    get trayTemps() {
+        return !!this._data.trayTemps;
+    }
+    setTrayTemps(on) {
+        this._refresh();
+        this._data.trayTemps = !!on;
+        this._save();
+    }
+    get fanControl() {
+        return !!this._data.fanControl;
+    }
+    setFanControl(on) {
+        this._refresh();
+        this._data.fanControl = !!on;
         this._save();
     }
 
