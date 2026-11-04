@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (which now runs while either is connected); with NotchNux off, curl
   fails quietly. Disconnect removes only that entry.
 
-### Added — Dev tab: containers
+### Added — Dev tab: containers, ports and projects
 - A **Dev** tab (opt-in, Preferences → Tabs) with a **Containers** view:
   Docker containers grouped by compose project — running, restarting,
   paused, and those that exited with an error in the last day (clean exits
