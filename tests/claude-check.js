@@ -10,7 +10,8 @@ import {
     SOCKET_NAME, approveSocketPath, approveCommand, passThrough, asksAtOnce, describeRequest, decisionBody,
     isApproveConnected, connectApproveHook, disconnectApproveHook,
     isActivityConnected, connectActivityHook, disconnectActivityHook, activityCommand, describeActivity, ACTIVITY_PATH,
-    activityFromPrefix,
+    activityFromPrefix, statusLineOutdated, updateStatusLine, parseSessionStats, fmtCost, recordUsage, usageForecast,
+    statsPath, WRAPPER,
     HOOK_TIMEOUT_S, settingsLayout, formatSettings,
     parseNeedsAuth, newAuthNames, parseMcpList, mcpSummary,
     SAFE_MODES, rulesOf, removeRule, setDefaultMode, claudeSettingsFiles, readSettingsAsync, writeSettingsAsync,
@@ -195,6 +196,40 @@ eq(hooked.hooks.PermissionRequest[0].hooks[0].timeout, HOOK_TIMEOUT_S, 'hook tim
 const emptyGroup = { hooks: { PermissionRequest: [{ matcher: 'X', hooks: [] }] } };
 eq(text(disconnectApproveHook(JSON.parse(text(connectApproveHook(emptyGroup, sock))))), text(emptyGroup),
     'a foreign group that was already empty survives');
+
+// ---- context and cost per session ----
+eq(parseSessionStats(JSON.stringify({ session_id: 'a', context_window: { used_percentage: 58.6 },
+    cost: { total_cost_usd: 37.1438 }, model: { display_name: 'Opus 5.5' } })),
+{ contextPct: 59, costUsd: 37.1438, model: 'Opus 5.5' }, 'stats parsed');
+eq(parseSessionStats('{"session_id":"a"}'), { contextPct: null, costUsd: null, model: null }, 'stats missing: nulls');
+ok(parseSessionStats('nope') === null && parseSessionStats('7') === null, 'stats: bad JSON');
+eq([fmtCost(0.4249), fmtCost(37.1438), fmtCost(128.6)], ['$0.42', '$37.14', '$129'], 'cost format');
+ok(statsPath('2834e6c5-bff8-438f') && statsPath('../x') === null && statsPath('a/b') === null && statsPath(undefined) === null,
+    'stats path only for plain session ids');
+let oldWrap = { statusLine: { type: 'command', command: wrapCommand('ccusage').replace(GLib.shell_quote(WRAPPER), GLib.shell_quote('in=$(cat); echo old')) } };
+ok(isConnected(oldWrap) && statusLineOutdated(oldWrap), 'an older wrapper is connected but outdated');
+let updated = updateStatusLine(oldWrap);
+ok(isConnected(updated) && !statusLineOutdated(updated) && updated.statusLine.command === wrapCommand('ccusage'),
+    'update rewraps the same original command');
+ok(!statusLineOutdated(connectStatusLine(original)) && !statusLineOutdated(original), 'current or not connected: not outdated');
+
+// Forecast: 30 → 60 % in 30 minutes, reset in 3 h → full 40 minutes after the last reading.
+const MIN = 60000;
+let sm = [];
+for (let [t, pct] of [[0, 30], [10, 40], [20, 50], [30, 60]])
+    sm = recordUsage(sm, { pct, resetsAt: 180 * MIN }, t * MIN);
+eq(usageForecast(sm, 30 * MIN), 70 * MIN, 'forecast: full at the last half hour\'s pace');
+eq(usageForecast(recordUsage([], { pct: 60, resetsAt: 180 * MIN }, 0), 0), null, 'one reading: no forecast');
+eq(usageForecast(recordUsage(sm, { pct: 60, resetsAt: 200 * MIN }, 31 * MIN), 31 * MIN), null, 'a new window starts over');
+let slow = [];
+for (let [t, pct] of [[0, 10], [30, 12]])
+    slow = recordUsage(slow, { pct, resetsAt: 60 * MIN }, t * MIN);
+eq(usageForecast(slow, 30 * MIN), null, 'too slow to fill before the reset');
+let flat = [];
+for (let t of [0, 15, 30])
+    flat = recordUsage(flat, { pct: 40, resetsAt: 180 * MIN }, t * MIN);
+eq(usageForecast(flat, 30 * MIN), null, 'not growing: no forecast');
+eq(recordUsage([{ t: 0, pct: 5, resetsAt: 9 }], { pct: 6, resetsAt: 9 }, 61 * MIN).length, 1, 'readings older than an hour drop');
 
 // ---- what sessions are doing: the activity hook ----
 ok(activityCommand(sock).includes("--unix-socket '/run/user/1000/notchnux-claude.sock'") && activityCommand(sock).endsWith('|| true')
@@ -463,6 +498,7 @@ let cacheFile = `${home}/.cache/notchnux/claude-usage.json`;
 function runWrapped(original, input) {
     let launcher = new Gio.SubprocessLauncher({ flags: Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE });
     launcher.setenv('HOME', home, true);
+    launcher.setenv('XDG_RUNTIME_DIR', `${home}/rt`, true);
     let proc = launcher.spawnv(['sh', '-c', wrapCommand(original)]);
     let [, out] = proc.communicate_utf8(input, null);
     return [out, proc.get_exit_status()];
@@ -475,6 +511,19 @@ eq(out, `${usage} <- seen\n`, 'original gets the same input and its output passe
 eq(new TextDecoder().decode(GLib.file_get_contents(cacheFile)[1]), usage, 'rate_limits input saved');
 runWrapped('true', '{"cwd":"/y"}');
 eq(new TextDecoder().decode(GLib.file_get_contents(cacheFile)[1]), usage, 'later input without rate_limits keeps the file');
+// Each session's own copy, in the runtime folder.
+let statsIn = '{"session_id":"2834e6c5-bff8-438f","context_window":{"used_percentage":59},"cost":{"total_cost_usd":1.5}}';
+[out] = runWrapped('cat; echo " <- seen"', statsIn);
+eq(out, `${statsIn} <- seen\n`, 'per-session copy: the original still gets the same input');
+eq(new TextDecoder().decode(GLib.file_get_contents(`${home}/rt/notchnux-claude/2834e6c5-bff8-438f.json`)[1]), statsIn,
+    'per-session copy saved under the session id');
+runWrapped('true', '{"session_id":"../../evil","x":1}');
+runWrapped('true', '{"cwd":"/no-session-id"}');
+let saved = [];
+let en = Gio.File.new_for_path(`${home}/rt/notchnux-claude`).enumerate_children('standard::name', 0, null);
+for (let i; (i = en.next_file(null));)
+    saved.push(i.get_name());
+eq(saved, ['2834e6c5-bff8-438f.json'], 'odd or missing session ids save nothing');
 
 // ---- run the approve hook command for real, against a scratch socket ----
 const sockPath = `${home}/nn.sock`;

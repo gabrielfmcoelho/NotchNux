@@ -44,7 +44,8 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import {
-    SESSIONS_DIR, USAGE_PATH, SESSION_FILE, parseSession, procStat, isLive, alertFor,
+    SESSIONS_DIR, USAGE_PATH, SESSION_FILE, statsPath, parseSessionStats, fmtCost, recordUsage, usageForecast,
+    parseSession, procStat, isLive, alertFor,
     parseUsage, sortSessions, pillDots, fmtAge,
     APPROVE_PATH, HOOK_TIMEOUT_S, approveSocketPath, passThrough, asksAtOnce, describeRequest, decisionBody, describeActivity, activityFromPrefix, ACTIVITY_PATH,
     MCP_AUTH_PATH, parseNeedsAuth, newAuthNames, parseMcpList, mcpSummary, claudeBinary,
@@ -291,7 +292,11 @@ const ClaudeFeatures = {
                     s ??= c.sessions.get(parseInt(name)) ?? null;
                     if (!s)
                         return null;
-                    return isLive(s, await read(`/proc/${s.pid}/stat`, cancellable)) ? s : null;
+                    if (!isLive(s, await read(`/proc/${s.pid}/stat`, cancellable)))
+                        return null;
+                    // Context and cost, when the status line is connected.
+                    let stats = statsPath(s.sessionId);
+                    return { ...s, stats: stats ? parseSessionStats(await read(stats, cancellable) ?? '') : null };
                 }));
                 let usage = parseUsage(await read(USAGE_PATH, cancellable) ?? '');
                 let auth = parseNeedsAuth(await read(MCP_AUTH_PATH, cancellable) ?? '');
@@ -326,6 +331,7 @@ const ClaudeFeatures = {
             c.unseen.clear();
         c.sessions = next;
         c.usage = usage;
+        c.usageSamples = recordUsage(c.usageSamples ?? [], usage?.fiveHour, Date.now());
         let fresh = [];
         if (auth !== null) {   // null: caught mid-write, keep the last one
             fresh = newAuthNames(c.mcp.auth, auth);
@@ -816,6 +822,7 @@ const ClaudeFeatures = {
         c.extras.loaded = false;
         c.unseen.clear();
         this._syncClaudeMonitor();
+        this._queueClaudeRead();   // fresh context and cost
         this._updateClaudeTab(false);
     },
 
@@ -883,10 +890,13 @@ const ClaudeFeatures = {
             if (w)
                 this._setMeter(m, w.pct, animate);
         }
+        // At the last hour's pace, the 5-hour window fills before it resets.
+        let full = usageForecast(c.usageSamples ?? [], Date.now());
         if (!u)
             ui.resets.set_text('Connect Claude Code in NotchNux Preferences to see usage.');
         else
             ui.resets.set_text([u.fiveHour && `5-hour ${fmtReset(u.fiveHour.resetsAt)}`,
+                full && `full by ${fmt(new Date(full), { hour: 'numeric', minute: '2-digit' })} at this pace`,
                 u.weekly && `weekly ${fmtReset(u.weekly.resetsAt)}`].filter(Boolean).join(' · '));
 
         // ---- sessions: rebuild only when the set or a state changes ----
@@ -1467,8 +1477,13 @@ const ClaudeFeatures = {
         // The folder, or while it works and activity is connected, what it's doing.
         let meta = text('', 'nook-card-meta', { visible: false });
         col.add_child(meta);
-        (ui.metas ??= []).push({ label: meta, s });
         row.add_child(col);
+        // How full its context is, and what it has cost (from the status line).
+        let ctx = text('', 'nn-claude-stats', { visible: false });
+        let cost = text('', 'nn-claude-stats nn-claude-cost', { visible: false });
+        row.add_child(ctx);
+        row.add_child(cost);
+        (ui.metas ??= []).push({ label: meta, ctx, cost, s });
         row.add_child(text(STATE_TEXT[s.state], 'nn-claude-state', { style: `color: ${stateColor(s.state)};` }));
         let age = text('', 'nn-claude-age');
         row.add_child(age);
@@ -1490,7 +1505,18 @@ const ClaudeFeatures = {
     _updateClaudeMetas(ui) {
         let c = this._claude;
         let resized = false;
-        for (let { label, s } of ui.metas ?? []) {
+        for (let { label, ctx, cost, s } of ui.metas ?? []) {
+            // The list rebuilds on state changes only: read the live session.
+            let st = c.sessions.get(s.pid)?.stats;
+            let pct = st?.contextPct ?? null;
+            ctx.visible = pct !== null;
+            if (pct !== null) {
+                ctx.set_text(`${pct}% ctx`);
+                ctx.set_style(`color: ${statColor(pct)};`);
+            }
+            cost.visible = st?.costUsd != null;
+            if (cost.visible)
+                cost.set_text(fmtCost(st.costUsd));
             let act = s.state === 'working' ? c.activity.get(s.sessionId) : null;
             let t = act ?? (s.folder && s.folder !== s.name ? s.folder : '');
             if (label.text !== t)

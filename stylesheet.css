@@ -2623,6 +2623,13 @@
     color: #ffffff;
     background-color: rgba(255, 255, 255, 0.12);
 }
+.nn-claude-stats {
+    font-size: 11px;
+    font-feature-settings: "tnum";
+}
+.nn-claude-cost {
+    color: rgba(255, 255, 255, 0.5);
+}
 .nn-claude-age {
     width: 52px;
     font-size: 11px;

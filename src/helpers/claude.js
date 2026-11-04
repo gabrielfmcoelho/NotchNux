@@ -30,6 +30,10 @@ export const MANAGED_SETTINGS_PATH = '/etc/claude-code/managed-settings.json';
 // Hard-coded rather than $XDG_CACHE_HOME: Claude Code (started from a
 // terminal) and gnome-shell can see different environments.
 export const USAGE_PATH = `${HOME}/.cache/notchnux/claude-usage.json`;
+// Each session's latest status-line JSON (context window, cost), saved by
+// the wrapper below in the runtime folder: tmpfs, gone at logout.
+export const STATS_DIR = `${GLib.get_user_runtime_dir()}/notchnux-claude`;
+export const statsPath = sessionId => (/^[0-9A-Za-z-]+$/.test(sessionId ?? '') ? `${STATS_DIR}/${sessionId}.json` : null);
 
 export const SESSION_FILE = /^\d+\.json$/;
 
@@ -165,11 +169,17 @@ export function fmtAge(ms) {
 //
 // Connecting puts this inline script in front of the user's own status line
 // command. It saves the status-line JSON when it carries rate_limits (atomic
-// write, safe with many sessions), then pipes the same input to the original
-// command, so its output is unchanged. Inline rather than a shipped script so
-// uninstalling NotchNux without disconnecting can't break the status line.
+// write, safe with many sessions), and every session's own copy under
+// $XDG_RUNTIME_DIR/notchnux-claude/<session_id>.json (the id read with
+// parameter expansion, no extra process; anything but [0-9A-Za-z-] is
+// skipped), then pipes the same input to the original command, so its
+// output is unchanged. Inline rather than a shipped script so uninstalling
+// NotchNux without disconnecting can't break the status line.
 const MARKER = 'notchnux-claude';
-export const WRAPPER = String.raw`in=$(cat); case $in in *'"rate_limits"'*) d=$HOME/.cache/notchnux; mkdir -p "$d" && printf %s "$in" >"$d/claude-usage.json.$$" && mv -f "$d/claude-usage.json.$$" "$d/claude-usage.json";; esac; if [ -n "$1" ]; then printf %s "$in" | sh -c "$1"; fi`;
+// The shell's own ${…} (parameter expansion) goes through ${D}: a bare one
+// would be this template's placeholder.
+const D = '$';
+export const WRAPPER = String.raw`in=$(cat); case $in in *'"rate_limits"'*) d=$HOME/.cache/notchnux; mkdir -p "$d" && printf %s "$in" >"$d/claude-usage.json.$$" && mv -f "$d/claude-usage.json.$$" "$d/claude-usage.json";; esac; s=${D}{in#*'"session_id":"'}; s=${D}{s%%'"'*}; r=${D}{XDG_RUNTIME_DIR:-}; case $s in ''|*[!0-9A-Za-z-]*) ;; *) if [ -n "$r" ] && mkdir -p -m 700 "$r/notchnux-claude" 2>/dev/null; then printf %s "$in" >"$r/notchnux-claude/$s.json.$$" && mv -f "$r/notchnux-claude/$s.json.$$" "$r/notchnux-claude/$s.json"; fi;; esac; if [ -n "$1" ]; then printf %s "$in" | sh -c "$1"; fi`;
 
 export function wrapCommand(original) {
     return `sh -c ${GLib.shell_quote(WRAPPER)} ${MARKER} ${GLib.shell_quote(original ?? '')}`;
@@ -192,6 +202,64 @@ export function unwrapCommand(command) {
 
 export function isConnected(settings) {
     return unwrapCommand(settings?.statusLine?.command) !== null;
+}
+
+// Connected by an older NotchNux (its wrapper doesn't save each session's
+// copy): Preferences offers to update it.
+export function statusLineOutdated(settings) {
+    let command = settings?.statusLine?.command;
+    let original = unwrapCommand(command);
+    return original !== null && command !== wrapCommand(original);
+}
+
+export const updateStatusLine = settings => connectStatusLine(disconnectStatusLine(settings));
+
+// A session's status-line JSON → { contextPct, costUsd, model } (each null
+// when missing), or null.
+export function parseSessionStats(text) {
+    let j;
+    try {
+        j = JSON.parse(text);
+    } catch (e) {
+        return null;
+    }
+    if (!j || typeof j !== 'object')
+        return null;
+    let num = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+    let pct = num(j.context_window?.used_percentage);
+    return {
+        contextPct: pct === null ? null : Math.max(0, Math.min(100, Math.round(pct))),
+        costUsd: num(j.cost?.total_cost_usd),
+        model: typeof j.model?.display_name === 'string' ? j.model.display_name : null,
+    };
+}
+
+// "$0.42", "$37.14", "$128".
+export const fmtCost = usd => (usd >= 100 ? `$${Math.round(usd)}` : `$${usd.toFixed(2)}`);
+
+// The 5-hour window's readings, for the forecast: [{ t, pct }] of the
+// current window (a new reset time starts over), the last FORECAST_SPAN_MS.
+const FORECAST_SPAN_MS = 60 * 60 * 1000;
+const FORECAST_MIN_MS = 10 * 60 * 1000;
+export function recordUsage(samples, fiveHour, nowMs) {
+    if (!fiveHour)
+        return samples;
+    let kept = samples.filter(x => x.resetsAt === fiveHour.resetsAt && nowMs - x.t <= FORECAST_SPAN_MS);
+    return [...kept, { t: nowMs, pct: fiveHour.pct, resetsAt: fiveHour.resetsAt }];
+}
+
+// When the 5-hour window fills at the pace of the last hour (at least 10
+// minutes of it), if that's before it resets → ms, else null.
+export function usageForecast(samples, nowMs) {
+    let last = samples.at(-1);
+    let first = samples[0];
+    if (!last || !first || last.t - first.t < FORECAST_MIN_MS || last.pct >= 100 || !last.resetsAt)
+        return null;
+    let rate = (last.pct - first.pct) / (last.t - first.t);
+    if (rate <= 0)
+        return null;
+    let full = last.t + (100 - last.pct) / rate;
+    return full < last.resetsAt && full > nowMs ? full : null;
 }
 
 // Return new settings with the wrapper in place. Keeps every other key (and

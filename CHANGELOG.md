@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — context and cost per Claude Code session
+- Each session's row in the Claude tab shows how full its context window
+  is ("55% ctx", green / yellow / red) and what it has cost so far, from
+  Claude Code's own status-line numbers.
+- The usage card says when the 5-hour window fills at the last hour's pace
+  ("full by 15:40 at this pace"), when that's before it resets.
+- The status-line step (Preferences → Claude Code → Usage limits) also saves
+  each session's numbers to `$XDG_RUNTIME_DIR/notchnux-claude/` (gone at
+  logout). Already connected? The row shows **Update** to add that.
+
 ### Added — power mode in the Tray
 - A **POWER MODE** card in the Tray: Saver · Balanced · Performance (the
   ones this computer offers), set the way GNOME's own Power Mode sets them
