@@ -44,16 +44,19 @@ export function run(argv, { cwd = null, env = null, timeoutS = 30, procs = new M
         });
         return GLib.SOURCE_REMOVE;
     });
-    proc.communicate_utf8_async(null, null, (p, res) => {
+    proc.communicate_async(null, null, (p, res) => {
         if (entry.id)
             GLib.Source.remove(entry.id);
         entry.id = 0;
         procs.delete(p);
         let out = null, err = null;
         try {
-            [, out, err] = p.communicate_utf8_finish(res);
+            // Bytes, decoded each on its own: a stray non-UTF-8 byte becomes
+            // U+FFFD instead of losing both streams.
+            let [, o, e] = p.communicate_finish(res);
+            [out, err] = [o, e].map(b => (b ? new TextDecoder().decode(b.toArray()) : ''));
         } catch (e) {
-            // killed, or not UTF-8: both stay null
+            // killed: both stay null
         }
         done({ out, err, ok: p.get_successful(), timedOut: entry.timedOut, started: true });
     });

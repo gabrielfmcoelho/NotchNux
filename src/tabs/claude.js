@@ -46,7 +46,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {
     SESSIONS_DIR, USAGE_PATH, SESSION_FILE, parseSession, procStat, isLive, alertFor,
     parseUsage, sortSessions, pillDots, fmtAge,
-    APPROVE_PATH, HOOK_TIMEOUT_S, approveSocketPath, passThrough, asksAtOnce, describeRequest, decisionBody, describeActivity, ACTIVITY_PATH,
+    APPROVE_PATH, HOOK_TIMEOUT_S, approveSocketPath, passThrough, asksAtOnce, describeRequest, decisionBody, describeActivity, activityFromPrefix, ACTIVITY_PATH,
     MCP_AUTH_PATH, parseNeedsAuth, newAuthNames, parseMcpList, mcpSummary, claudeBinary,
     SAFE_MODES, rulesOf, removeRule, setDefaultMode, claudeSettingsFiles, readSettingsAsync, writeSettingsAsync,
     SETTINGS_PATH, parsePluginList, parseSkillMeta, setSkillOverride, skillSources, parseEnviron,
@@ -67,6 +67,10 @@ const ALERT_MS = 4000;
 const DONE_GREY = 'rgba(255, 255, 255, 0.35)';
 const STATE_TEXT = { working: 'Working', approval: 'Needs approval', question: 'Has a question', done: 'Done' };
 const MAX_REQUEST_BYTES = 4 * 1024 * 1024;
+// Activity bodies past this (a Write of a big file) aren't parsed on the
+// compositor thread: their first ACTIVITY_PREFIX bytes hold what's shown.
+const ACTIVITY_PARSE_MAX = 64 * 1024;
+const ACTIVITY_PREFIX = 8 * 1024;
 // Gone before the hook times out (a click after that would do nothing), even
 // when the cut-off falls just after a sweep. Monotonic, like Claude Code's
 // timer: a suspend doesn't age a request.
@@ -540,9 +544,16 @@ const ClaudeFeatures = {
 
     // PreToolUse (async): note what the session is doing, answer at once.
     _onClaudeActivity(msg) {
-        let req = this._readClaudeJson(msg);
-        if (!req)
-            return;
+        let size = msg.get_request_body().length ?? 0;
+        let req;
+        if (msg.get_method() === 'POST' && size > ACTIVITY_PARSE_MAX) {
+            let bytes = msg.get_request_body().flatten().get_data() ?? new Uint8Array();
+            req = activityFromPrefix(new TextDecoder().decode(bytes.subarray(0, ACTIVITY_PREFIX)));
+        } else {
+            req = this._readClaudeJson(msg);
+            if (!req)
+                return;
+        }
         this._replyClaude(msg, 204);
         let id = String(req.session_id ?? '');
         if (!this._config.claudeActivity || !id)

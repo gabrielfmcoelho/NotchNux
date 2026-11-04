@@ -31,6 +31,9 @@ eq(parsePorts('0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp, 8080/tcp'),
 eq(parsePorts('127.0.0.1:8000->80/tcp, [::1]:8000->80/tcp'), [{ port: 8000, target: 80, proto: 'tcp', local: true }], 'local only');
 eq(parsePorts('127.0.0.1:8000->80/tcp, [::]:8000->80/tcp')[0].local, false, 'local on v4 but public on v6');
 eq(parsePorts(''), [], 'no ports');
+eq(parsePorts('0.0.0.0:8000-8002->9000-9002/tcp').map(p => [p.port, p.target]), [[8000, 9000], [8001, 9001], [8002, 9002]],
+    'port ranges count each port');
+eq(parsePorts('0.0.0.0:1-60000->1-60000/tcp').length, 64, 'a huge range is capped');
 eq(parsePorts(undefined), [], 'missing ports');
 
 // ---- docker ps ----
@@ -78,6 +81,8 @@ ok(tr.add(e('die', 60000 + 299000, 1)) === null, 'mute extends with each death')
 eq(tr.add(e('die', 60000 + 299000 + 300001, 1)).kind, 'exited', 'up for 5 min: alerts again');
 tr = new CrashTracker();
 ok(tr.add(e('kill', 1000)) === null && tr.add(e('die', 1500, 137)) === null, 'a stop you asked for is quiet');
+ok(tr.add(e('kill', 100000)) === null && tr.add(e('die', 130000, 143)) === null, 'a 30 s graceful shutdown is quiet too');
+eq(tr.add(e('die', 140000, 1)).kind, 'exited', 'the stop is used up: the next crash alerts');
 ok(tr.add(e('die', 1000 + 16000, 0)) === null, 'a clean exit is quiet');
 tr = new CrashTracker();
 tr.add(e('die', 1000, 1));
@@ -107,6 +112,13 @@ let pr = portRows(socks, [{ name: 'db-1', state: 'running', ports: [{ port: 5432
 eq(pr.rows.map(r => [r.port, r.name, r.container]), [[5173, 'node', null], [5432, 'db-1', 'db-1'], [8000, 'uvicorn', null],
     [9277, 'warp-terminal', null], [37901, 'bun', null]], 'own processes and published container ports');
 eq(pr.hidden, 2, 'system ports counted as hidden');
+// Rootless Docker: the forwarder is our own process, but stopping it would
+// stop every container; its port goes to the container instead.
+let rootless = portRows(parseSs('LISTEN 0 4096 *:5432 *:* users:(("rootlesskit",pid=99,fd=3))\n'
+    + 'LISTEN 0 4096 *:6000 *:* users:(("rootlessport",pid=98,fd=3))\n'),
+[{ name: 'db-1', state: 'running', ports: [{ port: 5432, target: 5432, proto: 'tcp', local: false }] }]);
+eq([rootless.rows.map(r => [r.port, r.container, r.pid]), rootless.hidden], [[[5432, 'db-1', null]], 1],
+    'rootless forwarders: matched to the container, never listed as a process to stop');
 eq(parseSs(''), [], 'no sockets');
 
 // ---- git status ----

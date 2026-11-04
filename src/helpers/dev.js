@@ -23,16 +23,21 @@ export function terminalArgv(dir, cmd = [], { hold = false } = {}) {
 
 // "0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp, 8080/tcp" → the published
 // ones, one per host port: [{ port, target, proto, local }]. `local`: only
-// reachable from this computer (bound to 127.0.0.1 / ::1).
+// reachable from this computer (bound to 127.0.0.1 / ::1). Ranges
+// ("8000-8002->8000-8002/tcp") count each port, MAX_RANGE at most.
+const MAX_RANGE = 64;
 export function parsePorts(text) {
     let out = new Map();
-    for (let m of String(text ?? '').matchAll(/(?:(\[[^\]]*\]|[\d.]+):)?(\d+)->(\d+)\/(tcp|udp)/g)) {
-        let [, host = '', port, target, proto] = m;
+    for (let m of String(text ?? '').matchAll(/(?:(\[[^\]]*\]|[\d.]+):)?(\d+)(?:-(\d+))?->(\d+)(?:-\d+)?\/(tcp|udp)/g)) {
+        let [, host = '', first, last = first, target, proto] = m;
         let local = host === '127.0.0.1' || host === '[::1]';
-        let key = `${port}/${proto}`;
-        let prev = out.get(key);
-        // Both v4 and v6 published: local only if every binding is.
-        out.set(key, { port: Number(port), target: Number(target), proto, local: prev ? prev.local && local : local });
+        for (let i = 0; i <= Math.min(Number(last) - Number(first), MAX_RANGE - 1); i++) {
+            let port = Number(first) + i;
+            let key = `${port}/${proto}`;
+            let prev = out.get(key);
+            // Both v4 and v6 published: local only if every binding is.
+            out.set(key, { port, target: Number(target) + i, proto, local: prev ? prev.local && local : local });
+        }
     }
     return [...out.values()];
 }
@@ -122,7 +127,9 @@ export function parseDockerEvent(line) {
 // `muteMs` (alerts only replace each other while showing, so a crash loop
 // would otherwise alert forever). At most two alerts per crash loop.
 export class CrashTracker {
-    constructor({ quietMs = 15000, loopN = 3, loopMs = 120000, muteMs = 300000 } = {}) {
+    // quietMs: the die that follows a kill/stop within this long is the stop
+    // you asked for (graceful shutdowns can take a while: stop_grace_period).
+    constructor({ quietMs = 600000, loopN = 3, loopMs = 120000, muteMs = 300000 } = {}) {
         Object.assign(this, { quietMs, loopN, loopMs, muteMs });
         this._c = new Map();   // id → { stoppedAt, dies: [ms], mutedUntil }
     }
@@ -138,8 +145,12 @@ export class CrashTracker {
             c.stoppedAt = ev.at;
             return null;
         }
-        if (ev.action !== 'die' || ev.at - c.stoppedAt < this.quietMs)
+        if (ev.action !== 'die')
             return null;
+        if (ev.at - c.stoppedAt < this.quietMs) {
+            c.stoppedAt = -Infinity;   // that stop is used up
+            return null;
+        }
         if (ev.at < c.mutedUntil) {
             c.mutedUntil = ev.at + this.muteMs;   // still looping: stay quiet
             return null;
@@ -181,9 +192,14 @@ export function parseSs(text) {
     return [...out.values()].sort((a, b) => a.port - b.port);
 }
 
+// Processes that only forward a container's ports (rootless Docker /
+// Podman, docker-proxy): stopping one would take every container down, so
+// their ports are matched to the container like root's docker-proxy.
+const FORWARDERS = new Set(['docker-proxy', 'rootlesskit', 'rootlessport', 'pasta', 'pasta.avx2', 'slirp4netns', 'conmon']);
+
 // What the Ports view lists: this user's processes, and Docker's published
-// ports (root's docker-proxy, so no process: matched by port to the
-// container) → { rows: [{ port, local, name, pid, container }], hidden }.
+// ports (forwarded by root's docker-proxy or a rootless forwarder, matched
+// by port to the container) → { rows: [{ port, local, name, pid, container }], hidden }.
 export function portRows(sockets, containers = []) {
     let published = new Map();
     for (let c of containers.filter(c => c.state === 'running')) {
@@ -192,8 +208,9 @@ export function portRows(sockets, containers = []) {
     }
     let rows = [], hidden = 0;
     for (let s of sockets) {
-        let pub = s.pid === null ? published.get(s.port) : null;
-        if (s.pid !== null)
+        let forwarder = s.pid === null || FORWARDERS.has(s.name);
+        let pub = forwarder ? published.get(s.port) : null;
+        if (!forwarder)
             rows.push({ ...s, container: null });
         else if (pub && !rows.some(r => r.container === pub.c.name && r.port === s.port))
             rows.push({ port: s.port, local: pub.local, name: pub.c.name, pid: null, container: pub.c.name });
@@ -204,6 +221,8 @@ export function portRows(sockets, containers = []) {
 }
 
 // ---- Projects ----
+
+const WALK_JOBS = 8;
 
 // Folders never worth walking into for repos.
 const SKIP_DIRS = new Set(['node_modules', 'venv', 'vendor', '__pycache__', 'site-packages', 'dist', 'build', 'target']);
@@ -253,8 +272,26 @@ const mtime = path => new Promise(resolve => Gio.File.new_for_path(path).query_i
 // may be a file (a worktree).
 export async function findRepos(roots, depth = 3) {
     let repos = [];
+    // At most WALK_JOBS folders open at once: each holds a directory fd in
+    // gnome-shell until it's read, and a wide tree would open thousands.
+    let free = WALK_JOBS, waiting = [];
+    let limited = async fn => {
+        if (free > 0)
+            free--;
+        else
+            await new Promise(resolve => waiting.push(resolve));
+        try {
+            return await fn();
+        } finally {
+            let next = waiting.shift();
+            if (next)
+                next();
+            else
+                free++;
+        }
+    };
     let walk = async (root, path, level) => {
-        let infos = await enumerate(Gio.File.new_for_path(path), 'standard::name,standard::type');
+        let infos = await limited(() => enumerate(Gio.File.new_for_path(path), 'standard::name,standard::type'));
         if (infos.some(i => i.get_name() === '.git'))
             repos.push({ path, root });
         if (level >= depth)

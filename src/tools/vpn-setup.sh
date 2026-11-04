@@ -41,9 +41,10 @@ if [ "${1:-}" = "--remove" ]; then
 fi
 
 CONFIG=/etc/openfortivpn/config
+CONFIG_GIVEN=no
 case ${1:-} in
     '') ;;
-    --config) CONFIG=${2:-}; [ -n "$CONFIG" ] || die "--config needs a file" ;;
+    --config) CONFIG=${2:-}; CONFIG_GIVEN=yes; [ -n "$CONFIG" ] || die "--config needs a file" ;;
     *) die "unknown option: $1" ;;
 esac
 
@@ -53,8 +54,15 @@ case $USER_NAME in *[!A-Za-z0-9_.-]*) die "unexpected user name: $USER_NAME" ;; 
 
 DONE=
 FORTI=$(command -v openfortivpn || true)
+# openfortivpn installed but never configured: set up Tailscale only (the
+# Tray doesn't offer Forti without a config either), unless asked for a file.
+if [ -n "$FORTI" ] && [ ! -f "$CONFIG" ]; then
+    [ "$CONFIG_GIVEN" = no ] || die "no Forti config at $CONFIG"
+    echo "vpn-setup: no Forti config at $CONFIG, so Forti is skipped (use --config FILE)" >&2
+    FORTI=
+fi
 if [ -n "$FORTI" ]; then
-    [ -f "$CONFIG" ] || die "no Forti config at $CONFIG (use --config FILE)"
+    CONFIG=$(readlink -f -- "$CONFIG")   # the unit runs from /: it needs an absolute path
     case $CONFIG in *[!A-Za-z0-9_./-]*) die "unexpected config path: $CONFIG" ;; esac
     cat > "$UNIT_FILE" <<EOF
 # NotchNux Forti VPN, written by vpn-setup.sh. Undo: sudo sh vpn-setup.sh --remove

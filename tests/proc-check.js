@@ -28,6 +28,10 @@ async function main() {
     r = await runP(['sh', '-c', 'echo $NN_X'], { env: ['NN_X=7', 'PATH=/usr/bin:/bin'] });
     ok(r.out === '7\n', 'env replaces the environment');
 
+    // A stray non-UTF-8 byte on stderr keeps stdout.
+    r = await runP(['sh', '-c', 'echo fine; printf "\\377\\n" >&2']);
+    ok(r.ok && r.out === 'fine\n' && r.err === '\uFFFD\n', `stdout survives bad stderr bytes: ${JSON.stringify(r)}`);
+
     r = await runP(['/no/such/binary']);
     ok(!r.started && !r.ok && r.err, 'spawn failure reports started=false');
 

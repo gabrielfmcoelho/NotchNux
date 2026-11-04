@@ -10,6 +10,7 @@ import {
     SOCKET_NAME, approveSocketPath, approveCommand, passThrough, asksAtOnce, describeRequest, decisionBody,
     isApproveConnected, connectApproveHook, disconnectApproveHook,
     isActivityConnected, connectActivityHook, disconnectActivityHook, activityCommand, describeActivity, ACTIVITY_PATH,
+    activityFromPrefix,
     HOOK_TIMEOUT_S, settingsLayout, formatSettings,
     parseNeedsAuth, newAuthNames, parseMcpList, mcpSummary,
     SAFE_MODES, rulesOf, removeRule, setDefaultMode, claudeSettingsFiles, readSettingsAsync, writeSettingsAsync,
@@ -235,6 +236,14 @@ for (let [input, want] of [
     [{}, 'Working'],
 ])
     eq(describeActivity(input), want, `describeActivity(${input.tool_name})`);
+// A big Write: only its start is read, and it still says what's happening.
+let bigWrite = JSON.stringify({ session_id: 's"1', transcript_path: '/t', cwd: '/c', hook_event_name: 'PreToolUse',
+    tool_name: 'Write', tool_input: { file_path: '/a/b/big \\ file.js', content: 'x'.repeat(200000) } });
+let pre = activityFromPrefix(bigWrite.slice(0, 8192));
+eq([pre.session_id, describeActivity(pre)], ['s"1', 'Editing big \\ file.js'], 'activity from a body prefix');
+eq(describeActivity(activityFromPrefix('{"session_id":"x","tool_name":"Bash","tool_input":{"command":"y'.slice(0, 50))), 'Running a command',
+    'a prefix cut inside a field still names the tool');
+eq(activityFromPrefix('garbage').session_id, undefined, 'no fields: nothing');
 
 // ---- settings.json layout survives Connect / Disconnect ----
 for (let [what, raw] of [
