@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   container that dies with an error — not one you stopped — raises an
   alert; if it keeps dying (3 times in 2 minutes) a second one says so, and
   then it stays quiet until it has been up for 5 minutes.
+- A **Ports** view: what listens on a TCP port (`ss -ltnp`), your own
+  processes with the folder they run in, and Docker's published ports with
+  their container's name; each marked *local* (this computer only) or
+  *network* (every interface). A row opens `http://localhost:PORT`; the
+  stop button asks once ("Stop?"), then sends the process SIGTERM (or runs
+  `docker stop`). Other users' ports (cups, DNS) are only counted.
 - The long-running reader behind the privacy dots now lives in
   `helpers/proc.js` (`watchRecords`) and is shared with the Docker watcher.
   Its retry limit now counts deaths in a row (it used to retry forever).

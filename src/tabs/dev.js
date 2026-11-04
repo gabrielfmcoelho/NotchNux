@@ -1,9 +1,12 @@
-// Dev tab: the containers on this computer.
+// Dev tab: the containers and servers on this computer.
 //
 //   Containers  Docker containers grouped by compose project: running,
 //               restarting, paused, and those that exited with an error. A row
 //               opens its logs in a terminal; its buttons restart it and stop
 //               or start it; its port chips open http://localhost:PORT.
+//   Ports       What listens on a TCP port: this user's processes (with the
+//               folder they run in) and Docker's published ports. A row opens
+//               http://localhost:PORT; stop asks once, then ends it.
 //
 // While the tab is enabled, `docker events` runs in the background (it only
 // prints when a container starts, dies or stops), so a container that
@@ -20,14 +23,15 @@ import St from 'gi://St';
 import { run, killAll, watchRecords, findProgram } from '../helpers/proc.js';
 import {
     terminalArgv, parseDockerPs, visibleContainers, groupByProject, parseDockerEvent, CrashTracker, dockerError,
+    parseSs, portRows,
 } from '../helpers/dev.js';
 import { addPressFeedback } from '../helpers/motion.js';
 import { logError } from '../helpers/log.js';
 import { SYS, iconBtn } from './ledge.js';
 import { text, dot, scrolled } from './claude.js';
 
-const DEV_VIEWS = [['containers', 'Containers']];
-const RELOAD_S = { containers: 30 };   // re-read an open view at most this often
+const DEV_VIEWS = [['containers', 'Containers'], ['ports', 'Ports']];
+const RELOAD_S = { containers: 30, ports: 5 };   // re-read an open view at most this often
 const EVENT_DEBOUNCE_MS = 300;
 const ALERT_MS = 5000;
 const DOCKER_EVENTS = ['start', 'die', 'kill', 'stop', 'destroy'];
@@ -42,6 +46,7 @@ const DevFeatures = {
             watch: null, restarts: 0, restartId: 0, debounceId: 0,
             tabOpen: false,
             containers: { list: null, error: '', loading: false, at: 0 },
+            ports: { list: null, error: '', loading: false, at: 0 },
             busy: new Set(),       // container names with an action running
         };
         this._syncDevWatch();
@@ -192,6 +197,8 @@ const DevFeatures = {
             return;
         if (id === 'containers')
             this._loadContainers();
+        else if (id === 'ports')
+            this._loadPorts();
     },
 
     _loadContainers() {
@@ -229,6 +236,7 @@ const DevFeatures = {
             ui.views[id].visible = id === view;
         }
         this._updateContainers(ui.containers);
+        this._updatePorts(ui.ports);
     },
 
     _updateContainers(ui) {
@@ -320,6 +328,121 @@ const DevFeatures = {
                 this._pushAlert({ kind: `docker:${name}`, icon: 'dialog-warning-symbolic', color: SYS.red, title: name,
                     value: `${args[0]} failed: ${dockerError(r)}`, valueColor: SYS.red, ms: ALERT_MS });
             this._loadContainers();
+            if (this._devView === 'ports')
+                this._loadPorts();
+        });
+    },
+
+    // ================================================================ ports
+
+    _loadPorts() {
+        let d = this._dev;
+        let st = d.ports;
+        if (st.loading)
+            return;
+        let ss = findProgram('ss');
+        if (!ss) {
+            Object.assign(st, { list: null, error: 'ss (iproute2) isn’t installed', at: Date.now() });
+            this._updateDevTab();
+            return;
+        }
+        // Published container ports are matched against the container list.
+        if (d.docker && Date.now() - d.containers.at > RELOAD_S.containers * 1000)
+            this._loadContainers();
+        st.loading = true;
+        run([ss, '-ltnpH'], { timeoutS: 5, procs: d.procs }, r => {
+            st.loading = false;
+            if (this._destroyed)
+                return;
+            st.at = Date.now();
+            st.list = r.ok ? parseSs(r.out) : null;
+            st.error = r.ok ? '' : (r.err?.trim() || 'ss failed');
+            this._updateDevTab();
+        });
+    },
+
+    _updatePorts(ui) {
+        let d = this._dev;
+        let st = d.ports;
+        let { rows, hidden } = st.list ? portRows(st.list, d.containers.list ?? []) : { rows: [], hidden: 0 };
+        let sig = JSON.stringify([st.error, st.list === null, rows, hidden, [...d.busy]]);
+        if (sig === ui.sig)
+            return;
+        ui.sig = sig;
+        ui.meta.set_text(st.list === null ? '' : [`${rows.length} listening`,
+            hidden && `${hidden} system ${hidden === 1 ? 'port' : 'ports'} hidden`].filter(Boolean).join(' · '));
+        ui.list.destroy_all_children();
+        if (st.error || !rows.length) {
+            ui.list.add_child(this._devEmpty('network-server-symbolic',
+                st.error || (st.list === null ? 'Reading ports…' : 'Nothing of yours is listening')));
+        } else {
+            for (let r of rows)
+                ui.list.add_child(this._buildPortRow(r));
+        }
+        this._resizeDevTab();
+    },
+
+    // [:8000  uvicorn / dlhsead-api  local] [■]; the row opens it in the browser.
+    _buildPortRow(r) {
+        let busy = this._dev.busy.has(r.container ?? `pid:${r.pid}`);
+        let line = new St.BoxLayout({ style_class: 'nn-claude-session', x_expand: true });
+        if (busy)
+            line.opacity = 128;
+        let btn = new St.Button({ style_class: 'nn-claude-row', x_expand: true, can_focus: true, reactive: !busy,
+            accessible_name: `Open http://localhost:${r.port}` });
+        let row = new St.BoxLayout({ x_expand: true });
+        row.add_child(text(`:${r.port}`, 'nn-dev-port'));
+        let col = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'nn-claude-col' });
+        col.add_child(text(r.name, 'nn-claude-name'));
+        let where = r.container ? 'Docker container' : this._procFolder(r.pid);
+        if (where)
+            col.add_child(text(where, 'nook-card-meta'));
+        row.add_child(col);
+        row.add_child(text(r.local ? 'local' : 'network', 'nn-claude-state',
+            { style: `color: ${r.local ? 'rgba(255, 255, 255, 0.5)' : SYS.orange};` }));
+        btn.set_child(row);
+        btn.connect('clicked', () => this._openUrl(`http://localhost:${r.port}`));
+        addPressFeedback(btn);
+        line.add_child(btn);
+        let stop = iconBtn('media-playback-stop-symbolic', 'nook-mini-btn',
+            () => this._armOrRun(stop, () => this._stopPort(r), { label: 'Stop?', icon: 'media-playback-stop-symbolic' }),
+            `Stop ${r.name}`);
+        stop.reactive = !busy;
+        line.add_child(stop);
+        return line;
+    },
+
+    // The folder a process runs in, as "~/…" (its own, so readable).
+    _procFolder(pid) {
+        try {
+            let dir = GLib.file_read_link(`/proc/${pid}/cwd`);
+            let home = GLib.get_home_dir();
+            return dir === home ? '~' : dir.startsWith(`${home}/`) ? `~/${dir.slice(home.length + 1)}` : dir;
+        } catch (e) {
+            return '';
+        }
+    },
+
+    // A container: docker stop. A process of ours: SIGTERM, then re-read.
+    _stopPort(r) {
+        if (r.container) {
+            this._dockerAction(r.container, ['stop', r.container]);
+            return;
+        }
+        let d = this._dev;
+        let key = `pid:${r.pid}`;
+        d.busy.add(key);
+        this._updateDevTab();
+        run(['kill', '-TERM', String(r.pid)], { timeoutS: 5, procs: d.procs }, () => {
+            d.busy.delete(key);
+            if (this._destroyed)
+                return;
+            // Give it a moment to close its socket.
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+                if (!this._destroyed)
+                    this._loadPorts();
+                return GLib.SOURCE_REMOVE;
+            });
         });
     },
 

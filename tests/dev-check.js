@@ -3,7 +3,7 @@
 
 import {
     terminalArgv, exitedRecently, parsePorts, parseDockerPs, visibleContainers, groupByProject, parseDockerEvent, CrashTracker,
-    dockerError,
+    dockerError, parseSs, portRows,
 } from '../src/helpers/dev.js';
 import { ConfigStore } from '../src/helpers/config.js';
 
@@ -82,6 +82,31 @@ tr = new CrashTracker();
 tr.add(e('die', 1000, 1));
 tr.add(e('destroy', 1200));
 eq(tr.add(e('die', 1300, 1)).kind, 'exited', 'destroy forgets history');
+
+// ---- ports ----
+let ss = [
+    'LISTEN 0      4096       127.0.0.1:9277  0.0.0.0:* users:(("warp-terminal",pid=14963,fd=56))',
+    'LISTEN 0      4096   127.0.0.53%lo:53    0.0.0.0:*',
+    'LISTEN 0      4096       127.0.0.1:631   0.0.0.0:*',
+    'LISTEN 0      2048         0.0.0.0:8000  0.0.0.0:* users:(("uvicorn",pid=42,fd=3),("uvicorn",pid=43,fd=3))',
+    'LISTEN 0      2048            [::]:8000     [::]:* users:(("uvicorn",pid=42,fd=4))',
+    'LISTEN 0      4096         0.0.0.0:5432  0.0.0.0:*',
+    'LISTEN 0      4096            [::]:5432     [::]:*',
+    'LISTEN 0      511            [::1]:5173     [::]:* users:(("node",pid=7,fd=20))',
+    'LISTEN 0      511                *:37901        *:* users:(("bun",pid=8,fd=11))',
+    'ESTAB  0      0      127.0.0.1:1 127.0.0.1:2 users:(("x",pid=1,fd=1))',
+    '',
+].join('\n');
+let socks = parseSs(ss);
+eq(socks.map(s => [s.port, s.local, s.name, s.pid]), [[53, true, '', null], [631, true, '', null], [5173, true, 'node', 7],
+    [5432, false, '', null], [8000, false, 'uvicorn', 42], [9277, true, 'warp-terminal', 14963], [37901, false, 'bun', 8]],
+    'ss: merged v4/v6, %lo stripped, first process, sorted');
+let pr = portRows(socks, [{ name: 'db-1', state: 'running', ports: [{ port: 5432, target: 5432, proto: 'tcp', local: false }] },
+    { name: 'gone', state: 'exited', ports: [{ port: 631, target: 631, proto: 'tcp', local: true }] }]);
+eq(pr.rows.map(r => [r.port, r.name, r.container]), [[5173, 'node', null], [5432, 'db-1', 'db-1'], [8000, 'uvicorn', null],
+    [9277, 'warp-terminal', null], [37901, 'bun', null]], 'own processes and published container ports');
+eq(pr.hidden, 2, 'system ports counted as hidden');
+eq(parseSs(''), [], 'no sockets');
 
 // ---- errors ----
 eq(dockerError({ started: false }), 'Docker isn’t installed', 'not installed');
