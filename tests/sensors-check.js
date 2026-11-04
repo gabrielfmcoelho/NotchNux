@@ -151,6 +151,8 @@ eq([cfg({}).trayTemps, cfg({ trayTemps: 1 }).trayTemps, cfg({}).fanControl, cfg(
     [false, true, false, true], 'tray temperatures and fan control are opt-in');
 eq([cfg({}).fanGuard, cfg({ fanGuard: false }).fanGuard, cfg({ fanGuard: 'x' }).fanGuard], [true, false, true],
     'back to Auto when hot: on unless turned off');
+eq([cfg({}).fanKeep, cfg({ fanKeep: 'off' }).fanKeep, cfg({ fanKeep: 'auto' }).fanKeep, cfg({ fanKeep: 'turbo' }).fanKeep],
+    [null, 'off', null, null], 'kept fan level: a manual level or nothing');
 
 main().catch(e => {
     failed = e;

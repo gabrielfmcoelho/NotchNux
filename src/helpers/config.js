@@ -192,6 +192,8 @@ const DEFAULT_ACCENT = '#7aa2ff';
 export const MAX_PINNED = 8;
 export const DEFAULT_PINNED_MAX = 5;
 export const DEFAULT_PINNED = ['media', 'tasks', 'calendar', 'weather', 'system'];
+// Manual fan levels (helpers/sensors.js FAN_LEVELS, all but Auto).
+export const FAN_KEEP_LEVELS = ['low', 'med', 'high', 'max', 'off'];
 // The Dev tab's terminal: the system default, or one of helpers/dev.js TERMINALS.
 export const DEV_TERMINALS = ['', 'warp'];
 // Which sensor the pill shows (helpers/sensors.js SENSOR_KINDS), or off.
@@ -316,6 +318,9 @@ export class ConfigStore {
             // A manual fan level goes back to Auto at FAN_GUARD_C (or when the
             // CPU can't be read). Off: the level stays until changed.
             fanGuard: true,
+            // The manual fan level last set from the notch (null: Auto). With
+            // fanGuard off it's put back when NotchNux starts (unlock, login).
+            fanKeep: null,
             // Keep Awake survives a lock/unlock (the extension is re-enabled).
             keepAwake: false,
             // Music tab shows synced lyrics in place of the vinyl + knob.
@@ -386,6 +391,7 @@ export class ConfigStore {
                 data.trayTemps = !!parsed.trayTemps;
                 data.fanControl = !!parsed.fanControl;
                 data.fanGuard = parsed.fanGuard !== false;
+                data.fanKeep = FAN_KEEP_LEVELS.includes(parsed.fanKeep) ? parsed.fanKeep : null;
                 data.keepAwake = !!parsed.keepAwake;
                 data.musicLyrics = !!parsed.musicLyrics;
                 data.claudeApprove = !!parsed.claudeApprove;
@@ -552,6 +558,14 @@ export class ConfigStore {
     setFanControl(on) {
         this._refresh();
         this._data.fanControl = !!on;
+        this._save();
+    }
+    get fanKeep() {
+        return this._data.fanKeep ?? null;
+    }
+    setFanKeep(level) {
+        this._refresh();
+        this._data.fanKeep = FAN_KEEP_LEVELS.includes(level) ? level : null;
         this._save();
     }
     get fanGuard() {

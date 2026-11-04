@@ -611,7 +611,7 @@ const TrayFeatures = {
             : level === 'auto' || level === null ? ''
                 : st?.level ? (this._config.fanGuard
                     ? `Back to Auto at ${FAN_GUARD_C} °C, and when NotchNux stops or the screen locks`
-                    : 'Stays until you change it (back to Auto when NotchNux stops or the screen locks)')
+                    : 'Stays until you change it, also after the screen locks')
                     : 'Set outside NotchNux: no automatic return to Auto');
         ui.note.set_text(text);
         if (ui.note.visible !== !!text) {
@@ -640,6 +640,10 @@ const TrayFeatures = {
             st.level = id === 'auto' ? null : id;
             st.sentAt = GLib.get_monotonic_time();
             st.error = '';
+            // Remembered for the next start (see _restoreFan); the minute's
+            // re-send writes nothing new.
+            if (this._config.fanKeep !== st.level)
+                this._writeConfig(c => c.setFanKeep(st.level));
         } catch (e) {
             st.error = `Couldn’t set the fan (${e.message})`;
             logError('Setting the fan level', e);
@@ -691,6 +695,8 @@ const TrayFeatures = {
     // Fan control turned off in Preferences, or NotchNux stopping: Auto.
     // `now`: a synchronous write, for disable() and logout, where an async
     // one may never run. ponytail: sync on purpose (one tiny sysfs write).
+    // With "Back to Auto when hot" off, stopping (screen lock, logout) leaves
+    // the level alone: _restoreFan puts it back on the next start anyway.
     _releaseFan(now = false) {
         let st = this._fan;
         if (!st)
@@ -698,7 +704,7 @@ const TrayFeatures = {
         if (st.id)
             GLib.Source.remove(st.id);
         st.id = 0;
-        if (!st.level)
+        if (!st.level || (now && !this._config.fanGuard))
             return;
         if (!now) {
             this._setFanLevel('auto');
@@ -710,6 +716,19 @@ const TrayFeatures = {
         } catch (e) {
             logError('Putting the fan back to Auto', e);
         }
+    },
+
+    // NotchNux starting (login, unlock after a lid close): with "Back to
+    // Auto when hot" off, the level you last set comes back (the firmware,
+    // or the ThinkPad watchdog, may have reset it while NotchNux was off).
+    async _restoreFan() {
+        let level = this._config.fanKeep;
+        if (!level || this._config.fanGuard || !this._config.fanControl)
+            return;
+        let { fan } = await this._ensureSensors();
+        if (this._destroyed || !fan || !(await fanUsable(fan)))
+            return;
+        this._setFanLevel(level);
     },
 
     // ---- VPN (helpers/vpn.js): Tailscale and the Forti unit ----

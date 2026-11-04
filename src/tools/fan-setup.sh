@@ -3,7 +3,7 @@
 # do, once, so the Tray tab can set the fan level without a password.
 #
 #   sudo sh fan-setup.sh                 set up (with the ThinkPad fan watchdog)
-#   sudo sh fan-setup.sh --no-watchdog   set up, leave the watchdog alone
+#   sudo sh fan-setup.sh --no-watchdog   set up without the watchdog (and turn it off now)
 #   sudo sh fan-setup.sh --remove        undo
 #
 # What it changes:
@@ -73,6 +73,9 @@ EXTRA=
 REBOOT=no
 if [ "$NAME" = thinkpad ]; then
     if [ "$WATCHDOG" = yes ]; then EXTRA="; echo 120 > $WATCHDOG_FILE"; fi
+    # Without it: off now too (an earlier setup may have turned it on), so a
+    # level you set lasts while the screen is locked.
+    if [ "$WATCHDOG" = no ] && [ -w "$WATCHDOG_FILE" ]; then echo 0 > "$WATCHDOG_FILE"; fi
     if [ "$(cat /sys/module/thinkpad_acpi/parameters/fan_control 2>/dev/null || echo N)" != Y ]; then
         echo 'options thinkpad_acpi fan_control=1' > "$MODCONF"
         REBOOT=yes
