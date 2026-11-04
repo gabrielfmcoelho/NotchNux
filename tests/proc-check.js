@@ -2,7 +2,7 @@
 // Exits non-zero on the first failure.
 
 import GLib from 'gi://GLib';
-import { run, killAll, findProgram } from '../src/helpers/proc.js';
+import { run, killAll, findProgram, watchRecords } from '../src/helpers/proc.js';
 
 let n = 0;
 function ok(cond, what) {
@@ -41,6 +41,18 @@ async function main() {
     killAll(procs);
     r = await killed;
     ok(procs.size === 0 && !r.ok && !r.timedOut, 'killAll stops it');
+
+    // Records split across reads come out whole; onEnd once stdout closes.
+    let recs = [];
+    await new Promise(resolve => watchRecords(['sh', '-c', 'printf "a\\nb\\nc"; sleep 0.2; printf "d\\n"'], '\n',
+        rec => recs.push(rec), resolve));
+    ok(JSON.stringify(recs) === '["a","b","cd"]', `watchRecords splits records: ${JSON.stringify(recs)}`);
+    ok(watchRecords(['/no/such/binary'], '\n', () => {}) === null, 'watchRecords: missing program is null');
+    let ended = false;
+    let w = watchRecords(['sleep', '30'], '\n', () => {}, () => { ended = true; });
+    w.stop();
+    await new Promise(resolve => GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => resolve() ?? GLib.SOURCE_REMOVE));
+    ok(!ended, 'stop() doesn\u2019t call onEnd');
 }
 
 let loop = new GLib.MainLoop(null, false);

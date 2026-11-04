@@ -8,6 +8,7 @@ import NM from 'gi://NM';
 // We import Main to control screen brightness and check layout
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import { logError, logDebug } from './log.js';
+import { watchRecords } from './proc.js';
 
 export class SystemHelper {
     constructor() {
@@ -157,75 +158,38 @@ export class SystemHelper {
         }
     }
 
-    // Spawn `argv`, read its stdout asynchronously and hand every complete
-    // record (text up to `sep`) to `onRecord`. Restarts with backoff if the
-    // process dies (e.g. PipeWire restarted), a few times at most.
+    // Run `argv` and hand every complete record (text up to `sep`) to
+    // `onRecord`. Restarts with backoff if the process dies (e.g. PipeWire
+    // restarted), a few times in a row at most.
     _startPrivacyProc(name, argv, onRecord, sep) {
+        let restarts = this._privacyProcs[name]?.restarts ?? 0;
         this._stopPrivacyProc(name);
-        let entry = { proc: null, cancellable: new Gio.Cancellable(), restartId: 0,
-            restarts: this._privacyProcs[name]?.restarts ?? 0 };
+        let entry = { watch: null, restartId: 0, restarts };
         this._privacyProcs[name] = entry;
-        try {
-            entry.proc = Gio.Subprocess.new(argv,
-                Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
-        } catch (e) {
-            // Tool not installed: that source simply never reports "in use".
-            return;
-        }
-        let stream = entry.proc.get_stdout_pipe();
-        let decoder = new TextDecoder();
-        let sepBytes = new TextEncoder().encode(sep);
-        // Raw bytes until a full record arrives: GJS's TextDecoder has no
-        // streaming mode, and the separators are ASCII, so decoding whole
-        // records never splits a multi-byte character.
-        let buf = new Uint8Array(0);
-        let read = () => stream.read_bytes_async(65536, GLib.PRIORITY_LOW, entry.cancellable, (s, res) => {
-            let bytes;
-            try {
-                bytes = s.read_bytes_finish(res);
-            } catch (e) {
-                return; // cancelled
+        entry.watch = watchRecords(argv, sep, record => {
+            entry.restarts = 0;   // it works: a later death gets fresh retries
+            onRecord(record);
+        }, () => {
+            // EOF: the monitor died. Retry a few times, then give up.
+            if (this._privacyOn && entry.restarts < 5 && this._privacyProcs[name] === entry) {
+                entry.restarts++;
+                entry.restartId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 5 * entry.restarts, () => {
+                    entry.restartId = 0;
+                    if (this._privacyOn && this._privacyProcs[name] === entry)
+                        this._startPrivacyProc(name, argv, onRecord, sep);
+                    return GLib.SOURCE_REMOVE;
+                });
             }
-            if (bytes.get_size() === 0) {
-                // EOF: the monitor died. Retry a few times, then give up.
-                if (this._privacyOn && entry.restarts < 5 && this._privacyProcs[name] === entry) {
-                    entry.restarts++;
-                    entry.restartId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, 5 * entry.restarts, () => {
-                        entry.restartId = 0;
-                        if (this._privacyOn && this._privacyProcs[name] === entry)
-                            this._startPrivacyProc(name, argv, onRecord, sep);
-                        return GLib.SOURCE_REMOVE;
-                    });
-                }
-                return;
-            }
-            let chunk = bytes.toArray();
-            let merged = new Uint8Array(buf.length + chunk.length);
-            merged.set(buf);
-            merged.set(chunk, buf.length);
-            buf = merged;
-            let idx;
-            while ((idx = indexOfBytes(buf, sepBytes)) >= 0) {
-                let record = decoder.decode(buf.subarray(0, idx + sepBytes.length - 1));
-                buf = buf.slice(idx + sepBytes.length);
-                try {
-                    onRecord(record);
-                } catch (e) {
-                    logDebug(`privacy monitor ${name}: ${e.message}`);
-                }
-            }
-            read();
         });
-        read();
+        // No watch: the tool isn't installed, so that source never reports "in use".
     }
 
     _stopPrivacyProc(name) {
         let entry = this._privacyProcs[name];
         if (!entry) return;
         delete this._privacyProcs[name];
-        entry.cancellable.cancel();
         if (entry.restartId) GLib.Source.remove(entry.restartId);
-        entry.proc?.force_exit();
+        entry.watch?.stop();
     }
 
     // Read a small file (/proc, /sys) without blocking the compositor, then
@@ -1838,17 +1802,6 @@ export class SystemHelper {
             logError('Error ejecting drive', e);
         }
     }
-}
-
-// Index of the byte sequence `seq` in `arr`, or -1.
-function indexOfBytes(arr, seq) {
-    let first = seq[0];
-    for (let i = arr.indexOf(first); i >= 0 && i <= arr.length - seq.length; i = arr.indexOf(first, i + 1)) {
-        let k = 1;
-        while (k < seq.length && arr[i + k] === seq[k]) k++;
-        if (k === seq.length) return i;
-    }
-    return -1;
 }
 
 // Helper to convert GBytes/ByteArray to Javascript string
