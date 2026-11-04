@@ -503,7 +503,9 @@ const TrayFeatures = {
         let st = this._fan;
         let text = st?.error || (!picked.cpu ? 'No CPU sensor found, so only Auto is offered'
             : level === 'auto' || level === null ? ''
-                : st?.level ? `Back to Auto at ${FAN_GUARD_C} °C, and when NotchNux stops or the screen locks`
+                : st?.level ? (this._config.fanGuard
+                    ? `Back to Auto at ${FAN_GUARD_C} °C, and when NotchNux stops or the screen locks`
+                    : 'Stays until you change it (back to Auto when NotchNux stops or the screen locks)')
                     : 'Set outside NotchNux: no automatic return to Auto');
         ui.note.set_text(text);
         if (ui.note.visible !== !!text) {
@@ -559,17 +561,19 @@ const TrayFeatures = {
         }
     },
 
-    // Too hot, or the CPU can't be read: back to Auto. Otherwise re-send the
-    // level once a minute.
+    // Too hot, or the CPU can't be read: back to Auto (unless "Back to Auto
+    // when hot" is off in Preferences). Otherwise re-send the level once a
+    // minute, which also keeps a ThinkPad's fan watchdog from resetting it.
     async _fanGuardTick() {
         let st = this._fan;
         if (!st?.level || st.busy)
             return;
+        let guard = this._config.fanGuard;
         let { picked } = await this._ensureSensors();
-        let c = picked.cpu ? await readTemp(picked.cpu.path) : null;
+        let c = guard && picked.cpu ? await readTemp(picked.cpu.path) : null;
         if (this._destroyed || !st.level || st.busy)
             return;
-        if (c === null || c >= FAN_GUARD_C) {
+        if (guard && (c === null || c >= FAN_GUARD_C)) {
             await this._setFanLevel('auto');
             this._pushAlert({ kind: 'fan', icon: 'dialog-warning-symbolic', color: '#ff9f0a', title: 'Fan back to Auto',
                 value: c === null ? 'CPU temperature unreadable' : `CPU ${Math.round(c)} °C`, valueColor: '#ff9f0a', ms: 4000 });

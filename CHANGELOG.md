@@ -53,6 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `helpers/proc.js` (`watchRecords`) and is shared with the Docker watcher.
   Its retry limit now counts deaths in a row (it used to retry forever).
 
+### Added — keep the fan level you set
+- Preferences → *Temperatures & fan* → **Back to Auto when hot** (on by
+  default). Off: a manual fan level stays when the CPU reaches 85 °C or
+  can't be read, instead of going back to Auto. NotchNux still re-sends it
+  every minute (so a ThinkPad's fan watchdog keeps it), and screen lock and
+  logout still hand the fan back to Auto.
+
 ### Added — VPN in the Tray
 - A **VPN** row in the Tray's connectivity card, shown when Tailscale or the
   Forti VPN (`openfortivpn` with `/etc/openfortivpn/config`) is installed.
