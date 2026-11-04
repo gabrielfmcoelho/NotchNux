@@ -4,7 +4,7 @@
 
 ### A dynamic, macOS-style **Notch** and dashboard for GNOME Shell
 
-A pill that lives at the top of your screen, morphs to show what you're doing, and springs open into a dashboard for your day: tasks, a focus timer, notes, music, calendar, weather, notifications, system controls and a file shelf.
+A pill that lives at the top of your screen, morphs to show what you're doing, and springs open into a dashboard for your day: tasks, a focus timer, notes, music, calendar, weather, notifications, system controls with VPN and fan, a file shelf — and, for developers, your Claude Code sessions, Docker containers, open ports and git projects.
 
 ![NotchNux collapsed pill](assets/pill-collapsed.png)
 
@@ -18,7 +18,7 @@ A pill that lives at the top of your screen, morphs to show what you're doing, a
 
 ## ✨ What is it?
 
-NotchNux replaces the default GNOME top-bar clock with a **living pill**. At a glance it shows the date, time, battery and privacy (mic/camera) indicators. It hosts one **live activity** at a time — a running focus timer, or the track that's playing. When a notification arrives, the pill **morphs into a banner** with action buttons. Hover or click and it **springs open** into a dashboard that starts on **Home**: what's next today, your tasks, the focus timer and now-playing, all in one glance.
+NotchNux replaces the default GNOME top-bar clock with a **living pill**. At a glance it shows the date, time, battery and privacy (mic/camera) indicators, and optionally your Claude Code sessions, a connected VPN and CPU temperature. It hosts one **live activity** at a time — a running focus timer, or the track that's playing. When a notification arrives, the pill **morphs into a banner** with action buttons. Hover or click and it **springs open** into a dashboard that starts on **Home**: what's next today, your tasks, the focus timer and now-playing, all in one glance.
 
 
 
@@ -36,7 +36,7 @@ NotchNux replaces the default GNOME top-bar clock with a **living pill**. At a g
 | 📅 | **Calendar** | A scrollable day strip with your events pulled from GNOME Online Accounts — scroll the dates to jump between days. |
 | 🔔 | **Alerts** | Notification history, and a **peek** mode where the pill expands into a banner with action buttons the moment a notification arrives. |
 | 🗂️ | **Shelf** | A click-to-browse / paste-a-file scratch space, plus **Quick Share** to send files to your phone and other paired [GSConnect](https://github.com/GSConnect/gnome-shell-extension-gsconnect) devices. |
-| 🖥️ | **Tray / System** | A Control Center: Wi-Fi, Bluetooth, hotspot and airplane toggles with in-notch network and device pickers; a **VPN** row for Tailscale and the Forti VPN (openfortivpn, [one-time setup](#vpn-optional)); Silence, Night Light, screenshot and lock tiles; volume and brightness sliders; device batteries; and live CPU, memory, disk and network. Optional: CPU, SSD and GPU temperatures, and fan levels (Auto · Low · Med · High · Max · Off, beta, [one-time setup](#fan-control-beta-optional)). |
+| 🖥️ | **Tray / System** | A Control Center: Wi-Fi, Bluetooth, hotspot and airplane toggles with in-notch network and device pickers; a **VPN** row for Tailscale and the Forti VPN (openfortivpn, [one-time setup](#vpn-optional)); Silence, Night Light, screenshot and lock tiles; volume and brightness sliders; device batteries; and live CPU, memory, disk and network. Optional: CPU, SSD and GPU temperatures (a sleeping GPU reads *asleep* and is never woken to be read), and fan levels (Auto · Low · Med · High · Max · Off, beta, [one-time setup](#fan-control-beta-optional)) that go back to Auto at 85 °C unless you turn that off. |
 | 🏝️ | **Island alerts** | Volume, brightness, charging, low battery, headphones and a 5-minute event heads-up grow out of the pill for a moment, one at a time. |
 | 🫥 | **Hide when idle** | Optional: the notch tucks into the top edge until something is live, or you rest the pointer at the top centre. |
 | 🔲 | **Grid launcher** | Home plus one to eight shortcuts in the header (five by default; Preferences → Tabs → *Header shortcuts*); everything else (and the toggles) behind the grid button. Hold a tile to pick shortcuts. |
@@ -190,7 +190,7 @@ Configuration is stored as plain JSON under `~/.config/notchnux/config.json` —
 | `~/.local/share/notchnux/shelf/` | Files added to the Shelf (cleared once per login) |
 | `~/.cache/notchnux/` | Album art, wallpaper thumbnails and processed wallpapers (pruned automatically) |
 
-Everything is stored locally, readable only by you (`0600` files in `0700` folders). Nothing is uploaded; the only network requests are the weather forecast (Open-Meteo), place-name lookups (OpenStreetMap Nominatim) and album art from your music player. While *Approve from the notch* is connected, NotchNux also listens on a socket in your runtime folder (`$XDG_RUNTIME_DIR/notchnux-claude.sock`) for Claude Code's permission hook, which reaches it with `curl`; only your own user can connect to it.
+Everything is stored locally, readable only by you (`0600` files in `0700` folders). Nothing is uploaded; the only network requests are the weather forecast (Open-Meteo), place-name lookups (OpenStreetMap Nominatim) and album art from your music player. While *Approve from the notch* or *Show what sessions are doing* is connected, NotchNux also listens on a socket in your runtime folder (`$XDG_RUNTIME_DIR/notchnux-claude.sock`) for Claude Code's hooks, which reach it with `curl`; only your own user can connect to it. The Dev tab and the VPN row run local commands (`docker`, `ss`, `git`, `tailscale`) and talk to systemd; they send nothing anywhere themselves.
 
 > **Quick Share** sends files through the [GSConnect](https://github.com/GSConnect/gnome-shell-extension-gsconnect) extension. Install and pair a device in GSConnect to send files to your phone from the Shelf. Pasting a copied file into the Shelf uses `wl-clipboard` (`wl-paste`) on Wayland.
 
@@ -218,6 +218,13 @@ This is a young project and **help is very welcome** — bug reports, feature id
 3. Open a pull request describing what you changed and why.
 
 To build the zip for [extensions.gnome.org](https://extensions.gnome.org/upload/), run `./pack.sh`; it writes `dist/notchnux@adityasah.programs.shell-extension.zip` with only the runtime files.
+
+## 👥 Contributors
+
+- **Aditya Sah** ([Adityasah2004](https://github.com/Adityasah2004)) — created NotchNux.
+- **Gabriel Coelho** ([gabrielfmcoelho](https://github.com/gabrielfmcoelho)) — the Claude Code integration (sessions, usage, approvals from the notch, what sessions are doing), temperatures and fan control, the VPN row, the Dev tab (containers, ports, projects) and the header shortcuts.
+
+Thanks to everyone who [sent a pull request](https://github.com/Adityasah2004/NotchNux/graphs/contributors).
 
 ## 📄 License
 
