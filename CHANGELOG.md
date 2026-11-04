@@ -7,20 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added — what Claude Code sessions are doing
-- Preferences → Claude Code → **Show what sessions are doing**: a working
-  session's row in the Claude tab says what it's doing right now — Bash's
-  own description ("Run the tests") or the command, "Editing tray.js",
-  "Reading sensors.js", "Searching …", "Fetching code.claude.com", an MCP
-  server and tool, a subagent's task. Its folder comes back when the
-  session stops working. The pill is unchanged.
-- Connect adds a `PreToolUse` hook with `"async": true` to
-  `~/.claude/settings.json`: Claude Code runs it in the background and
-  never waits for it, and its exit code can't block a tool. It posts each
-  tool call to NotchNux through the same private socket as approvals
-  (which now runs while either is connected); with NotchNux off, curl
-  fails quietly. Disconnect removes only that entry.
-
 ### Added — Dev tab: containers, ports and projects
 - A **Dev** tab (opt-in, Preferences → Tabs) with a **Containers** view:
   Docker containers grouped by compose project — running, restarting,
@@ -30,35 +16,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and stop or start it; port chips open `http://localhost:PORT`.
 - Crash alerts: while the tab is enabled, `docker events` runs in the
   background (it prints only when a container starts, dies or stops). A
-  container that dies with an error — not one you stopped — raises an
-  alert; if it keeps dying (3 times in 2 minutes) a second one says so, and
-  then it stays quiet until it has been up for 5 minutes.
+  container that dies with an error — not one you stopped, however long
+  its shutdown takes — raises an alert; if it keeps dying (3 times in 2
+  minutes) a second one says so, and then it stays quiet until it has been
+  up for 5 minutes. When Docker stops or starts after login, the watcher
+  keeps retrying (every minute at most).
 - A **Ports** view: what listens on a TCP port (`ss -ltnp`), your own
   processes with the folder they run in, and Docker's published ports with
   their container's name; each marked *local* (this computer only) or
   *network* (every interface). A row opens `http://localhost:PORT`; the
   stop button asks once ("Stop?"), then sends the process SIGTERM (or runs
-  `docker stop`). Other users' ports (cups, DNS) are only counted.
+  `docker stop`). Other users' ports (cups, DNS) are only counted. Ports
+  forwarded by rootless Docker or Podman (rootlesskit, pasta, …) go to
+  their container, so Stop never takes every container down. Port ranges
+  count each port.
 - A **Projects** view: the git repositories in the folders you pick in
   Preferences → *Dev tab · Projects* (searched 3 levels down, repos inside
   repos included, hidden folders and `node_modules` & co. skipped), most
   recently used first. The newest 20 show their branch, changed files and
   ahead/behind (`git --no-optional-locks status`, so a commit running in a
-  terminal never meets a lock). A row opens the repo in your editor (the
-  Claude Code one from Preferences, or the file manager); its buttons open
-  a terminal there or start `claude` in it.
-- Text buttons beside rows ("claude", port chips) and armed confirm buttons
-  ("Remove?", "Stop?") size to their word instead of the round button's.
-- The long-running reader behind the privacy dots now lives in
-  `helpers/proc.js` (`watchRecords`) and is shared with the Docker watcher.
-  Its retry limit now counts deaths in a row (it used to retry forever).
-
-### Added — keep the fan level you set
-- Preferences → *Temperatures & fan* → **Back to Auto when hot** (on by
-  default). Off: a manual fan level stays when the CPU reaches 85 °C or
-  can't be read, instead of going back to Auto. NotchNux still re-sends it
-  every minute (so a ThinkPad's fan watchdog keeps it), and screen lock and
-  logout still hand the fan back to Auto.
+  terminal never meets a lock; with `core.fsmonitor` off, so a repo's own
+  config can't make the notch run a program). A row opens the repo in your
+  editor (the Claude Code one from Preferences, or the file manager); its
+  buttons open a terminal there or start `claude` in it.
 
 ### Added — VPN in the Tray
 - A **VPN** row in the Tray's connectivity card, shown when Tailscale or the
@@ -73,37 +53,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a systemd unit, `notchnux-forti.service`, for `openfortivpn -c <config>`
   (no automatic restart, so a wrong password can't lock the account, and
   never started at boot), a polkit rule that lets only your user start and
-  stop it, and `tailscale set --operator` for Tailscale. `--remove` undoes
-  it.
-- The Tray's network meter no longer counts VPN traffic twice (tailscale,
-  ppp, tun and wg links are skipped, like docker and bridge links).
-- Commands NotchNux runs (claude, tailscale) share one runner,
-  `src/helpers/proc.js`, that also returns their error output.
+  stop it, and `tailscale set --operator` for Tailscale. Each part only if
+  that VPN is installed (Forti also needs its config); `--config FILE` for
+  another Forti config, `--remove` undoes it.
 
-### Added — header shortcuts, 1 to 8
-- Preferences → Tabs → **Header shortcuts** sets how many tabs sit beside
-  Home, 1 to 8 (5 before, still the default). Lowering it hides the extra
-  shortcuts; raising it again brings them back until you next edit them in
-  the grid.
-
-### Added — temperatures and fan control (beta)
-- Preferences → **Temperatures & fan**, all off by default and read from
-  the kernel's hardware sensors (`/sys/class/hwmon`):
-  - **Temperature in the pill**: one sensor (CPU, SSD or GPU, whichever
-    this computer has) next to the pill's stats, coloured as it warms up.
-  - **Temperatures in Tray**: every sensor that reports gets a meter in the
-    Tray's System card. A discrete GPU that's asleep reads *asleep*
-    instead of being woken up to read it (ThinkPads report their NVIDIA
-    card through the laptop's own sensor chip; elsewhere an NVIDIA card,
-    which doesn't report there, is left out).
-  - **Fan control (beta)**: Auto · Low · Med · High · Max · Off in Tray,
-    with the fan speed. It stays locked until you run
-    `sudo sh src/tools/fan-setup.sh` once (it lets your user set the fan's
-    `pwm` files; `--remove` undoes it). A manual level goes back to Auto
-    when the CPU reaches 85 °C or can't be read, when you turn the setting
-    off, and when NotchNux stops (screen lock, logout); it is never
-    restored at login. On ThinkPads the setup also turns on the firmware's
-    2-minute fan watchdog, so even a crash can't leave the fan off.
+### Added — what Claude Code sessions are doing
+- Preferences → Claude Code → **Show what sessions are doing**: a working
+  session's row in the Claude tab says what it's doing right now — Bash's
+  own description ("Run the tests") or the command, "Editing tray.js",
+  "Reading sensors.js", "Searching …", "Fetching code.claude.com", an MCP
+  server and tool, a subagent's task. Its folder comes back when the
+  session stops working. The pill is unchanged.
+- Connect adds a `PreToolUse` hook with `"async": true` to
+  `~/.claude/settings.json`: Claude Code runs it in the background and
+  never waits for it, and its exit code can't block a tool. It posts each
+  tool call to NotchNux through the same private socket as approvals
+  (which now runs while either is connected); with NotchNux off, curl
+  fails quietly. Disconnect removes only that entry. A very large call
+  (a Write of a big file) is read from its start only, so the shell never
+  parses megabytes for one line of text.
 
 ### Added — Claude Code monitor (opt-in)
 - A **Claude** tab lists your running Claude Code sessions (working, needs
@@ -164,6 +132,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   folder decides otherwise, and those folder overrides are listed with a ×
   to remove them.
 
+### Added — temperatures and fan control (beta)
+- Preferences → **Temperatures & fan**, all off by default and read from
+  the kernel's hardware sensors (`/sys/class/hwmon`):
+  - **Temperature in the pill**: one sensor (CPU, SSD or GPU, whichever
+    this computer has) next to the pill's stats, coloured as it warms up.
+  - **Temperatures in Tray**: every sensor that reports gets a meter in the
+    Tray's System card. A discrete GPU that's asleep reads *asleep*
+    instead of being woken up to read it (ThinkPads report their NVIDIA
+    card through the laptop's own sensor chip; elsewhere an NVIDIA card,
+    which doesn't report there, is left out).
+  - **Fan control (beta)**: Auto · Low · Med · High · Max · Off in Tray,
+    with the fan speed. It stays locked until you run
+    `sudo sh src/tools/fan-setup.sh` once (it lets your user set the fan's
+    `pwm` files; `--remove` undoes it). A manual level goes back to Auto
+    when the CPU reaches 85 °C or can't be read, when you turn the setting
+    off, and when NotchNux stops (screen lock, logout); it is never
+    restored at login. On ThinkPads the setup also turns on the firmware's
+    2-minute fan watchdog, so even a crash can't leave the fan off.
+
+### Added — keep the fan level you set
+- Preferences → *Temperatures & fan* → **Back to Auto when hot** (on by
+  default). Off: a manual fan level stays when the CPU reaches 85 °C or
+  can't be read, instead of going back to Auto. NotchNux still re-sends it
+  every minute (so a ThinkPad's fan watchdog keeps it), and screen lock and
+  logout still hand the fan back to Auto.
+
+### Added — header shortcuts, 1 to 8
+- Preferences → Tabs → **Header shortcuts** sets how many tabs sit beside
+  Home, 1 to 8 (5 before, still the default). Lowering it hides the extra
+  shortcuts; raising it again brings them back until you next edit them in
+  the grid.
+
 ### Changed — extensions.gnome.org readiness
 - Clipboard history is now opt-in for new installs (Preferences → Tabs);
   the metadata description declares clipboard and network use.
@@ -188,6 +188,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A banner whose text wraps (a long Claude Code command) no longer hides
   its last line under the action buttons, and it shows the command exactly,
   without a hyphen where a long word wraps.
+- The Tray's network meter no longer counts VPN traffic twice: tailscale,
+  ppp, tun and wg links are skipped, like docker and bridge links.
+- The privacy dots' microphone and camera monitors stop retrying after 5
+  failures in a row, as intended (they retried forever); a monitor that
+  worked again gets fresh retries.
+- Armed confirm buttons ("Remove?" in the Claude tab's Rules) grow to fit
+  their word instead of being cut in the round button.
+- Commands NotchNux runs (claude, and now tailscale, docker, git, ss) share
+  one runner, `src/helpers/proc.js`, that also returns their error output
+  and keeps their output when stderr has a non-UTF-8 byte.
 
 ## [1.6.1] - 2026-11-01
 
