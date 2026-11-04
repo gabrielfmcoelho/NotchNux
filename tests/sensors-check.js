@@ -136,6 +136,8 @@ const cfg = obj => new ConfigStore({ contents: new TextEncoder().encode(JSON.str
 eq([cfg({}).pillTemp, cfg({ pillTemp: 'ssd' }).pillTemp, cfg({ pillTemp: 'bogus' }).pillTemp], ['off', 'ssd', 'off'], 'pill temperature');
 eq([cfg({}).trayTemps, cfg({ trayTemps: 1 }).trayTemps, cfg({}).fanControl, cfg({ fanControl: true }).fanControl],
     [false, true, false, true], 'tray temperatures and fan control are opt-in');
+eq([cfg({}).fanGuard, cfg({ fanGuard: false }).fanGuard, cfg({ fanGuard: 'x' }).fanGuard], [true, false, true],
+    'back to Auto when hot: on unless turned off');
 
 main().catch(e => {
     failed = e;

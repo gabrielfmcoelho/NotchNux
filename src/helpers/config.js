@@ -311,6 +311,9 @@ export class ConfigStore {
             trayTemps: false,
             // Fan levels in Tray (beta); usable only after tools/fan-setup.sh.
             fanControl: false,
+            // A manual fan level goes back to Auto at FAN_GUARD_C (or when the
+            // CPU can't be read). Off: the level stays until changed.
+            fanGuard: true,
             // Keep Awake survives a lock/unlock (the extension is re-enabled).
             keepAwake: false,
             // Music tab shows synced lyrics in place of the vinyl + knob.
@@ -377,6 +380,7 @@ export class ConfigStore {
                 data.pillTemp = PILL_TEMPS.includes(parsed.pillTemp) ? parsed.pillTemp : 'off';
                 data.trayTemps = !!parsed.trayTemps;
                 data.fanControl = !!parsed.fanControl;
+                data.fanGuard = parsed.fanGuard !== false;
                 data.keepAwake = !!parsed.keepAwake;
                 data.musicLyrics = !!parsed.musicLyrics;
                 data.claudeApprove = !!parsed.claudeApprove;
@@ -542,6 +546,14 @@ export class ConfigStore {
     setFanControl(on) {
         this._refresh();
         this._data.fanControl = !!on;
+        this._save();
+    }
+    get fanGuard() {
+        return this._data.fanGuard !== false;
+    }
+    setFanGuard(on) {
+        this._refresh();
+        this._data.fanGuard = !!on;
         this._save();
     }
 

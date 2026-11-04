@@ -769,6 +769,11 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         copy.connect('clicked', () => Gdk.Display.get_default().get_clipboard().set(setup));
         fanRow.add_suffix(copy);
         group.add(fanRow);
+        const guardRow = new Adw.SwitchRow({ title: 'Back to Auto when hot', use_markup: false, active: config.fanGuard,
+            visible: false,
+            subtitle: `A level you set goes back to Auto at ${FAN_GUARD_C} °C CPU, or when the CPU can’t be read. Off: it stays until you change it (the processor still slows itself down when it gets too hot).` });
+        guardRow.connect('notify::active', () => config.setFanGuard(guardRow.active));
+        group.add(guardRow);
 
         discoverHwmon().then(async chips => {
             const picked = pickSensors(chips);
@@ -787,8 +792,9 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
             fanRow.visible = true;
             fanRow.sensitive = usable;
             copy.visible = !usable;
+            guardRow.visible = usable;
             fanRow.subtitle = usable
-                ? `Auto · Low · Med · High · Max · Off in Tray. Back to Auto at ${FAN_GUARD_C} °C CPU, and when NotchNux stops or the screen locks.`
+                ? 'Auto · Low · Med · High · Max · Off in Tray. Back to Auto when NotchNux stops or the screen locks.'
                 : `Locked until a one-time setup lets your user set the fan level. Run this in a terminal (the button copies it): ${setup}`;
         }).catch(e => {
             filling = false;

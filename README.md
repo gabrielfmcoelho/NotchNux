@@ -154,16 +154,20 @@ Then turn on **Fan control (beta)** in Preferences → *Temperatures & fan*. The
 - On a ThinkPad it also turns on the firmware's fan watchdog: a manual level nobody re-sends for 2 minutes goes back to Auto (NotchNux re-sends it every minute). This applies to levels set any other way too, such as `echo level 0 > /proc/acpi/ibm/fan`. If `thinkpad_acpi` has fan control off, the script turns it on in `/etc/modprobe.d/notchnux-fan.conf` and asks for one reboot.
 - `--no-watchdog` sets up without the ThinkPad watchdog; `--remove` undoes everything.
 
-NotchNux puts the fan back to Auto when the CPU reaches 85 °C or can't be read, when you turn the setting off, and when it stops (screen lock, logout). It never restores a manual level at login.
+NotchNux puts the fan back to Auto when the CPU reaches 85 °C or can't be read, when you turn the setting off, and when it stops (screen lock, logout). It never restores a manual level at login. Turn off **Back to Auto when hot** (under Fan control) to keep the level you set however warm it gets; the processor still slows itself down when it gets too hot, and screen lock and logout still hand the fan back.
 
 ### VPN (optional)
-The Tray's **VPN** row lists Tailscale (when installed) and the Forti VPN (when `openfortivpn` and `/etc/openfortivpn/config` exist; the config holds your user and password). Connecting them without a password needs a one-time setup that you run yourself (NotchNux never runs it):
+The Tray's **VPN** row needs nothing extra to show Tailscale (when installed) and the Forti VPN (when `openfortivpn` and its config, `/etc/openfortivpn/config`, exist). Connecting them from the notch without a password needs a one-time setup that you run yourself (NotchNux never runs it):
 ```bash
 sudo sh ~/.local/share/gnome-shell/extensions/notchnux@adityasah.programs/src/tools/vpn-setup.sh
 ```
-- **Forti:** it writes a systemd unit, `notchnux-forti.service`, that runs `openfortivpn -c /etc/openfortivpn/config` (`--config FILE` for another file). It never restarts by itself, so a wrong password can't loop and lock your account, and it never starts at boot. A polkit rule lets only your user start and stop that one unit.
+Then open Tray → **VPN**. Until the setup has run, Forti reads *Set up once* there, and its Copy button gives you this same command. Each part is set up only if that VPN is installed:
+
+- **Forti:** it adds a systemd unit (`/etc/systemd/system/notchnux-forti.service`) that runs `openfortivpn -c /etc/openfortivpn/config`, and a polkit rule (`/etc/polkit-1/rules.d/50-notchnux-forti.rules`) that lets only your user start and stop that one unit, and nothing else. The unit never restarts by itself, so a wrong password can't loop and lock your account, and it never starts at boot. Your user and password stay in the config file, which only root can read.
 - **Tailscale:** it runs `tailscale set --operator=$USER`, so `tailscale up` / `down` work without sudo.
-- `--remove` undoes all of it. The VPN list's Copy button gives you the same command.
+- `--config FILE` uses another Forti config; `--remove` undoes everything.
+
+If Forti says *Didn't connect*, `journalctl -u notchnux-forti` shows openfortivpn's own message.
 
 ## 🕹️ Usage
 
