@@ -192,6 +192,8 @@ const DEFAULT_ACCENT = '#7aa2ff';
 export const MAX_PINNED = 8;
 export const DEFAULT_PINNED_MAX = 5;
 export const DEFAULT_PINNED = ['media', 'tasks', 'calendar', 'weather', 'system'];
+// The Dev tab's terminal: the system default, or one of helpers/dev.js TERMINALS.
+export const DEV_TERMINALS = ['', 'warp'];
 // Which sensor the pill shows (helpers/sensors.js SENSOR_KINDS), or off.
 export const PILL_TEMPS = ['off', 'cpu', 'ssd', 'gpu'];
 
@@ -326,7 +328,10 @@ export class ConfigStore {
             // the first one installed (helpers/claude.js EDITORS).
             claudeEditor: '',
             // Folders the Dev tab's Projects view searches for git repos.
-            devProjectRoots: []
+            devProjectRoots: [],
+            // The terminal the Dev tab opens: '' (the system default) or an
+            // id from helpers/dev.js TERMINALS ('warp').
+            devTerminal: ''
         };
     }
 
@@ -386,6 +391,7 @@ export class ConfigStore {
                 data.claudeApprove = !!parsed.claudeApprove;
                 data.claudeActivity = !!parsed.claudeActivity;
                 data.claudeEditor = typeof parsed.claudeEditor === 'string' ? parsed.claudeEditor : '';
+                data.devTerminal = DEV_TERMINALS.includes(parsed.devTerminal) ? parsed.devTerminal : '';
                 data.devProjectRoots = Array.isArray(parsed.devProjectRoots)
                     ? [...new Set(parsed.devProjectRoots.filter(p => typeof p === 'string' && p.startsWith('/')))] : [];
                 data.tabOrder = this._reconcileOrder(parsed.tabOrder);
@@ -599,6 +605,15 @@ export class ConfigStore {
     setClaudeEditor(id) {
         this._refresh();
         this._data.claudeEditor = String(id ?? '');
+        this._save();
+    }
+
+    get devTerminal() {
+        return this._data.devTerminal ?? '';
+    }
+    setDevTerminal(id) {
+        this._refresh();
+        this._data.devTerminal = DEV_TERMINALS.includes(id) ? id : '';
         this._save();
     }
 
