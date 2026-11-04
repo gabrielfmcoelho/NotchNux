@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — power mode in the Tray
+- A **POWER MODE** card in the Tray: Saver · Balanced · Performance (the
+  ones this computer offers), set the way GNOME's own Power Mode sets them
+  (power-profiles-daemon over D-Bus; no password for the active session).
+  It follows changes made elsewhere while the Tray is open, says why when
+  Performance is held back (on your lap, running hot), and stays hidden
+  without power-profiles-daemon.
+
 ### Added — pick the Dev tab's terminal (Warp)
 - Preferences → *Dev tab* → **Terminal**: the system default
   (`xdg-terminal-exec`, named in the list) or **Warp**, when installed. The
