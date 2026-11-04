@@ -317,6 +317,8 @@ export class ConfigStore {
             musicLyrics: false,
             // "Approve from the notch" connected in Preferences.
             claudeApprove: false,
+            // "Show what sessions are doing" connected in Preferences.
+            claudeActivity: false,
             // Desktop id of the editor the Claude tab opens files in; '' =
             // the first one installed (helpers/claude.js EDITORS).
             claudeEditor: '',
@@ -378,6 +380,7 @@ export class ConfigStore {
                 data.keepAwake = !!parsed.keepAwake;
                 data.musicLyrics = !!parsed.musicLyrics;
                 data.claudeApprove = !!parsed.claudeApprove;
+                data.claudeActivity = !!parsed.claudeActivity;
                 data.claudeEditor = typeof parsed.claudeEditor === 'string' ? parsed.claudeEditor : '';
                 data.devProjectRoots = Array.isArray(parsed.devProjectRoots)
                     ? [...new Set(parsed.devProjectRoots.filter(p => typeof p === 'string' && p.startsWith('/')))] : [];
@@ -566,6 +569,15 @@ export class ConfigStore {
     setClaudeApprove(on) {
         this._refresh();
         this._data.claudeApprove = !!on;
+        this._save();
+    }
+
+    get claudeActivity() {
+        return !!this._data.claudeActivity;
+    }
+    setClaudeActivity(on) {
+        this._refresh();
+        this._data.claudeActivity = !!on;
         this._save();
     }
 

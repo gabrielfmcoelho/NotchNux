@@ -386,6 +386,7 @@ export const NotchNux = GObject.registerClass({
             pinnedKey: JSON.stringify(this._config.pinnedTabs),
             keepAwake: this._config.keepAwake,
             claudeApprove: this._config.claudeApprove,
+            claudeActivity: this._config.claudeActivity,
             pillTemp: this._config.pillTemp,
             trayTemps: this._config.trayTemps,
             fanControl: this._config.fanControl,
@@ -479,7 +480,7 @@ export const NotchNux = GObject.registerClass({
         if (next.keepAwake !== prev.keepAwake)
             this._setKeepAwake(next.keepAwake, { persist: false });
         // "Approve from the notch" connected / disconnected in prefs.
-        if (next.claudeApprove !== prev.claudeApprove)
+        if (next.claudeApprove !== prev.claudeApprove || next.claudeActivity !== prev.claudeActivity)
             this._syncClaudeMonitor();
         // Sensors group in prefs: the pill's temperature column, and the
         // Tray's temperature meters / fan card (rebuilt on next show).
