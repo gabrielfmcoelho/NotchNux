@@ -23,7 +23,7 @@ import { ConfigStore, TAB_DEFS, FEATURE_DEFS, WALLPAPER_DEFAULTS, ENHANCE_AUTO, 
 import { discoverHwmon, pickSensors, pickFan, fanUsable, SENSOR_KINDS, FAN_GUARD_C } from './src/helpers/sensors.js';
 import { TERMINALS } from './src/helpers/dev.js';
 import {
-    SETTINGS_PATH, isConnected, connectStatusLine, disconnectStatusLine,
+    SETTINGS_PATH, isConnected, connectStatusLine, disconnectStatusLine, statusLineOutdated, updateStatusLine,
     isApproveConnected, connectApproveHook, disconnectApproveHook,
     isActivityConnected, connectActivityHook, disconnectActivityHook, settingsLayout, formatSettings, parseSettings,
     installedEditors,
@@ -817,7 +817,9 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
 
         // One Connect / Disconnect row over ~/.claude/settings.json.
         // `change(settings, on)` → [new settings, what to do once written].
-        const addRow = (title, isOn, change, onText, offText) => {
+        // `outdated`: connected by an older NotchNux; the button then
+        // offers `update` (new settings) with `oldText`.
+        const addRow = (title, isOn, change, onText, offText, { outdated = null, update = null, oldText = '' } = {}) => {
             const row = new Adw.ActionRow({ title, use_markup: false });
             const btn = new Gtk.Button({ valign: Gtk.Align.CENTER });
             row.add_suffix(btn);
@@ -826,9 +828,10 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
             const refresh = (note = null) => {
                 const r = readClaudeSettings();
                 const on = !r.error && isOn(r.settings);
-                btn.label = on ? 'Disconnect' : 'Connect';
+                const old = on && !!outdated?.(r.settings);
+                btn.label = old ? 'Update' : on ? 'Disconnect' : 'Connect';
                 btn.sensitive = !r.error;
-                row.subtitle = note ?? r.error ?? (on ? onText : offText);
+                row.subtitle = note ?? r.error ?? (old ? oldText : on ? onText : offText);
             };
             btn.connect('clicked', () => {
                 const r = readClaudeSettings();
@@ -836,7 +839,8 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
                     refresh();
                     return;
                 }
-                const [next, done] = change(r.settings, isOn(r.settings));
+                const old = isOn(r.settings) && !!outdated?.(r.settings);
+                const [next, done] = old ? [update(r.settings)] : change(r.settings, isOn(r.settings));
                 try {
                     writeClaudeSettings(r.path, next, r.layout);
                 } catch (e) {
@@ -852,7 +856,9 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         addRow('Usage limits', isConnected,
             (s, on) => [on ? disconnectStatusLine(s) : connectStatusLine(s)],
             'Connected. Your own status line still runs as before.',
-            'Adds a step in front of your status line in ~/.claude/settings.json that saves the usage numbers to ~/.cache/notchnux. Your status line keeps working; the old file is kept as settings.json~.');
+            'Adds a step in front of your status line in ~/.claude/settings.json that saves the usage numbers to ~/.cache/notchnux, and each session’s context and cost to your runtime folder (gone at logout). Your status line keeps working; the old file is kept as settings.json~.',
+            { outdated: statusLineOutdated, update: updateStatusLine,
+                oldText: 'Connected by an older NotchNux. Update to also see each session’s context and cost in the Claude tab.' });
 
         // Settings are written first, so a failed write leaves the notch's
         // side as it was.
