@@ -319,7 +319,9 @@ export class ConfigStore {
             claudeApprove: false,
             // Desktop id of the editor the Claude tab opens files in; '' =
             // the first one installed (helpers/claude.js EDITORS).
-            claudeEditor: ''
+            claudeEditor: '',
+            // Folders the Dev tab's Projects view searches for git repos.
+            devProjectRoots: []
         };
     }
 
@@ -377,6 +379,8 @@ export class ConfigStore {
                 data.musicLyrics = !!parsed.musicLyrics;
                 data.claudeApprove = !!parsed.claudeApprove;
                 data.claudeEditor = typeof parsed.claudeEditor === 'string' ? parsed.claudeEditor : '';
+                data.devProjectRoots = Array.isArray(parsed.devProjectRoots)
+                    ? [...new Set(parsed.devProjectRoots.filter(p => typeof p === 'string' && p.startsWith('/')))] : [];
                 data.tabOrder = this._reconcileOrder(parsed.tabOrder);
             }
         } catch (e) {
@@ -571,6 +575,15 @@ export class ConfigStore {
     setClaudeEditor(id) {
         this._refresh();
         this._data.claudeEditor = String(id ?? '');
+        this._save();
+    }
+
+    get devProjectRoots() {
+        return Array.isArray(this._data.devProjectRoots) ? this._data.devProjectRoots : [];
+    }
+    setDevProjectRoots(list) {
+        this._refresh();
+        this._data.devProjectRoots = [...new Set(list.filter(p => typeof p === 'string' && p.startsWith('/')))];
         this._save();
     }
 

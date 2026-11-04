@@ -87,6 +87,7 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         this._addFeaturesGroup(page, config);
         this._addSensorsGroup(page, config);
         this._addClaudeGroup(page, config);
+        this._addDevGroup(page, config, window);
         this._addTrayMirrorGroup(page, config);
         this._addQuickShareGroup(page);
         this._addSystemGroup(page);
@@ -868,6 +869,55 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
             editorRow.connect('notify::selected', () => config.setClaudeEditor(editors[editorRow.selected]?.id ?? ''));
             group.add(editorRow);
         }
+    }
+
+    // ---- Dev tab: the folders Projects searches for git repos ----
+    _addDevGroup(page, config, window) {
+        const group = new Adw.PreferencesGroup({
+            title: 'Dev tab · Projects',
+            description: 'Turn on the Dev tab in Tabs. Projects lists the git repositories in these folders, up to 3 levels down, most recently used first.',
+        });
+        page.add(group);
+        let rows = [];
+        const fill = () => {
+            rows.forEach(r => group.remove(r));
+            rows = config.devProjectRoots.map(path => {
+                const row = new Adw.ActionRow({ title: path, use_markup: false });
+                const del = new Gtk.Button({ icon_name: 'list-remove-symbolic', valign: Gtk.Align.CENTER,
+                    tooltip_text: 'Remove this folder' });
+                del.add_css_class('flat');
+                del.connect('clicked', () => {
+                    config.setDevProjectRoots(config.devProjectRoots.filter(p => p !== path));
+                    fill();
+                });
+                row.add_suffix(del);
+                group.add(row);
+                return row;
+            });
+            if (!rows.length) {
+                const none = new Adw.ActionRow({ title: 'No folders yet', subtitle: 'Add the folder your projects live in (e.g. ~/Projects)' });
+                group.add(none);
+                rows.push(none);
+            }
+        };
+        const add = new Gtk.Button({ icon_name: 'list-add-symbolic', valign: Gtk.Align.CENTER, tooltip_text: 'Add a project folder' });
+        add.add_css_class('flat');
+        add.connect('clicked', () => {
+            const dialog = new Gtk.FileDialog({ title: 'Choose a project folder' });
+            dialog.select_folder(window, null, (dlg, res) => {
+                try {
+                    const path = dlg.select_folder_finish(res)?.get_path();
+                    if (path) {
+                        config.setDevProjectRoots([...config.devProjectRoots, path]);
+                        fill();
+                    }
+                } catch (e) {
+                    // Cancelled.
+                }
+            });
+        });
+        group.set_header_suffix(add);
+        fill();
     }
 
     // ---- Mirrored indicators (Tray tab) ----

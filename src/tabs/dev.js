@@ -7,6 +7,9 @@
 //   Ports       What listens on a TCP port: this user's processes (with the
 //               folder they run in) and Docker's published ports. A row opens
 //               http://localhost:PORT; stop asks once, then ends it.
+//   Projects    The git repos in the folders set in Preferences, most recently
+//               used first, with branch, changes and ahead/behind. A row opens
+//               it in the editor; buttons open a terminal or Claude Code there.
 //
 // While the tab is enabled, `docker events` runs in the background (it only
 // prints when a container starts, dies or stops), so a container that
@@ -23,15 +26,18 @@ import St from 'gi://St';
 import { run, killAll, watchRecords, findProgram } from '../helpers/proc.js';
 import {
     terminalArgv, parseDockerPs, visibleContainers, groupByProject, parseDockerEvent, CrashTracker, dockerError,
-    parseSs, portRows,
+    parseSs, portRows, findRepos, parseGitStatus,
 } from '../helpers/dev.js';
+import { claudeBinary } from '../helpers/claude.js';
 import { addPressFeedback } from '../helpers/motion.js';
 import { logError } from '../helpers/log.js';
 import { SYS, iconBtn } from './ledge.js';
 import { text, dot, scrolled } from './claude.js';
 
-const DEV_VIEWS = [['containers', 'Containers'], ['ports', 'Ports']];
-const RELOAD_S = { containers: 30, ports: 5 };   // re-read an open view at most this often
+const DEV_VIEWS = [['containers', 'Containers'], ['ports', 'Ports'], ['projects', 'Projects']];
+const RELOAD_S = { containers: 30, ports: 5, projects: 60 };   // re-read an open view at most this often
+const PROJECTS_SHOWN = 20;   // newest repos listed (and git-status'd)
+const GIT_JOBS = 4;          // git status runs at once
 const EVENT_DEBOUNCE_MS = 300;
 const ALERT_MS = 5000;
 const DOCKER_EVENTS = ['start', 'die', 'kill', 'stop', 'destroy'];
@@ -47,6 +53,8 @@ const DevFeatures = {
             tabOpen: false,
             containers: { list: null, error: '', loading: false, at: 0 },
             ports: { list: null, error: '', loading: false, at: 0 },
+            projects: { list: null, status: new Map(), error: '', loading: false, at: 0 },
+            updateId: 0,
             busy: new Set(),       // container names with an action running
         };
         this._syncDevWatch();
@@ -56,7 +64,7 @@ const DevFeatures = {
         let d = this._dev;
         d.watch?.stop();
         d.watch = null;
-        for (let id of ['restartId', 'debounceId']) {
+        for (let id of ['restartId', 'debounceId', 'updateId']) {
             if (d[id])
                 GLib.Source.remove(d[id]);
             d[id] = 0;
@@ -199,6 +207,8 @@ const DevFeatures = {
             this._loadContainers();
         else if (id === 'ports')
             this._loadPorts();
+        else if (id === 'projects')
+            this._loadProjects();
     },
 
     _loadContainers() {
@@ -237,6 +247,19 @@ const DevFeatures = {
         }
         this._updateContainers(ui.containers);
         this._updatePorts(ui.ports);
+        this._updateProjects(ui.projects);
+    },
+
+    // Coalesce a burst of results (git status per repo) into one update.
+    _queueDevUpdate() {
+        let d = this._dev;
+        if (d.updateId)
+            return;
+        d.updateId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
+            d.updateId = 0;
+            this._updateDevTab();
+            return GLib.SOURCE_REMOVE;
+        });
     },
 
     _updateContainers(ui) {
@@ -296,7 +319,7 @@ const DevFeatures = {
         addPressFeedback(btn);
         line.add_child(btn);
         for (let p of c.state === 'running' ? c.ports.slice(0, 2) : []) {
-            let chip = new St.Button({ style_class: 'nook-mini-btn nn-dev-chip', label: `:${p.port}`, can_focus: true,
+            let chip = new St.Button({ style_class: 'nn-dev-chip', label: `:${p.port}`, can_focus: true,
                 y_align: Clutter.ActorAlign.CENTER, accessible_name: `Open http://localhost:${p.port}` });
             chip.connect('clicked', () => this._openUrl(`http://localhost:${p.port}`));
             line.add_child(chip);
@@ -444,6 +467,135 @@ const DevFeatures = {
                 return GLib.SOURCE_REMOVE;
             });
         });
+    },
+
+    // ================================================================ projects
+
+    // Preferences changed the folders: forget what was found.
+    _onDevRootsChanged() {
+        let st = this._dev.projects;
+        Object.assign(st, { list: null, at: 0 });
+        st.status.clear();
+        if (this._dev.tabOpen && this._devView === 'projects')
+            this._loadProjects();
+        this._updateDevTab();
+    },
+
+    async _loadProjects() {
+        let st = this._dev.projects;
+        if (st.loading)
+            return;
+        st.loading = true;
+        let roots = this._config.devProjectRoots;
+        let list = [];
+        try {
+            list = roots.length ? await findRepos(roots) : [];
+        } catch (e) {
+            logError('Looking for git repositories', e);
+        }
+        st.loading = false;
+        if (this._destroyed)
+            return;
+        Object.assign(st, { list, at: Date.now() });
+        this._updateDevTab();
+        this._loadGitStatus(list.slice(0, PROJECTS_SHOWN));
+    },
+
+    // `git status` for each shown repo, GIT_JOBS at a time. --no-optional-locks:
+    // never take the index lock (a commit running in a terminal could fail).
+    _loadGitStatus(repos) {
+        let d = this._dev;
+        let git = findProgram('git');
+        if (!git)
+            return;
+        let queue = [...repos];
+        let next = () => {
+            let r = queue.shift();
+            if (!r || this._destroyed)
+                return;
+            run([git, '--no-optional-locks', '-C', r.path, 'status', '--porcelain=v2', '--branch'],
+                { timeoutS: 10, procs: d.procs }, res => {
+                    if (this._destroyed)
+                        return;
+                    if (res.ok)
+                        d.projects.status.set(r.path, parseGitStatus(res.out));
+                    this._queueDevUpdate();
+                    next();
+                });
+        };
+        for (let i = 0; i < GIT_JOBS; i++)
+            next();
+    },
+
+    _updateProjects(ui) {
+        let st = this._dev.projects;
+        let roots = this._config.devProjectRoots;
+        let shown = (st.list ?? []).slice(0, PROJECTS_SHOWN);
+        let sig = JSON.stringify([roots, st.list === null, st.list?.length, shown.map(r => [r.path, st.status.get(r.path)])]);
+        if (sig === ui.sig)
+            return;
+        ui.sig = sig;
+        let more = (st.list?.length ?? 0) - shown.length;
+        ui.meta.set_text(!roots.length || st.list === null ? ''
+            : [`${st.list.length} ${st.list.length === 1 ? 'repo' : 'repos'}, latest first`, more > 0 && `${more} older not shown`]
+                .filter(Boolean).join(' · '));
+        ui.list.destroy_all_children();
+        if (!roots.length) {
+            let empty = this._devEmpty('folder-symbolic', 'Choose your project folders in Preferences');
+            let open = new St.Button({ style_class: 'nook-clear-btn', label: 'Open Preferences', can_focus: true,
+                x_align: Clutter.ActorAlign.CENTER });
+            open.connect('clicked', () => {
+                this._collapseImmediately();
+                this.extension.openPreferences();
+            });
+            empty.add_child(open);
+            ui.list.add_child(empty);
+        } else if (!shown.length) {
+            ui.list.add_child(this._devEmpty('folder-symbolic',
+                st.list === null ? 'Looking for repositories…' : 'No git repositories in those folders'));
+        } else {
+            for (let r of shown)
+                ui.list.add_child(this._buildProjectRow(r, st.status.get(r.path)));
+        }
+        this._resizeDevTab();
+    },
+
+    // [name / parent · branch   3 changed  ↑2 ↓1] [terminal] [claude]; the
+    // row opens it in the editor (or the file manager without one).
+    _buildProjectRow(r, gs) {
+        let line = new St.BoxLayout({ style_class: 'nn-claude-session', x_expand: true });
+        let btn = new St.Button({ style_class: 'nn-claude-row', x_expand: true, can_focus: true,
+            accessible_name: `Open ${r.name}` });
+        let row = new St.BoxLayout({ x_expand: true });
+        let col = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'nn-claude-col' });
+        col.add_child(text(r.name, 'nn-claude-name'));
+        let meta = [r.rel, gs && (gs.branch ?? 'detached')].filter(Boolean).join(' · ');
+        if (meta)
+            col.add_child(text(meta, 'nook-card-meta'));
+        row.add_child(col);
+        if (gs?.changed)
+            row.add_child(text(`${gs.changed} changed`, 'nn-claude-state', { style: `color: ${SYS.orange};` }));
+        let ab = [gs?.ahead && `↑${gs.ahead}`, gs?.behind && `↓${gs.behind}`].filter(Boolean).join(' ');
+        if (ab)
+            row.add_child(text(ab, 'nn-claude-state', { style: `color: ${SYS.blue};` }));
+        btn.set_child(row);
+        btn.connect('clicked', () => {
+            if (!this._openInEditor([r.path]))
+                this._openUrl(Gio.File.new_for_path(r.path).get_uri());
+        });
+        addPressFeedback(btn);
+        line.add_child(btn);
+        line.add_child(iconBtn('utilities-terminal-symbolic', 'nook-mini-btn', () => this._openTerminal(r.path),
+            `Open a terminal in ${r.name}`));
+        let claude = claudeBinary();
+        if (claude) {
+            let c = new St.Button({ style_class: 'nn-dev-chip', label: 'claude', can_focus: true,
+                y_align: Clutter.ActorAlign.CENTER, accessible_name: `Start Claude Code in ${r.name}` });
+            c.connect('clicked', () => this._openTerminal(r.path, [claude]));
+            addPressFeedback(c);
+            line.add_child(c);
+        }
+        return line;
     },
 
     // ================================================================ launching
