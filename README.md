@@ -81,6 +81,9 @@ NotchNux replaces the default GNOME top-bar clock with a **living pill**. At a g
 **Tray / System** — connectivity, quick tiles, volume and brightness sliders, device batteries and live system meters
 ![Tray dashboard](assets/tray.png)
 
+**Tray → VPN** — Tailscale and the Forti VPN in one list; temperatures (a sleeping GPU reads *asleep*) and fan levels below
+![VPN list in the Tray](assets/tray-vpn.png)
+
 **Calendar** — a scrollable day strip with your GNOME Online Accounts events
 ![Calendar dashboard](assets/calendar.png)
 
@@ -92,6 +95,18 @@ NotchNux replaces the default GNOME top-bar clock with a **living pill**. At a g
 
 **Studio** — live webcam preview plus camera & audio recording
 ![Studio dashboard](assets/studio.png)
+
+**Claude** — your Claude Code sessions with 5-hour and weekly usage, and what each working session is doing
+![Claude tab](assets/claude-activity.png)
+
+**Dev → Containers** — Docker containers by compose project, with restart, stop and logs; crash-looping ones in orange
+![Dev tab: containers](assets/dev-containers.png)
+
+**Dev → Ports** — what's listening, the folder it runs in, and whether it's local or on the network
+![Dev tab: ports](assets/dev-ports.png)
+
+**Dev → Projects** — your git repos, latest first, with branch and changes; open the editor, a terminal or Claude there
+![Dev tab: projects](assets/dev-projects.png)
 
 **Notification peek** — the pill smoothly expands into a banner with actions
 ![Notification peek](assets/peek-screenshot.png)
