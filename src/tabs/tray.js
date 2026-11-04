@@ -423,7 +423,9 @@ const TrayFeatures = {
         this._updateTrayTemps(meters, false);
     },
 
-    // A sensor that doesn't report (a sleeping dGPU) hides its meter.
+    // A sensor that doesn't report hides its meter, except the GPU: a
+    // discrete GPU that sleeps can't be read without waking it, so it says
+    // "asleep" (reading it never wakes it).
     async _updateTrayTemps(meters, animate) {
         let readings = await Promise.all(meters.temps.map(t => readTemp(t.path)));
         if (this._destroyed || this._trayMeters !== meters)
@@ -431,10 +433,13 @@ const TrayFeatures = {
         let shown = false;
         meters.temps.forEach((t, i) => {
             let c = readings[i];
-            shown ||= t.m.row.visible !== (c !== null);
-            t.m.row.visible = c !== null;
+            let asleep = c === null && t.kind === 'gpu';
+            shown ||= t.m.row.visible !== (c !== null || asleep);
+            t.m.row.visible = c !== null || asleep;
             if (c !== null)
                 this._setMeter(t.m, c, animate, `${Math.round(c)}°C`, tempLevel(t.kind, c) === 2);
+            else if (asleep)
+                this._setMeter(t.m, 0, false, 'asleep');
         });
         if (shown)
             this._refitTray();

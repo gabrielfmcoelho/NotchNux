@@ -39,8 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Temperature in the pill**: one sensor (CPU, SSD or GPU, whichever
     this computer has) next to the pill's stats, coloured as it warms up.
   - **Temperatures in Tray**: every sensor that reports gets a meter in the
-    Tray's System card. A GPU that's asleep (or an NVIDIA card, which
-    doesn't report there) is left out rather than woken up.
+    Tray's System card. A discrete GPU that's asleep reads *asleep*
+    instead of being woken up to read it (ThinkPads report their NVIDIA
+    card through the laptop's own sensor chip; elsewhere an NVIDIA card,
+    which doesn't report there, is left out).
   - **Fan control (beta)**: Auto · Low · Med · High · Max · Off in Tray,
     with the fan speed. It stays locked until you run
     `sudo sh src/tools/fan-setup.sh` once (it lets your user set the fan's

@@ -83,7 +83,9 @@ export const SENSOR_KINDS = [['cpu', 'CPU'], ['ssd', 'SSD'], ['gpu', 'GPU']];
 
 // Per kind, [chip name, label pattern (null: its first sensor)], best first.
 // ponytail: no nvidia-smi for NVIDIA cards: polling it wakes a sleeping dGPU
-// (battery); a GPU that doesn't report through hwmon just isn't shown.
+// (battery). ThinkPads report the dGPU through their EC (`thinkpad` GPU),
+// which reads nothing while the card sleeps and never wakes it; a GPU with
+// no hwmon sensor at all isn't shown.
 const PICKS = {
     cpu: [['coretemp', /^(Package|Physical) id 0$/], ['k10temp', /^(Tctl|Tdie)$/], ['zenpower', /^(Tdie|Tctl)$/],
         ['thinkpad', /^CPU$/], ['cpu_thermal', null], ['acpitz', null]],
