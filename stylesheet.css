@@ -2119,6 +2119,9 @@
 .nn-pill-awake {
     color: #ffd60a;
 }
+.nn-pill-vpn {
+    color: #64d2ff;
+}
 
 /* ---- Header grid button ---- */
 .nn-grid-btn {
