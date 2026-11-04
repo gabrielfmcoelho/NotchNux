@@ -28,6 +28,10 @@ import * as Slider from 'resource:///org/gnome/shell/ui/slider.js';
 import { addPressFeedback } from '../helpers/motion.js';
 import { accentHex, accentRgbStr } from '../helpers/widgets.js';
 import { logError } from '../helpers/log.js';
+import { run, killAll, findProgram } from '../helpers/proc.js';
+import {
+    FORTI_UNIT, FORTI_UNIT_PATH, FORTI_CONFIG, parseTailscaleStatus, tailscaleError, fortiState, vpnSummary,
+} from '../helpers/vpn.js';
 import {
     discoverHwmon, pickSensors, pickFan, readText, readTemp, tempLevel, SENSOR_KINDS, FAN_LEVELS, FAN_GUARD_C,
     fanLevelOf, fanWrites, writeSysfs, fanUsable, fmtRpm,
@@ -40,12 +44,51 @@ const HOT = 85;   // meter turns amber past this
 // (a ThinkPad's fan watchdog hands the fan back after 120 s of silence).
 const FAN_TICK_S = 5;
 const FAN_RESEND_S = 60;
+// VPN: how often the pill icon checks (while on), and how fast a connect
+// is followed until it settles.
+const VPN_POLL_S = 30;
+const VPN_FOLLOW_MS = 2000;
+const VPN_FOLLOW_TICKS = 15;
+const VPN_SETUP = `sudo sh ${GLib.shell_quote(Gio.File.new_for_uri(import.meta.url).get_parent().get_parent()
+    .get_child('tools').get_child('vpn-setup.sh').get_path())}`;
+const SYSTEMD = ['org.freedesktop.systemd1', '/org/freedesktop/systemd1', 'org.freedesktop.systemd1.Manager'];
 
 function label(text, cls, props = {}) {
     let l = new St.Label({ text, style_class: cls, y_align: Clutter.ActorAlign.CENTER, ...props });
     l.clutter_text.ellipsize = Pango.EllipsizeMode.END;
     return l;
 }
+
+// A call on the system bus to systemd → a Promise of its reply.
+function systemd(path, iface, method, params, type, flags = Gio.DBusCallFlags.NONE, timeoutMs = 5000) {
+    return new Promise((resolve, reject) => Gio.DBus.system.call(SYSTEMD[0], path, iface, method, params,
+        type ? new GLib.VariantType(type) : null, flags, timeoutMs, null, (c, res) => {
+            try {
+                resolve(c.call_finish(res));
+            } catch (e) {
+                reject(e);
+            }
+        }));
+}
+
+// openfortivpn's link is up once a pppN interface exists. ponytail: a
+// sync read of /sys/class/net (a handful of names), every 30 s at most.
+function hasPpp() {
+    try {
+        let dir = GLib.Dir.open('/sys/class/net', 0);
+        let name, found = false;
+        while (!found && (name = dir.read_name()) !== null)
+            found = name.startsWith('ppp');
+        dir.close();
+        return found;
+    } catch (e) {
+        return false;
+    }
+}
+
+const VPN_BUSY = new Set(['connecting', 'starting']);
+const VPN_STATE_TEXT = { connecting: 'Connecting…', starting: 'Connecting…', login: 'Log in needed',
+    setup: 'Set up once', failed: 'Didn’t connect', down: 'Off', off: 'Off' };
 
 function onStyle() {
     return `background-color: ${accentHex()}; color: #0b0b0e;`;
@@ -77,6 +120,8 @@ const TrayFeatures = {
             ui.conn.air.update(on, on ? 'On' : 'Off');
             this._system.setAirplaneMode(on, () => this._queueTrayCardsRefresh());
         });
+        if (this._hasVpn())
+            ui.conn.vpn = this._ccRow(conn, 'VPN', () => this._toggleVpnRow(), () => this._openVpnOverlay());
         top.add_child(conn);
 
         let grid = new St.BoxLayout({ style_class: 'nn-cc-grid', vertical: true });
@@ -345,6 +390,7 @@ const TrayFeatures = {
         this._updateTrayTemps(m, animate);
         this._updateTrayFan();
         this._syncTraySliders();
+        this._refreshVpn();
     },
 
     // ---- Temperatures (Tray SYSTEM card) and fan levels (beta) ----
@@ -551,6 +597,292 @@ const TrayFeatures = {
         }
     },
 
+    // ---- VPN (helpers/vpn.js): Tailscale and the Forti unit ----
+
+    _initVpn() {
+        this._vpn = {
+            ts: findProgram('tailscale'), fortiBin: findProgram('openfortivpn'),
+            items: { ts: null, forti: null },     // last reading of each
+            errors: { ts: null, forti: null },    // what the last connect/disconnect said
+            last: null, at: 0, refreshing: false, procs: new Map(),
+            pollId: 0, followId: 0, follows: 0, onChange: null,
+        };
+        this._pillVpn = new St.Icon({ icon_name: 'network-vpn-symbolic', style_class: 'nn-pill-vpn', icon_size: 13,
+            visible: false, y_align: Clutter.ActorAlign.CENTER });
+        this._pillPrivBox.insert_child_at_index(this._pillVpn, 0);
+        this._syncVpnPoll();
+    },
+
+    _destroyVpn() {
+        let v = this._vpn;
+        if (!v)
+            return;
+        if (v.pollId)
+            GLib.Source.remove(v.pollId);
+        if (v.followId)
+            GLib.Source.remove(v.followId);
+        v.pollId = v.followId = 0;
+        v.onChange = null;
+        killAll(v.procs);
+    },
+
+    // Tailscale when installed; Forti once tools/vpn-setup.sh made its unit,
+    // or installed with a config (to offer the setup).
+    _vpnSources() {
+        let v = this._vpn;
+        let fortiSetUp = GLib.file_test(FORTI_UNIT_PATH, GLib.FileTest.EXISTS);
+        return { ts: !!v.ts, fortiSetUp,
+            forti: fortiSetUp || (!!v.fortiBin && GLib.file_test(FORTI_CONFIG, GLib.FileTest.EXISTS)) };
+    },
+
+    _hasVpn() {
+        let s = this._vpnSources();
+        return s.ts || s.forti;
+    },
+
+    // [{ id, name, state, detail, note, error }] for what this computer has.
+    // detail: the tailnet; note: why it can't be used ("Not running").
+    _vpnItems() {
+        let v = this._vpn;
+        let src = this._vpnSources();
+        let out = [];
+        if (src.ts)
+            out.push({ id: 'ts', name: 'Tailscale', state: 'down', detail: '', ...v.items.ts, error: v.errors.ts });
+        if (src.forti)
+            out.push({ id: 'forti', name: 'Forti', state: src.fortiSetUp ? 'off' : 'setup', detail: '',
+                ...(src.fortiSetUp ? v.items.forti : null), error: v.errors.forti });
+        return out;
+    },
+
+    // The pill icon's 30 s check, while it's on and there's a VPN.
+    _syncVpnPoll() {
+        let v = this._vpn;
+        let want = this._config.isFeatureEnabled('pillVpn') && this._hasVpn();
+        if (want && !v.pollId) {
+            v.pollId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, VPN_POLL_S, () => {
+                this._refreshVpn(true);
+                return GLib.SOURCE_CONTINUE;
+            });
+            this._refreshVpn(true);
+        } else if (!want && v.pollId) {
+            GLib.Source.remove(v.pollId);
+            v.pollId = 0;
+        }
+        this._syncPillVpn();
+    },
+
+    // Read both VPNs again (at most every 30 s unless `force`).
+    async _refreshVpn(force = false) {
+        let v = this._vpn;
+        if (!v || v.refreshing || (!force && GLib.get_monotonic_time() - v.at < VPN_POLL_S * 1e6))
+            return;
+        v.refreshing = true;
+        v.at = GLib.get_monotonic_time();
+        let src = this._vpnSources();
+        let [ts, forti] = await Promise.all([src.ts ? this._readTailscale() : null,
+            src.fortiSetUp ? this._readForti() : null]);
+        v.refreshing = false;
+        if (this._destroyed)
+            return;
+        v.items = { ts, forti };
+        for (let id of ['ts', 'forti']) {
+            if (v.items[id]?.state === 'up')
+                v.errors[id] = null;
+        }
+        this._onVpnChanged();
+    },
+
+    _readTailscale() {
+        return new Promise(resolve => run([this._vpn.ts, 'status', '--json', '--peers=false'],
+            { timeoutS: 5, procs: this._vpn.procs }, r => {
+                let s = r.out ? parseTailscaleStatus(r.out) : null;
+                // No answer: tailscaled isn't running.
+                resolve(s ? { state: s.state, detail: s.name } : { state: 'down', note: 'Not running' });
+            }));
+    },
+
+    async _readForti() {
+        try {
+            let [path] = (await systemd(SYSTEMD[1], SYSTEMD[2], 'LoadUnit', new GLib.Variant('(s)', [FORTI_UNIT]), '(o)')).deep_unpack();
+            let get = prop => systemd(path, 'org.freedesktop.DBus.Properties', 'Get',
+                new GLib.Variant('(ss)', ['org.freedesktop.systemd1.Unit', prop]), '(v)').then(r => r.deep_unpack()[0].deep_unpack());
+            let [load, active] = await Promise.all([get('LoadState'), get('ActiveState')]);
+            return { state: fortiState({ load, active, ppp: hasPpp() }), detail: '' };
+        } catch (e) {
+            return { state: 'off', detail: '' };
+        }
+    },
+
+    // Connect or disconnect one VPN, then follow it until it settles.
+    _setVpn(id, on) {
+        let v = this._vpn;
+        v.errors[id] = null;
+        if (on)
+            v.last = id;
+        v.items[id] = { ...v.items[id], state: on ? 'connecting' : 'off' };
+        this._onVpnChanged();
+        let done = error => {
+            if (this._destroyed)
+                return;
+            v.errors[id] = error;
+            this._followVpn();
+        };
+        if (id === 'ts') {
+            // --timeout: a logged-out node prints its login link and gives up
+            // instead of waiting forever.
+            run([v.ts, ...(on ? ['up', '--timeout=15s'] : ['down'])], { timeoutS: 25, procs: v.procs },
+                r => done(r.ok ? null : tailscaleError(r.err)));
+        } else {
+            // The polkit rule from vpn-setup.sh allows this without a password;
+            // without it the shell's own dialog asks.
+            systemd(SYSTEMD[1], SYSTEMD[2], on ? 'StartUnit' : 'StopUnit', new GLib.Variant('(ss)', [FORTI_UNIT, 'replace']),
+                '(o)', Gio.DBusCallFlags.ALLOW_INTERACTIVE_AUTHORIZATION, 60000).then(
+                () => done(null),
+                e => done({ kind: 'other', line: Gio.DBusError.strip_remote_error(e) || e.message, url: null, suggest: null }));
+        }
+    },
+
+    // Re-read every 2 s while something is connecting (30 s at most).
+    _followVpn() {
+        let v = this._vpn;
+        v.follows = VPN_FOLLOW_TICKS;
+        this._refreshVpn(true);
+        if (v.followId)
+            return;
+        v.followId = GLib.timeout_add(GLib.PRIORITY_LOW, VPN_FOLLOW_MS, () => {
+            if (--v.follows <= 0 || !this._vpnItems().some(i => VPN_BUSY.has(i.state))) {
+                v.followId = 0;
+                return GLib.SOURCE_REMOVE;
+            }
+            this._refreshVpn(true);
+            return GLib.SOURCE_CONTINUE;
+        });
+    },
+
+    _onVpnChanged() {
+        this._syncPillVpn();
+        this._vpn.onChange?.();
+        this._queueTrayCardsRefresh();
+    },
+
+    _syncPillVpn() {
+        let icon = this._pillVpn;
+        if (this._destroyed || !icon)
+            return;
+        let show = this._config.isFeatureEnabled('pillVpn') && this._vpnItems().some(i => i.state === 'up');
+        if (icon.visible === show)
+            return;
+        icon.visible = show;
+        if (!this.isExpanded && !this._alertShowing)
+            this._applyPillWidth();
+    },
+
+    // The row's round button: disconnect what's on, else connect the last
+    // used (or the first) VPN. Anything that needs a word opens the list.
+    _toggleVpnRow() {
+        let items = this._vpnItems();
+        let on = items.filter(i => i.state === 'up' || VPN_BUSY.has(i.state));
+        if (on.length) {
+            on.forEach(i => this._setVpn(i.id, false));
+            return;
+        }
+        let usable = items.filter(i => i.state !== 'setup');
+        let pick = usable.find(i => i.id === this._vpn.last) ?? usable[0];
+        if (pick && !pick.error && pick.state !== 'login')
+            this._setVpn(pick.id, true);
+        else
+            this._openVpnOverlay();
+    },
+
+    _openVpnOverlay() {
+        let v = this._vpn;
+        let ov = this._openScanOverlay({ title: 'VPN', onClose: () => { v.onChange = null; } });
+        let lastSig = null;
+        let refresh = () => {
+            if (this._scanOverlay !== ov)
+                return;
+            let items = this._vpnItems();
+            let sig = JSON.stringify(items);
+            if (sig === lastSig)
+                return;
+            lastSig = sig;
+            ov.body.destroy_all_children();
+            for (let it of items)
+                this._buildVpnRow(ov.body, it);
+        };
+        v.onChange = refresh;
+        refresh();
+        this._refreshVpn(true);
+        ov.timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3000, () => {
+            if (this._scanOverlay !== ov)
+                return GLib.SOURCE_REMOVE;
+            this._refreshVpn(true);
+            return GLib.SOURCE_CONTINUE;
+        });
+    },
+
+    // One VPN in the list: tap to connect or disconnect; below it, what to do
+    // when it needs the one-time setup, a login, or failed.
+    _buildVpnRow(body, it) {
+        let on = it.state === 'up' || VPN_BUSY.has(it.state);
+        let canToggle = it.state !== 'setup';
+        let row = new St.Button({ style_class: 'nook-scan-row', reactive: canToggle, can_focus: canToggle, x_expand: true,
+            accessible_name: `${on ? 'Disconnect' : 'Connect'} ${it.name}` });
+        let inner = new St.BoxLayout({ x_expand: true });
+        inner.add_child(new St.Icon({ icon_name: 'network-vpn-symbolic', icon_size: 16, style_class: 'nook-scan-row-icon',
+            y_align: Clutter.ActorAlign.CENTER }));
+        inner.add_child(new St.Label({ text: it.name, style_class: 'nook-scan-row-name', x_expand: true,
+            y_align: Clutter.ActorAlign.CENTER }));
+        let state = it.state === 'up' ? (it.detail ? `Connected · ${it.detail}` : 'Connected')
+            : it.note || (VPN_STATE_TEXT[it.state] ?? 'Off');
+        let sub = new St.Label({ text: state, style_class: 'nook-scan-row-sub', y_align: Clutter.ActorAlign.CENTER });
+        if (it.state === 'up')
+            sub.set_style(`color: ${accentHex()};`);
+        inner.add_child(sub);
+        row.set_child(inner);
+        if (canToggle)
+            row.connect('clicked', () => this._setVpn(it.id, !on));
+        body.add_child(row);
+
+        let help = this._vpnHelp(it);
+        if (!help)
+            return;
+        let line = new St.BoxLayout({ style_class: 'nook-scan-pw', x_expand: true });
+        line.add_child(label(help.text, 'nook-scan-row-sub', { x_expand: true }));
+        if (help.button) {
+            let btn = new St.Button({ style_class: 'nook-scan-connect', can_focus: true, label: help.button });
+            btn.connect('clicked', () => {
+                help.action();
+                if (help.copies)
+                    btn.label = 'Copied';
+            });
+            line.add_child(btn);
+        }
+        body.add_child(line);
+    },
+
+    _vpnHelp(it) {
+        let copy = text => ({ button: 'Copy', copies: true,
+            action: () => St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text) });
+        let e = it.error;
+        if (it.state === 'setup' || e?.kind === 'operator')
+            return { text: 'One-time setup: run this in a terminal', ...copy(VPN_SETUP) };
+        if (e?.url)
+            return { text: 'Log in to Tailscale in the browser', button: 'Open', action: () => {
+                this._collapseImmediately();
+                Gio.AppInfo.launch_default_for_uri(e.url, global.create_app_launch_context(0, -1));
+            } };
+        if (it.state === 'login' || e?.kind === 'login')
+            return { text: 'Log in: run tailscale up in a terminal', ...copy('tailscale up') };
+        if (e?.suggest)
+            return { text: e.line, ...copy(e.suggest) };
+        if (e)
+            return { text: e.line };
+        if (it.state === 'failed')
+            return { text: 'See why: journalctl -u notchnux-forti', ...copy('journalctl -u notchnux-forti -n 50') };
+        return null;
+    },
+
     _nightLightSettings() {
         if (this._nightLight === undefined) {
             let src = Gio.SettingsSchemaSource.get_default();
@@ -604,6 +936,14 @@ const TrayFeatures = {
 
         let air = this._system.getAirplaneMode();
         c.air.update(air, air ? 'On' : 'Off', 'airplane-mode-symbolic');
+
+        if (c.vpn) {
+            let items = this._vpnItems();
+            let on = items.some(i => i.state === 'up');
+            c.vpn.update(on, on || items.some(i => VPN_BUSY.has(i.state)) ? vpnSummary(items)
+                : items.some(i => i.error) ? 'Didn’t connect'
+                    : items.some(i => i.state !== 'setup') ? 'Off' : 'Set up once', 'network-vpn-symbolic');
+        }
 
         let silent = !this._notificationSettings().get_boolean('show-banners');
         ui.tiles.dnd.update(silent, silent ? 'On' : 'Off',

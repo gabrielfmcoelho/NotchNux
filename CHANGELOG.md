@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — VPN in the Tray
+- A **VPN** row in the Tray's connectivity card, shown when Tailscale or the
+  Forti VPN (`openfortivpn` with `/etc/openfortivpn/config`) is installed.
+  The round button connects the last VPN you used (or turns off what's on);
+  the chevron lists each one with its state, a switch, and what to do when
+  it needs a setup or a login (the Tailscale login link opens in the
+  browser).
+- **VPN in the pill** (Features, on by default): a VPN icon while one is
+  connected, checked every 30 seconds only while the feature is on.
+- `src/tools/vpn-setup.sh`, run once with sudo by you (never by NotchNux):
+  a systemd unit, `notchnux-forti.service`, for `openfortivpn -c <config>`
+  (no automatic restart, so a wrong password can't lock the account, and
+  never started at boot), a polkit rule that lets only your user start and
+  stop it, and `tailscale set --operator` for Tailscale. `--remove` undoes
+  it.
+- The Tray's network meter no longer counts VPN traffic twice (tailscale,
+  ppp, tun and wg links are skipped, like docker and bridge links).
+- Commands NotchNux runs (claude, tailscale) share one runner,
+  `src/helpers/proc.js`, that also returns their error output.
+
 ### Added — header shortcuts, 1 to 8
 - Preferences → Tabs → **Header shortcuts** sets how many tabs sit beside
   Home, 1 to 8 (5 before, still the default). Lowering it hides the extra

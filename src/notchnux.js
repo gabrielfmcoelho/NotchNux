@@ -181,6 +181,8 @@ export const NotchNux = GObject.registerClass({
         this._initProductivity();
         // Alerts, hide-when-idle, launcher, clipboard, lyrics, keep awake…
         this._initLedge();
+        // VPN state for the Tray's VPN row and the pill's VPN icon.
+        this._initVpn();
         // Claude Code sessions + usage (the pill's dots and the Claude tab).
         this._initClaude();
         // Recolour the active-state chrome to match the persisted accent.
@@ -512,6 +514,7 @@ export const NotchNux = GObject.registerClass({
         this._destroyLedge();
         // A manual fan level never outlives NotchNux (screen lock, logout).
         this._releaseFan(true);
+        this._destroyVpn();
         this._destroyClaude();
         this._destroyProductivity();
         stopSpring(this);
@@ -4386,6 +4389,9 @@ export const NotchNux = GObject.registerClass({
                 break;
             case 'topScroll':
                 this._applyTopScroll();
+                break;
+            case 'pillVpn':
+                this._syncVpnPoll();
                 break;
             case 'claudeMonitor':
                 this._onClaudeFeatureToggled();

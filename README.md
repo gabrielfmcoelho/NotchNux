@@ -36,7 +36,7 @@ NotchNux replaces the default GNOME top-bar clock with a **living pill**. At a g
 | 📅 | **Calendar** | A scrollable day strip with your events pulled from GNOME Online Accounts — scroll the dates to jump between days. |
 | 🔔 | **Alerts** | Notification history, and a **peek** mode where the pill expands into a banner with action buttons the moment a notification arrives. |
 | 🗂️ | **Shelf** | A click-to-browse / paste-a-file scratch space, plus **Quick Share** to send files to your phone and other paired [GSConnect](https://github.com/GSConnect/gnome-shell-extension-gsconnect) devices. |
-| 🖥️ | **Tray / System** | A Control Center: Wi-Fi, Bluetooth, hotspot and airplane toggles with in-notch network and device pickers; Silence, Night Light, screenshot and lock tiles; volume and brightness sliders; device batteries; and live CPU, memory, disk and network. Optional: CPU, SSD and GPU temperatures, and fan levels (Auto · Low · Med · High · Max · Off, beta, [one-time setup](#fan-control-beta-optional)). |
+| 🖥️ | **Tray / System** | A Control Center: Wi-Fi, Bluetooth, hotspot and airplane toggles with in-notch network and device pickers; a **VPN** row for Tailscale and the Forti VPN (openfortivpn, [one-time setup](#vpn-optional)); Silence, Night Light, screenshot and lock tiles; volume and brightness sliders; device batteries; and live CPU, memory, disk and network. Optional: CPU, SSD and GPU temperatures, and fan levels (Auto · Low · Med · High · Max · Off, beta, [one-time setup](#fan-control-beta-optional)). |
 | 🏝️ | **Island alerts** | Volume, brightness, charging, low battery, headphones and a 5-minute event heads-up grow out of the pill for a moment, one at a time. |
 | 🫥 | **Hide when idle** | Optional: the notch tucks into the top edge until something is live, or you rest the pointer at the top centre. |
 | 🔲 | **Grid launcher** | Home plus one to eight shortcuts in the header (five by default; Preferences → Tabs → *Header shortcuts*); everything else (and the toggles) behind the grid button. Hold a tile to pick shortcuts. |
@@ -49,6 +49,7 @@ NotchNux replaces the default GNOME top-bar clock with a **living pill**. At a g
 - 📆 Date & time (pill sizes to its content so the clock never truncates)
 - 🔋 Battery percentage & charging state
 - 🎤/📷 Privacy dots the moment the mic or camera is in use
+- 🛡️ A VPN icon while Tailscale or the Forti VPN is connected
 - ⏱️ Focus countdown while a session runs — click it to jump to the Focus tab
 - 🎶 Scrolling now-playing title while media is active
 
@@ -154,6 +155,15 @@ Then turn on **Fan control (beta)** in Preferences → *Temperatures & fan*. The
 
 NotchNux puts the fan back to Auto when the CPU reaches 85 °C or can't be read, when you turn the setting off, and when it stops (screen lock, logout). It never restores a manual level at login.
 
+### VPN (optional)
+The Tray's **VPN** row lists Tailscale (when installed) and the Forti VPN (when `openfortivpn` and `/etc/openfortivpn/config` exist; the config holds your user and password). Connecting them without a password needs a one-time setup that you run yourself (NotchNux never runs it):
+```bash
+sudo sh ~/.local/share/gnome-shell/extensions/notchnux@adityasah.programs/src/tools/vpn-setup.sh
+```
+- **Forti:** it writes a systemd unit, `notchnux-forti.service`, that runs `openfortivpn -c /etc/openfortivpn/config` (`--config FILE` for another file). It never restarts by itself, so a wrong password can't loop and lock your account, and it never starts at boot. A polkit rule lets only your user start and stop that one unit.
+- **Tailscale:** it runs `tailscale set --operator=$USER`, so `tailscale up` / `down` work without sudo.
+- `--remove` undoes all of it. The VPN list's Copy button gives you the same command.
+
 ## 🕹️ Usage
 
 - **Hover or click the pill** to open the dashboard; click outside to collapse it.
@@ -191,6 +201,7 @@ Everything is stored locally, readable only by you (`0600` files in `0700` folde
   Bluetooth, brightness, weather fallbacks), start GNOME Shell with
   `NOTCHNUX_DEBUG=1` in its environment.
 - **Clipboard tab missing** → clipboard history is opt-in; enable it in Preferences → Tabs.
+- **VPN row says "Set up once"** → run the [one-time setup](#vpn-optional). If Forti says *Didn't connect*, `journalctl -u notchnux-forti` shows openfortivpn's own message.
 - **Fan control (beta) greyed out** → run the [one-time setup](#fan-control-beta-optional), and reboot if it asks you to. It's hidden when no fan here can be set by software.
 
 ## 🤝 Contributing

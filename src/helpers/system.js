@@ -377,8 +377,9 @@ export class SystemHelper {
                 let idx = line.indexOf(':');
                 if (idx < 0) continue;
                 let iface = line.slice(0, idx).trim();
-                if (iface === 'lo' || iface.startsWith('veth') || iface.startsWith('docker') ||
-                    iface.startsWith('br-') || iface.startsWith('virbr'))
+                // VPN tunnels (tailscale0, ppp0, tun0, wg0) carry traffic the
+                // physical link already counts.
+                if (iface === 'lo' || /^(veth|docker|br-|virbr|tailscale|ppp|tun|wg)/.test(iface))
                     continue;
                 let cols = line.slice(idx + 1).trim().split(/\s+/).map(Number);
                 // cols[0] = rx bytes, cols[8] = tx bytes
