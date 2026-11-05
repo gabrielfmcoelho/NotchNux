@@ -1376,10 +1376,11 @@ export const NotchNux = GObject.registerClass({
         // redirection). Inhibiting unredirection keeps every frame composited so
         // the notch stays drawn over the covering window.
         //
-        // We only inhibit when a window is *actually* covering the top strip
-        // (evaluated in _updateUnredirect), so direct scanout for fullscreen
-        // video keeps working the rest of the time. The watch is wired up only
-        // while reclaim is on — the only combo that lets a window reach y=0.
+        // We only inhibit when a window is *actually* covering the top strip,
+        // and not for a fullscreen app while the notch is tucked away for it
+        // (evaluated in _updateUnredirect), so fullscreen video and games keep
+        // direct scanout. The watch is wired up only while reclaim is on —
+        // the only combo that lets a window reach y=0.
         if (reclaim) {
             this._startUnredirectWatch();
             this._updateUnredirect();
@@ -1396,17 +1397,21 @@ export const NotchNux = GObject.registerClass({
     // Start watching for window geometry/stacking changes so we can flip the
     // unredirect inhibit on/off as a window covers or uncovers the top strip.
     // Idempotent. `restacked` (already tracked in _init for the raise-to-top)
-    // covers maximize/minimize/raise/map/workspace-switch; window_manager's
-    // `size-change` covers maximize/unmaximize/tile/fullscreen transitions.
+    // covers maximize/minimize/raise/workspace-switch; window_manager's
+    // `size-change` covers maximize/unmaximize/tile/fullscreen transitions,
+    // and its `map` a window that opens already maximized or fullscreen (its
+    // restack comes before it has that size).
     _startUnredirectWatch() {
         if (this._unredirectWatchStarted)
             return;
         this._unredirectWatchStarted = true;
         try {
             let wm = global.window_manager;
-            if (wm)
+            if (wm) {
                 this._wmSizeChangeId = wm.connect('size-change',
                     () => this._queueUnredirectUpdate());
+                this._wmMapId = wm.connect('map', () => this._queueUnredirectUpdate());
+            }
         } catch (e) {
             logError('Failed to start unredirect watch.', e);
         }
@@ -1416,14 +1421,17 @@ export const NotchNux = GObject.registerClass({
         if (!this._unredirectWatchStarted)
             return;
         this._unredirectWatchStarted = false;
-        if (this._wmSizeChangeId) {
-            try { global.window_manager.disconnect(this._wmSizeChangeId); } catch (e) {}
-            this._wmSizeChangeId = 0;
+        for (let id of [this._wmSizeChangeId, this._wmMapId]) {
+            if (id)
+                try { global.window_manager.disconnect(id); } catch (e) {}
         }
+        this._wmSizeChangeId = this._wmMapId = 0;
         if (this._unredirectUpdateId) {
             GLib.Source.remove(this._unredirectUpdateId);
             this._unredirectUpdateId = 0;
         }
+        // Not watching any more: no fullscreen app holds the notch tucked.
+        this._setFsCovered(false);
     }
 
     // Coalesce a burst of window signals into a single re-evaluation on the next
@@ -1440,33 +1448,49 @@ export const NotchNux = GObject.registerClass({
         });
     }
 
-    // Inhibit unredirection iff some ordinary window currently overlaps the
-    // notch's top strip on the primary monitor + active workspace. Cheap enough
-    // to run on every relevant window change.
+    // Inhibit unredirection while a window overlaps the notch's top strip on
+    // the primary monitor + active workspace, except for a fullscreen app on
+    // top (video, game): the notch tucks away for it (_shouldTuck), so it can
+    // be scanned out instead of composited every frame. While the notch shows
+    // something over it (alert, peek, dashboard, hover) it's untucked, and
+    // inhibited again, the way GNOME's own OSD does it. Cheap enough to run
+    // on every relevant window change.
     _updateUnredirect() {
         // Only meaningful while we're reclaiming the strip; a defensive re-check
         // in case this is reached after the feature was toggled off.
         let reclaim = this._config.isFeatureEnabled('hidePanel') &&
                       this._config.isFeatureEnabled('reclaimSpace');
         if (!reclaim) {
+            this._setFsCovered(false);
             this._uninhibitUnredirect();
             return;
         }
-        if (this._windowCoversTopStrip())
+        let win = this._topStripWindow();
+        this._setFsCovered(!!win?.is_fullscreen());
+        if (win && !(this._fsCovered && this._tucked))
             this._inhibitUnredirect();
         else
             this._uninhibitUnredirect();
     }
 
-    // True if any normal, shown window on the primary monitor's active workspace
-    // has a frame rect that reaches into the top strip the notch occupies. We
-    // test overlap against the collapsed pill's band at the top of the monitor
-    // (a window merely touching y=0 is enough to cover the notch), which is what
-    // triggers Mutter's unredirect in the first place.
-    _windowCoversTopStrip() {
+    // A fullscreen app took or left the top of the screen: tuck at once, or
+    // come back (_shouldTuck reads the flag).
+    _setFsCovered(on) {
+        if (on === !!this._fsCovered)
+            return;
+        this._fsCovered = on;
+        this._updateTuck?.({ instant: on });
+    }
+
+    // The topmost normal, shown window on the primary monitor's active
+    // workspace whose frame rect reaches into the top strip the notch
+    // occupies, or null. We test overlap against the collapsed pill's band at
+    // the top of the monitor (a window merely touching y=0 is enough to cover
+    // the notch), which is what triggers Mutter's unredirect in the first place.
+    _topStripWindow() {
         let monitor = Main.layoutManager.primaryMonitor;
         if (!monitor)
-            return false;
+            return null;
         // The band the notch draws in: the top PILL_HEIGHT rows of the monitor.
         let stripTop = monitor.y;
         let stripBottom = monitor.y + PILL_HEIGHT;
@@ -1475,6 +1499,8 @@ export const NotchNux = GObject.registerClass({
         let wsm = global.workspace_manager;
         let activeWs = wsm ? wsm.get_active_workspace() : null;
 
+        // Stacking order, bottom to top: the last match is the topmost.
+        let top = null;
         let actors = global.get_window_actors();
         for (let actor of actors) {
             let win = actor.meta_window ?? actor.get_meta_window?.();
@@ -1508,9 +1534,9 @@ export const NotchNux = GObject.registerClass({
             let rTop = r.y;
             let rBottom = r.y + r.height;
             if (rTop < stripBottom && rBottom > stripTop)
-                return true;
+                top = win;
         }
-        return false;
+        return top;
     }
 
     // Disable Mutter's direct-scanout optimization so top chrome stays composited
@@ -2449,14 +2475,9 @@ export const NotchNux = GObject.registerClass({
         if (showMusic) {
             let label = info.artist && info.artist !== 'Unknown Artist'
                 ? `${info.title} — ${info.artist}` : info.title;
-            if (this._pillTitle.text !== label) {
+            if (this._pillTitle.text !== label)
                 this._pillTitle.set_text(label);
-                this._startPillMarquee();
-            }
-            // Bars only bounce while actually playing (and visible); a paused
-            // track sits still.
-            if (info.status === 'Playing' && !this._alertShowing && !this._tucked) this._pillEq.start();
-            else this._pillEq.stop();
+            this._syncPillMotion();
         } else {
             this._pillEq.stop();
             this._stopPillMarquee();
@@ -2669,9 +2690,11 @@ export const NotchNux = GObject.registerClass({
     // where copy 1 started, so the loop is continuous with no visible restart.
     _startPillMarquee() {
         this._stopPillMarquee();
-        // Feature off: leave the (clipped) title static, no scrolling.
-        if (!this._config.isFeatureEnabled('pillMarquee'))
+        // Feature off, or paused: leave the (clipped) title static.
+        if (!this._config.isFeatureEnabled('pillMarquee') || !this._musicPlaying)
             return;
+        // Which title runs, so a refresh doesn't restart it (_syncPillMotion).
+        this._marqueeFor = this._pillTitle.text;
         this._marqueeTries = 0;
         // Gap (px) between the end of one copy and the start of the next.
         const GAP = 40;
@@ -2723,7 +2746,24 @@ export const NotchNux = GObject.registerClass({
         });
     }
 
+    // The marquee and the EQ bars loop for as long as they run, and every
+    // frame of them is a redraw of the screen: run them only while a track
+    // plays on a pill that's on screen (not paused, tucked or behind an
+    // alert). The marquee restarts only for a new title or after a stop, so
+    // a plain refresh doesn't snap a scrolling title back.
+    _syncPillMotion() {
+        if (this._musicPlaying && !this._alertShowing && !this._tucked) {
+            if (this._marqueeFor !== this._pillTitle.text)
+                this._startPillMarquee();
+            this._pillEq?.start();
+        } else {
+            this._stopPillMarquee();
+            this._pillEq?.stop();
+        }
+    }
+
     _stopPillMarquee() {
+        this._marqueeFor = null;
         if (this._marqueeStartId) { GLib.Source.remove(this._marqueeStartId); this._marqueeStartId = 0; }
         if (this._marqueeHoldId) { GLib.Source.remove(this._marqueeHoldId); this._marqueeHoldId = 0; }
         if (this._pillTitleTrack) {
@@ -4388,6 +4428,7 @@ export const NotchNux = GObject.registerClass({
                 break;
             case 'pillMarquee':
                 // Re-run the live refresh so the marquee starts/stops.
+                this._stopPillMarquee();
                 this._refreshLive();
                 break;
             case 'showPowerButton':

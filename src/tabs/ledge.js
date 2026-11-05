@@ -580,17 +580,21 @@ export const LedgeFeatures = {
     // ================================================================ hide when idle
 
     _shouldTuck() {
-        if (!this._config.isFeatureEnabled('autoHide'))
-            return false;
         if (this.isExpanded || this._isExpanding || this._peekActive || this._alertShowing)
             return false;
         if (this._hoverRevealed || this._pointerInside || this._pillMenu?.isOpen)
             return false;
+        if (this._pillMic?.visible || this._pillCam?.visible)
+            return false;
+        // A fullscreen app (video, game) has the screen: step aside, even
+        // with idle-hide off, so it can be scanned out (_updateUnredirect).
+        if (this._fsCovered)
+            return true;
+        if (!this._config.isFeatureEnabled('autoHide'))
+            return false;
         if (this._prod?.focusActive || this._prod?.stopwatch.running)
             return false;
         if (this._musicPlaying)
-            return false;
-        if (this._pillMic?.visible || this._pillCam?.visible)
             return false;
         if (this._config.isFeatureEnabled('pillStats') || this._config.pillTemp !== 'off')
             return false;
@@ -648,8 +652,8 @@ export const LedgeFeatures = {
 
     _setTucked(want, { instant = false } = {}) {
         this._tucked = want;
+        this._syncPillMotion();
         if (want) {
-            this._stopPillMarquee();
             this._fadeIsland(0, instant ? 0 : 220);
             if (instant) {
                 let g = Main.layoutManager.primaryMonitor ? this._restGeometry() : null;
@@ -661,14 +665,15 @@ export const LedgeFeatures = {
         } else {
             this._fadeIsland(255, instant ? 0 : 160);
             this._springToRest({ duration: 440, damping: 0.72 });
-            if (this._pillMusicBox?.visible)
-                this._startPillMarquee();
         }
     },
 
     // Fade the visible island (surface, shoulders, glass) — the outer actor
-    // stays reactive so the pointer can still find the tucked strip.
+    // stays reactive so the pointer can still find the tucked strip. Every
+    // tuck and untuck comes through here, so it also re-checks whether a
+    // fullscreen app may be scanned out (the notch shown needs compositing).
     _fadeIsland(opacity, ms) {
+        this._queueUnredirectUpdate?.();
         let targets = [this._surface, ...(this._shoulders ?? [])];
         if (this._glass)
             targets.push(this._glass.actor);

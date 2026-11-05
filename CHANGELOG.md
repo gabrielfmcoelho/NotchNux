@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — less CPU and heat from the pill and over fullscreen apps
+- A paused track's long title no longer scrolls forever: the title and the
+  EQ bars move only while a track plays (each frame of them is a redraw of
+  the screen). The title also scrolls again after an island alert, and
+  *Scrolling track title* in Preferences starts and stops it right away.
+- With *Hide top panel* and *Reclaim panel space* on, a fullscreen app
+  (video, game) was composited every frame just to draw the notch over it.
+  The notch now tucks away for it, so the app is scanned out directly; it
+  comes back over the app for alerts, notification peeks, the pointer at
+  the top centre and the mic/camera dots. A window that opens already
+  maximized now gets the notch drawn over it too (it used to vanish).
+
 ### Added — context and cost per Claude Code session
 - Each session's row in the Claude tab shows how full its context window
   is ("55% ctx", green / yellow / red) and what it has cost so far, from
