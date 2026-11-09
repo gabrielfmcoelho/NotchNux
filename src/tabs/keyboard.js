@@ -59,10 +59,12 @@ const KeyboardFeatures = {
         this._settings = null;
     },
 
-    // The shortcut fired. Another popup (a panel menu, a modal) holds the
-    // keyboard: don't open over it.
+    // The shortcut fired. Opening is allowed from the desktop and the
+    // overview (which holds a modal of its own); a panel menu or dialog
+    // (POPUP, SYSTEM_MODAL, ...) keeps the keyboard, so don't open over it.
     _onShortcut() {
-        if (!this.isExpanded && Main.modalCount > (this._kbGrab ? 1 : 0))
+        const canOpen = Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW;
+        if (!this.isExpanded && !(Main.actionMode & canOpen))
             return;
         this._toggleFromKeyboard();
     },

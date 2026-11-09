@@ -87,6 +87,17 @@ nnx_super_slash
 nnx_check super-ignored-over-modal "$NNX.isExpanded" false
 nnx_eval "(() => { Main.popModal(globalThis.__nnxModal); globalThis.__nnxModalActor.destroy(); return true; })()" >/dev/null; sleep 0.5
 
+# The overview holds a modal of its own: Super+/ still opens the notch over it,
+# with the command bar focused, and Esc closes the notch, leaving the overview.
+nnx_eval "(() => { Main.overview.show(); return true; })()" >/dev/null; sleep 1.5
+nnx_check overview-shown "[Main.overview.visible, Main.actionMode === imports.gi.Shell.ActionMode.OVERVIEW]" '[true,true]'
+nnx_super_slash
+nnx_check super-opens-in-overview "(() => { const n = $NNX; return [n.isExpanded, n._kbGrab !== null, global.stage.get_key_focus() === n._commandEntry.clutter_text]; })()" '[true,true,true]'
+nnx_keys KEY_Escape
+nnx_check overview-esc-closes "(() => { const n = $NNX; return [n.isExpanded, n._kbGrab === null, Main.overview.visible, Main.actionMode === imports.gi.Shell.ActionMode.OVERVIEW]; })()" '[false,true,true,true]'
+nnx_eval "(() => { Main.overview.hide(); return true; })()" >/dev/null; sleep 1.5
+nnx_check overview-hidden "[Main.overview.visible, Main.actionMode === imports.gi.Shell.ActionMode.NORMAL]" '[false,true]'
+
 # Esc in a Tasks in-place edit cancels the edit and leaves the notch open.
 nnx_eval "(() => { const n = $NNX; n.collapse(); n._prod.addTask('esc edit task'); n.expand(); n._switchTab('tasks'); return true; })()" >/dev/null; sleep 1.5
 FIND="const find = (x, f) => { if (f(x)) return x; for (const c of x.get_children()) { const r = find(c, f); if (r) return r; } return null; };"
