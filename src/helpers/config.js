@@ -161,11 +161,25 @@ export function blurPreset(id) {
 
 // Feature toggles exposed in settings. `id` is the stored key; `default`
 // is used when the config file has no opinion yet.
+export const COMPANION_SPECIES = [['rabbit', 'Rabbit'], ['cat', 'Cat'], ['fox', 'Fox']];
+
+function cleanCompanion(c) {
+    c = c && typeof c === 'object' ? c : {};
+    let day = v => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+    return {
+        species: COMPANION_SPECIES.some(([id]) => id === c.species) ? c.species : 'rabbit',
+        lastFed: day(c.lastFed),
+        lastMushroom: day(c.lastMushroom),
+        pets: Number.isInteger(c.pets) && c.pets >= 0 ? c.pets : 0,
+    };
+}
+
 export const FEATURE_DEFS = [
     { id: 'showBattery',       label: 'Battery on pill',      description: 'Show the battery indicator on the collapsed pill.',        default: true },
     { id: 'showPrivacy',       label: 'Privacy indicators',   description: 'Show mic/camera in-use dots on the collapsed pill.',        default: true },
-    { id: 'rabbitCompanion',   label: 'Rabbit companion',     description: 'The Inova Data rabbit at the left of the pill: it reacts to Claude Code, the focus timer, notifications, music and battery.', default: true },
-    { id: 'rabbitCalm',        label: 'Calm rabbit',          description: 'Keep the rabbit’s reactions but drop its idle moves (blinks, ear flicks, nibbles).', default: false },
+    // `group: 'companion'`: shown in Preferences' Companion group, with the animal picker.
+    { id: 'rabbitCompanion',   label: 'Companion on the pill', description: 'A small animal lives at the left of the pill: it reacts to Claude Code, the focus timer, notifications, music, weather and battery.', default: true, group: 'companion' },
+    { id: 'rabbitCalm',        label: 'Calm companion',       description: 'Keep its reactions but drop its idle life (wandering, grooming, digging, eating).', default: false, group: 'companion' },
     { id: 'showScreenShare',   label: 'Screen sharing indicator', description: 'Show a red icon on the pill while the screen is shared or recorded.', default: true },
     { id: 'pillMarquee',       label: 'Scrolling track title', description: 'Scroll long track titles across the pill while playing.',  default: true },
     { id: 'weatherAutoRefresh', label: 'Auto-refresh weather', description: 'Periodically refresh weather in the background.',           default: true },
@@ -369,7 +383,10 @@ export class ConfigStore {
             devTerminal: '',
             // The Tasks tab's list while the googleTasks feature is on:
             // 'local' (tasks.json) or an EDS task-list source uid.
-            tasksSource: 'local'
+            tasksSource: 'local',
+            // The pill companion: which animal, and what it remembers (day keys
+            // for its once-a-day habits, how often it was petted).
+            companion: { species: 'rabbit', lastFed: null, lastMushroom: null, pets: 0 }
         };
     }
 
@@ -436,6 +453,7 @@ export class ConfigStore {
                 data.devProjectRoots = Array.isArray(parsed.devProjectRoots)
                     ? [...new Set(parsed.devProjectRoots.filter(p => typeof p === 'string' && p.startsWith('/')))] : [];
                 data.tabOrder = this._reconcileOrder(parsed.tabOrder);
+                data.companion = cleanCompanion(parsed.companion);
             }
         } catch (e) {
             // Corrupt JSON: log it but fall back to defaults so the extension
@@ -674,6 +692,19 @@ export class ConfigStore {
     setDevTerminal(id) {
         this._refresh();
         this._data.devTerminal = DEV_TERMINALS.includes(id) ? id : '';
+        this._save();
+    }
+
+    get companion() {
+        return cleanCompanion(this._data.companion);
+    }
+    // Patch one or more companion fields; 'pets' adds to the count.
+    setCompanion(patch) {
+        this._refresh();
+        let c = cleanCompanion(this._data.companion);
+        for (let [k, v] of Object.entries(patch))
+            c[k] = k === 'pets' ? c.pets + (Number(v) || 0) : v;
+        this._data.companion = cleanCompanion(c);
         this._save();
     }
 

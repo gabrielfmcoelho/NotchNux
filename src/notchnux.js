@@ -28,7 +28,8 @@ import { TAB_DEFS, FEATURE_DEFS, blurPreset, resolveAccent, hexToRgb01 } from '.
 import { fmt } from './helpers/format.js';
 import { GlassBackdrop, createShoulder, SHOULDER_SIZE, PILL_HEIGHT } from './helpers/island.js';
 import { springTo, stopSpring, addPressFeedback } from './helpers/motion.js';
-import { RabbitCompanion } from './helpers/companion.js';
+import { Companion } from './helpers/companion.js';
+import { weatherKind, isNight } from './helpers/companion-brain.js';
 import { DeskNotes } from './helpers/desknotes.js';
 import { installProductivity } from './tabs/productivity.js';
 import { installLedge, swapContent } from './tabs/ledge.js';
@@ -208,7 +209,11 @@ export const NotchNux = GObject.registerClass({
         this._screenShare = new ScreenShareWatch(() => this._updatePrivacyIndicators());
         // The rabbit companion goes in last, at index 0, so it stays left of the
         // live-activity zones that the inits above inserted by index.
-        this._pillRabbit = new RabbitCompanion(() => this._companionState());
+        this._pillRabbit = new Companion(() => this._companionState(), {
+            species: this._config.companion.species,
+            onWidth: () => { if (!this.isExpanded && !this._alertShowing) this._applyPillWidth(); },
+            onMemory: (key, value) => this._config.setCompanion({ [key]: value }),
+        });
         this._pillRabbit.visible = this._config.isFeatureEnabled('rabbitCompanion');
         this._pill.insert_child_at_index(this._pillRabbit, 0);
         // Recolour the active-state chrome to match the persisted accent.
@@ -377,13 +382,25 @@ export const NotchNux = GObject.registerClass({
     // What the pill rabbit reacts to besides Claude (see helpers/companion-brain.js).
     _companionState() {
         let bat = this._system.getBatteryInfo();
+        let wx = this._weather?.weatherData ?? {};
+        let kind = wx.loaded && !wx.stale ? weatherKind(wx.code) : null;
+        let now = new Date();
+        let mem = this._config.companion;
         return {
             focus: this._prod?.focus.phase ?? 'idle',
             music: !!this._musicPlaying,
+            track: this._musicPlaying ? this._pillTitle.text : null,
             low: bat.percentage <= 15,
             charging: bat.isCharging,
-            hour: new Date().getHours(),
+            night: isNight(now.getTime(), wx.sunriseMs, wx.sunsetMs, now.getHours()),
+            rain: kind === 'rain',
+            snow: kind === 'snow',
+            wind: wx.windKmh ?? 0,
+            unread: this._unreadCount ?? 0,
             calm: this._config.isFeatureEnabled('rabbitCalm'),
+            minutes: now.getHours() * 60 + now.getMinutes(),
+            dayKey: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+            mem: { lastFed: mem.lastFed, lastMushroom: mem.lastMushroom },
         };
     }
 
@@ -435,6 +452,7 @@ export const NotchNux = GObject.registerClass({
             fanControl: this._config.fanControl,
             devRootsKey: JSON.stringify(this._config.devProjectRoots),
             tasksSource: this._config.tasksSource,
+            companionSpecies: this._config.companion.species,
         };
     }
 
@@ -534,6 +552,8 @@ export const NotchNux = GObject.registerClass({
             this._onDevRootsChanged();
         // Tasks list picked in prefs (the googleTasks switch goes through
         // _onFeatureToggled).
+        if (next.companionSpecies !== prev.companionSpecies)
+            this._pillRabbit?.setSpecies(next.companionSpecies);
         if (next.tasksSource !== prev.tasksSource)
             this._syncTaskSource();
         if ((next.trayTemps !== prev.trayTemps || next.fanControl !== prev.fanControl) && this._invalidateTab('system'))
@@ -2576,8 +2596,11 @@ export const NotchNux = GObject.registerClass({
         if (showMusic) {
             let label = info.artist && info.artist !== 'Unknown Artist'
                 ? `${info.title} — ${info.artist}` : info.title;
-            if (this._pillTitle.text !== label)
+            if (this._pillTitle.text !== label) {
                 this._pillTitle.set_text(label);
+                if (this._musicPlaying && wasVisible)
+                    this._pillRabbit?.react('track');
+            }
             this._syncPillMotion();
         } else {
             this._pillEq.stop();
@@ -2632,6 +2655,7 @@ export const NotchNux = GObject.registerClass({
 
     _onWeatherUpdated() {
         if (this._destroyed) return;
+        this._pillRabbit?.update();   // rain, wind, sunrise/sunset
         if (this._invalidateTab('weather', 'home'))
             this._renderActiveTab();
     }
@@ -5170,6 +5194,10 @@ export const NotchNux = GObject.registerClass({
         if (count === null) {
             try { count = this._collectNotifications().length; }
             catch (e) { count = 0; }
+        }
+        if (count !== this._unreadCount) {
+            this._unreadCount = count;
+            this._pillRabbit?.update();   // 5+ unread: it faces the bell
         }
         if (count > 0) {
             this._tabCountLabel.set_text(count > 99 ? '99+' : String(count));

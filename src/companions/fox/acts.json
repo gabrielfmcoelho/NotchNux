@@ -1,0 +1,651 @@
+{
+ "fps": 12,
+ "acts": {
+  "sit": {
+   "frames": [
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0
+   ]
+  },
+  "blink": {
+   "frames": [
+    "rabbit-01-symbolic.svg",
+    "rabbit-01-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0
+   ]
+  },
+  "flick": {
+   "frames": [
+    "rabbit-02-symbolic.svg",
+    "rabbit-03-symbolic.svg",
+    "rabbit-04-symbolic.svg",
+    "rabbit-05-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "nibble": {
+   "frames": [
+    "rabbit-06-symbolic.svg",
+    "rabbit-07-symbolic.svg",
+    "rabbit-08-symbolic.svg",
+    "rabbit-07-symbolic.svg",
+    "rabbit-08-symbolic.svg",
+    "rabbit-09-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "look": {
+   "frames": [
+    "rabbit-10-symbolic.svg",
+    "rabbit-11-symbolic.svg",
+    "rabbit-12-symbolic.svg",
+    "rabbit-13-symbolic.svg",
+    "rabbit-14-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "perk": {
+   "frames": [
+    "rabbit-15-symbolic.svg",
+    "rabbit-16-symbolic.svg",
+    "rabbit-17-symbolic.svg",
+    "rabbit-18-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "hop": {
+   "frames": [
+    "rabbit-19-symbolic.svg",
+    "rabbit-20-symbolic.svg",
+    "rabbit-21-symbolic.svg",
+    "rabbit-22-symbolic.svg",
+    "rabbit-23-symbolic.svg",
+    "rabbit-24-symbolic.svg",
+    "rabbit-25-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    -2,
+    -5,
+    -4,
+    0,
+    0,
+    0
+   ]
+  },
+  "run": {
+   "frames": [
+    "rabbit-19-symbolic.svg",
+    "rabbit-21-symbolic.svg",
+    "rabbit-22-symbolic.svg",
+    "rabbit-23-symbolic.svg",
+    "rabbit-24-symbolic.svg",
+    "rabbit-25-symbolic.svg"
+   ],
+   "y": [
+    0,
+    -1,
+    -4,
+    -3,
+    0,
+    0
+   ]
+  },
+  "thump": {
+   "frames": [
+    "rabbit-26-symbolic.svg",
+    "rabbit-26-symbolic.svg",
+    "rabbit-27-symbolic.svg",
+    "rabbit-26-symbolic.svg",
+    "rabbit-27-symbolic.svg",
+    "rabbit-26-symbolic.svg",
+    "rabbit-25-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    -1,
+    1,
+    -1,
+    1,
+    -1,
+    0,
+    0
+   ]
+  },
+  "binky": {
+   "frames": [
+    "rabbit-19-symbolic.svg",
+    "rabbit-20-symbolic.svg",
+    "rabbit-21-symbolic.svg",
+    "rabbit-28-symbolic.svg",
+    "rabbit-29-symbolic.svg",
+    "rabbit-23-symbolic.svg",
+    "rabbit-24-symbolic.svg",
+    "rabbit-25-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    -3,
+    -7,
+    -8,
+    -5,
+    0,
+    0,
+    0
+   ]
+  },
+  "stretch": {
+   "frames": [
+    "rabbit-30-symbolic.svg",
+    "rabbit-30-symbolic.svg",
+    "rabbit-31-symbolic.svg",
+    "rabbit-30-symbolic.svg",
+    "rabbit-25-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "sleep": {
+   "frames": [
+    "rabbit-32-symbolic.svg"
+   ],
+   "y": [
+    0
+   ]
+  },
+  "breathe": {
+   "frames": [
+    "rabbit-33-symbolic.svg"
+   ],
+   "y": [
+    0
+   ]
+  },
+  "sleepbreathe": {
+   "frames": [
+    "rabbit-34-symbolic.svg"
+   ],
+   "y": [
+    0
+   ]
+  },
+  "sniff": {
+   "frames": [
+    "rabbit-35-symbolic.svg",
+    "rabbit-36-symbolic.svg",
+    "rabbit-37-symbolic.svg",
+    "rabbit-36-symbolic.svg",
+    "rabbit-38-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "groom": {
+   "frames": [
+    "rabbit-39-symbolic.svg",
+    "rabbit-40-symbolic.svg",
+    "rabbit-41-symbolic.svg",
+    "rabbit-40-symbolic.svg",
+    "rabbit-42-symbolic.svg",
+    "rabbit-43-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "bob": {
+   "frames": [
+    "rabbit-44-symbolic.svg",
+    "rabbit-45-symbolic.svg",
+    "rabbit-46-symbolic.svg",
+    "rabbit-47-symbolic.svg",
+    "rabbit-48-symbolic.svg",
+    "rabbit-49-symbolic.svg",
+    "rabbit-50-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "flop": {
+   "frames": [
+    "rabbit-25-symbolic.svg",
+    "rabbit-51-symbolic.svg",
+    "rabbit-52-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0
+   ]
+  },
+  "yawn": {
+   "frames": [
+    "rabbit-53-symbolic.svg",
+    "rabbit-54-symbolic.svg",
+    "rabbit-55-symbolic.svg",
+    "rabbit-54-symbolic.svg",
+    "rabbit-56-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "shake": {
+   "frames": [
+    "rabbit-57-symbolic.svg",
+    "rabbit-58-symbolic.svg",
+    "rabbit-59-symbolic.svg",
+    "rabbit-60-symbolic.svg",
+    "rabbit-61-symbolic.svg",
+    "rabbit-62-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "dig": {
+   "frames": [
+    "rabbit-63-symbolic.svg",
+    "rabbit-64-symbolic.svg",
+    "rabbit-65-symbolic.svg",
+    "rabbit-64-symbolic.svg",
+    "rabbit-65-symbolic.svg",
+    "rabbit-66-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "sniffup": {
+   "frames": [
+    "rabbit-67-symbolic.svg",
+    "rabbit-68-symbolic.svg",
+    "rabbit-69-symbolic.svg",
+    "rabbit-68-symbolic.svg",
+    "rabbit-70-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "pet": {
+   "frames": [
+    "rabbit-71-symbolic.svg",
+    "rabbit-72-symbolic.svg",
+    "rabbit-72-symbolic.svg",
+    "rabbit-73-symbolic.svg",
+    "rabbit-74-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "shiver": {
+   "frames": [
+    "rabbit-75-symbolic.svg",
+    "rabbit-76-symbolic.svg",
+    "rabbit-75-symbolic.svg",
+    "rabbit-77-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "tired": {
+   "frames": [
+    "rabbit-78-symbolic.svg"
+   ],
+   "y": [
+    0
+   ]
+  },
+  "sit@music": {
+   "frames": [
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0
+   ]
+  },
+  "breathe@music": {
+   "frames": [
+    "rabbit-80-symbolic.svg"
+   ],
+   "y": [
+    0
+   ]
+  },
+  "blink@music": {
+   "frames": [
+    "rabbit-81-symbolic.svg",
+    "rabbit-81-symbolic.svg",
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0
+   ]
+  },
+  "flick@music": {
+   "frames": [
+    "rabbit-82-symbolic.svg",
+    "rabbit-83-symbolic.svg",
+    "rabbit-84-symbolic.svg",
+    "rabbit-85-symbolic.svg",
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "look@music": {
+   "frames": [
+    "rabbit-86-symbolic.svg",
+    "rabbit-87-symbolic.svg",
+    "rabbit-88-symbolic.svg",
+    "rabbit-89-symbolic.svg",
+    "rabbit-90-symbolic.svg",
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "sniff@music": {
+   "frames": [
+    "rabbit-91-symbolic.svg",
+    "rabbit-92-symbolic.svg",
+    "rabbit-93-symbolic.svg",
+    "rabbit-92-symbolic.svg",
+    "rabbit-94-symbolic.svg",
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "nibble@music": {
+   "frames": [
+    "rabbit-95-symbolic.svg",
+    "rabbit-96-symbolic.svg",
+    "rabbit-97-symbolic.svg",
+    "rabbit-96-symbolic.svg",
+    "rabbit-97-symbolic.svg",
+    "rabbit-98-symbolic.svg",
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "groom@music": {
+   "frames": [
+    "rabbit-99-symbolic.svg",
+    "rabbit-100-symbolic.svg",
+    "rabbit-101-symbolic.svg",
+    "rabbit-100-symbolic.svg",
+    "rabbit-102-symbolic.svg",
+    "rabbit-103-symbolic.svg",
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "bob@music": {
+   "frames": [
+    "rabbit-104-symbolic.svg",
+    "rabbit-105-symbolic.svg",
+    "rabbit-106-symbolic.svg",
+    "rabbit-107-symbolic.svg",
+    "rabbit-108-symbolic.svg",
+    "rabbit-109-symbolic.svg",
+    "rabbit-110-symbolic.svg",
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "hop@music": {
+   "frames": [
+    "rabbit-111-symbolic.svg",
+    "rabbit-112-symbolic.svg",
+    "rabbit-113-symbolic.svg",
+    "rabbit-114-symbolic.svg",
+    "rabbit-115-symbolic.svg",
+    "rabbit-116-symbolic.svg",
+    "rabbit-117-symbolic.svg",
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    -2,
+    -5,
+    -4,
+    0,
+    0,
+    0
+   ]
+  },
+  "dig@music": {
+   "frames": [
+    "rabbit-118-symbolic.svg",
+    "rabbit-119-symbolic.svg",
+    "rabbit-120-symbolic.svg",
+    "rabbit-119-symbolic.svg",
+    "rabbit-120-symbolic.svg",
+    "rabbit-121-symbolic.svg",
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "sniffup@music": {
+   "frames": [
+    "rabbit-122-symbolic.svg",
+    "rabbit-123-symbolic.svg",
+    "rabbit-124-symbolic.svg",
+    "rabbit-123-symbolic.svg",
+    "rabbit-125-symbolic.svg",
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "pet@music": {
+   "frames": [
+    "rabbit-126-symbolic.svg",
+    "rabbit-127-symbolic.svg",
+    "rabbit-127-symbolic.svg",
+    "rabbit-128-symbolic.svg",
+    "rabbit-129-symbolic.svg",
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "shake@music": {
+   "frames": [
+    "rabbit-130-symbolic.svg",
+    "rabbit-131-symbolic.svg",
+    "rabbit-132-symbolic.svg",
+    "rabbit-133-symbolic.svg",
+    "rabbit-134-symbolic.svg",
+    "rabbit-135-symbolic.svg",
+    "rabbit-79-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  }
+ }
+}

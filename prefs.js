@@ -19,7 +19,7 @@ import GioUnix from 'gi://GioUnix';
 
 import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-import { ConfigStore, TAB_DEFS, FEATURE_DEFS, WALLPAPER_DEFAULTS, ENHANCE_AUTO, ENHANCE_RANGE, normalizeHex, BLUR_PRESETS, BLUR_RADIUS_RANGE, BLUR_DEFAULTS, MAX_PINNED } from './src/helpers/config.js';
+import { ConfigStore, TAB_DEFS, FEATURE_DEFS, COMPANION_SPECIES, WALLPAPER_DEFAULTS, ENHANCE_AUTO, ENHANCE_RANGE, normalizeHex, BLUR_PRESETS, BLUR_RADIUS_RANGE, BLUR_DEFAULTS, MAX_PINNED } from './src/helpers/config.js';
 import { discoverHwmon, pickSensors, pickFan, fanUsable, SENSOR_KINDS, FAN_GUARD_C } from './src/helpers/sensors.js';
 import { TERMINALS } from './src/helpers/dev.js';
 import { EdsClient } from './src/helpers/eds.js';
@@ -93,6 +93,7 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         this._addWallpaperGroup(page, config, window);
         this._addTabsGroup(page, config);
         this._addFeaturesGroup(page, config);
+        this._addCompanionGroup(page, config);
         this._addGoogleGroup(page, config);
         this._addSensorsGroup(page, config);
         this._addClaudeGroup(page, config);
@@ -870,6 +871,29 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
             row.connect('notify::active', () => {
                 config.setFeatureEnabled(f.id, row.get_active());
             });
+            group.add(row);
+        }
+    }
+
+    // ---- Companion: the animal on the pill and its two switches ----
+    _addCompanionGroup(page, config) {
+        const group = new Adw.PreferencesGroup({
+            title: 'Companion',
+            description: 'One small animal lives at the left of the pill. It breathes, wanders, eats around lunchtime, sleeps when you are away or after dark, and reacts to Claude Code, the focus timer, music, notifications, the weather and the battery. Click it to pet it.',
+        });
+        page.add(group);
+        const speciesRow = new Adw.ComboRow({
+            title: 'Animal',
+            subtitle: 'Changing it, the current one hops off and the new one hops in',
+            model: Gtk.StringList.new(COMPANION_SPECIES.map(([, name]) => name)),
+            selected: Math.max(0, COMPANION_SPECIES.findIndex(([id]) => id === config.companion.species)),
+        });
+        speciesRow.connect('notify::selected', () => config.setCompanion({ species: COMPANION_SPECIES[speciesRow.selected]?.[0] ?? 'rabbit' }));
+        group.add(speciesRow);
+        for (const f of FEATURE_DEFS.filter(f => f.group === 'companion')) {
+            const row = new Adw.SwitchRow({ title: f.label, use_markup: false, active: config.isFeatureEnabled(f.id) });
+            row.subtitle = f.description;
+            row.connect('notify::active', () => config.setFeatureEnabled(f.id, row.get_active()));
             group.add(row);
         }
     }

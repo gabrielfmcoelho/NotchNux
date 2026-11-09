@@ -569,6 +569,7 @@ export const LedgeFeatures = {
             if (this._headsUpSeen.has(key))
                 continue;
             this._headsUpSeen.add(key);
+            this._pillRabbit?.react('event');
             let m = Math.max(1, Math.round(mins));
             this._pushAlert({ kind: 'calendar', icon: 'x-office-calendar-symbolic', color: SYS.red,
                 title: ev.title || 'Event', value: `in ${m} min`,

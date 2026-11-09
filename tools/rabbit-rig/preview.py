@@ -21,7 +21,7 @@ cache = {}
 def render(name, width, color):
     key = (name, width, color)
     if key not in cache:
-        svg = open(os.path.join(FRAMES, name)).read().replace("#bebebe", color)
+        svg = open(os.path.join(FRAMES, name)).read().replace("#bebebe", color).replace("#73d216", "#7aa2ff")
         tmp_svg = os.path.join(OUT, "_tmp.svg")
         tmp_png = os.path.join(OUT, f"_tmp_{width}.png")
         open(tmp_svg, "w").write(svg)
@@ -71,7 +71,7 @@ for act, a in acts.items():
         dr = ImageDraw.Draw(im)
         grass(dr, scroll=k * 2 if act == "run" else 0, bend=act in ("hop", "binky", "run") and y == 0 and k > 0)
         spr = render(n, ICON, color)
-        top = GROUND - int(spr.height * 0.95) + y   # rabbit feet near the bottom of the frame box
+        top = GROUND - int(spr.height * 0.97) + y   # rabbit feet near the bottom of the frame box
         im.paste(spr, (W // 2 - spr.width // 2, top), spr)
         if act == "sleep":
             for j, (zx, zy) in enumerate([(8, -4), (12, -8), (17, -12)]):

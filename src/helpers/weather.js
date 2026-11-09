@@ -371,6 +371,11 @@ export class WeatherHelper {
                 low: daily.temperature_2m_min ? `${Math.round(daily.temperature_2m_min[0])}°` : '--°',
                 sunrise: this._fmtTime(daily.sunrise && daily.sunrise[0]),
                 sunset: this._fmtTime(daily.sunset && daily.sunset[0]),
+                // raw values for the pill companion's world (rain, wind, night)
+                code: current.weather_code,
+                windKmh: Math.round(current.wind_speed_10m),
+                sunriseMs: this._localMs(daily.sunrise && daily.sunrise[0]),
+                sunsetMs: this._localMs(daily.sunset && daily.sunset[0]),
                 hourly: this._buildHourly(json.hourly),
                 manualLocation: this._settings.locationQuery || '',
                 loaded: true,
@@ -385,6 +390,12 @@ export class WeatherHelper {
     // "2026-07-15T18:10" -> "6:10 PM" (or "18:10", per locale). open-meteo
     // returns the location's local wall-clock time with timezone=auto, so build
     // the Date from those fields as-is rather than re-applying a zone.
+    // "2026-11-09T06:12" (local, no zone) -> epoch ms, or 0.
+    _localMs(iso) {
+        let m = typeof iso === 'string' && iso.match(/^(\d+)-(\d+)-(\d+)T(\d+):(\d+)/);
+        return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime() : 0;
+    }
+
     _fmtTime(iso) {
         let m = typeof iso === 'string' && iso.match(/^(\d+)-(\d+)-(\d+)T(\d+):(\d+)/);
         if (!m) return '--:--';

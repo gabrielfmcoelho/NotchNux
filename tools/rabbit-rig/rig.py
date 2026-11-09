@@ -1,170 +1,437 @@
-"""Rabbit rig: the coelho lockup split into parts, posed per frame, written as symbolic SVGs.
+"""Rabbit rig: an original side-view rabbit built from simple shapes, posed per frame, written as
+symbolic SVGs (one fill colour; the headphones use the symbolic "success" class).
 
-    python3 -I rig.py <marca.tsx> <frames-dir> <acts.json>
+    python3 -I rig.py <frames-dir> <acts.json>
+    python3 -I rig.py --try <out.png> '<json list of poses>'      # calibration / model sheet
 
-Parts come from the visible rabbit (the lockup is 5 overlapping sub-paths filled even-odd, so the
-parts are found by XOR-ing them in Inkscape and splitting the result). Each frame is a pose:
-a root transform (squash, stretch, tilt about the feet) plus per-part offsets and rotations about
-joints. Vertical travel (the hop arc) is NOT baked in: it goes to acts.json as per-frame y offsets,
-so the shell can tween it at full frame rate while the pose steps at 12 fps.
+Drawn in its rest pose: sitting, facing right, ground at y=100 (units). Anatomy: pear body, big
+round haunch with a long flat hind foot, slim front leg with a paw, round head with snout and an
+eye cut out, two long ears (near and far), a cotton tail.
+Bones: root (squash/stretch/tilt about the feet) > body > {tail, hind @hip, arm @shoulder,
+head @neck > {ear_far, ear_near}}. Pose values: root (dx, dy, rot, sx, sy); every other bone
+(dx, dy, rot[, length]), rot clockwise in degrees, length < 1 folds a limb toward its joint.
+Every frame is grounded: shifted so its lowest point touches the grass.
+Hop arcs are not baked in: acts.json has per-frame y offsets the shell tweens.
 """
-import json, os, re, subprocess, sys, tempfile
+import json, math, os, subprocess, sys, tempfile
 
-MARCA, OUT, ACTS = sys.argv[1:4]
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, "out")
 os.makedirs(CACHE, exist_ok=True)
-os.makedirs(OUT, exist_ok=True)
 
 
-def inkscape(svg_text, actions, out):
+# ---------------------------------------------------------------- shapes
+def poly(pts):
+    return "M " + " L ".join(f"{x:.2f} {y:.2f}" for x, y in pts) + " Z"
+
+
+def ellipse(cx, cy, rx, ry, rot=0, n=40):
+    c, s = math.cos(math.radians(rot)), math.sin(math.radians(rot))
+    pts = []
+    for i in range(n):
+        t = 2 * math.pi * i / n
+        x, y = rx * math.cos(t), ry * math.sin(t)
+        pts.append((cx + x * c - y * s, cy + x * s + y * c))
+    return poly(pts)
+
+
+def leaf(bx, by, tx, ty, w, n=16):
+    # an ear from base to tip: widest a third of the way up, rounded tip
+    L = math.hypot(tx - bx, ty - by)
+    ux, uy = (tx - bx) / L, (ty - by) / L
+    nx, ny = -uy, ux
+    half = lambda t: w / 2 * math.sin(math.pi * min(1, t * 1.5) / 2) * (1 - t) ** 0.35
+    side = lambda sgn: [(bx + ux * L * t + nx * sgn * half(t), by + uy * L * t + ny * sgn * half(t)) for t in [i / n for i in range(n + 1)]]
+    base = [(bx + nx * w * 0.42, by + ny * w * 0.42), (bx - nx * w * 0.42, by - ny * w * 0.42)]
+    return poly([base[0]] + side(1)[1:] + side(-1)[::-1][:-1] + [base[1]])
+
+
+def rbar(x0, y0, x1, y1, r):
+    # rounded bar (stadium) from (x0,y0) to (x1,y1), radius r
+    a = math.atan2(y1 - y0, x1 - x0)
+    pts = [(x1 + r * math.cos(a + t), y1 + r * math.sin(a + t)) for t in [math.pi * (i / 10 - 0.5) for i in range(11)]]
+    pts += [(x0 + r * math.cos(a + t), y0 + r * math.sin(a + t)) for t in [math.pi * (i / 10 + 0.5) for i in range(11)]]
+    return poly(pts)
+
+
+def arc_band(cx, cy, r0, r1, a0, a1, n=20):
+    p = lambda r, a: (cx + r * math.cos(math.radians(a)), cy - r * math.sin(math.radians(a)))
+    return poly([p(r1, a0 + (a1 - a0) * i / n) for i in range(n + 1)] + [p(r0, a1 - (a1 - a0) * i / n) for i in range(n + 1)])
+
+
+def thick_curve(p0, p1, p2, w0, w1, n=18):
+    # a tapering stroke along a quadratic curve, as a filled outline (tails)
+    pts = [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0],
+            (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1]) for t in [i / n for i in range(n + 1)]]
+    left, right = [], []
+    for i, (x, y) in enumerate(pts):
+        a, b = pts[max(0, i - 1)], pts[min(n, i + 1)]
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        L = math.hypot(dx, dy) or 1
+        w = (w0 + (w1 - w0) * i / n) / 2
+        left.append((x - dy / L * w, y + dx / L * w))
+        right.append((x + dy / L * w, y - dx / L * w))
+    return poly(left + right[::-1])
+
+
+def tri_ear(bx, by, tx, ty, w, tip=3.0):
+    # a blunt triangle ear: wide base, rounded tip of radius `tip`
+    L = math.hypot(tx - bx, ty - by)
+    ux, uy = (tx - bx) / L, (ty - by) / L
+    nx, ny = -uy, ux
+    k = (L - tip) / L
+    cx, cy = bx + ux * L * k, by + uy * L * k      # tip circle centre
+    a = math.atan2(uy, ux)
+    cap = [(cx + tip * math.cos(a + t), cy + tip * math.sin(a + t)) for t in [math.pi * (i / 8 - 0.5) for i in range(9)]]
+    # the cap runs from the -n side to the +n side, so the base points go the same way (no bow-tie)
+    return poly([(bx - nx * w / 2, by - ny * w / 2)] + cap + [(bx + nx * w / 2, by + ny * w / 2)])
+
+
+# ---- the tech motif, at a size that survives 22 px: GNOME symbolic icons want main
+# features >= 2 px and no 1 px strokes; here 1 px is ~4.2 units.
+PX = 4.2
+
+
+EYE_STYLE = os.environ.get("EYE", "button")
+
+
+def eye_open(cx, cy):
+    if EYE_STYLE == "button":      # big round eye, a grey highlight dot left inside it (even-odd)
+        return ellipse(cx, cy, 6.2, 6.2, 0, 22) + " " + ellipse(cx + 2.2, cy - 2.2, 1.9, 1.9, 0, 10)
+    if EYE_STYLE == "visor":       # dark rounded bar across the face; the accent pupil is drawn separately
+        return rbar(cx - 9, cy, cx + 5, cy, 3.6)
+    return node_eye(cx, cy)
+
+
+def eye_closed(cx, cy):
+    if EYE_STYLE == "button":      # a happy arc
+        return arc_band(cx, cy + 3.5, 3.6, 6, 15, 165)
+    if EYE_STYLE == "visor":
+        return rbar(cx - 9, cy, cx + 5, cy, 1.6)
+    return slit(cx, cy)
+
+
+def eye_accent(cx, cy, dx=0):
+    # visor pupil: an accent dot that slides inside the bar when it looks around
+    return [ellipse(cx + 1.5 + dx, cy, 2.6, 2.6, 0, 12)] if EYE_STYLE == "visor" else []
+
+
+def node_eye(cx, cy):
+    # the logo's mark, a line ending in a node, cut out of the head: reads as a visor eye.
+    # dot r 4.6 (~2.2 px), slot 5.6 tall (~1.3 px) running back from it
+    return (ellipse(cx, cy, 4.6, 4.6, 0, 18) + " "
+            + poly([(cx - 9.5, cy - 2.8), (cx - 3.6, cy - 2.8), (cx - 3.6, cy + 2.8), (cx - 9.5, cy + 2.8)]))
+
+
+def slit(cx, cy):
+    return poly([(cx - 9.5, cy - 1.5), (cx + 4.6, cy - 1.5), (cx + 4.6, cy + 1.5), (cx - 9.5, cy + 1.5)])
+
+
+def headphones(cx, cy, r, style):
+    """Headphones on a head centred (cx, cy) with radius r. Side view, facing right.
+    band: cup on the near ear + thick band over the skull.  muffs: two cups (the far one
+    peeks over the top) joined by a band.  bud: one big earbud, no band."""
+    cup = ellipse(cx - r * 0.55, cy + r * 0.05, 6.5, 7)
+    if style == "band":
+        return [cup, arc_band(cx, cy + 2, r + 1, r + 7.5, 20, 160)]
+    if style == "muffs":
+        far = ellipse(cx + r * 0.1, cy - r - 3, 5.5, 4)
+        return [cup, far, arc_band(cx, cy + 2, r + 0.5, r + 7, 60, 160)]
+    if style == "clip":          # a solid muff on the side of the head + a short thick clip up the ear, no headband
+        mx, my = cx - r * 0.5, cy + r * 0.05
+        return [ellipse(mx, my, 7, 7.5), rbar(mx + 1, my - 6, mx + 3, my - r * 0.95 - 2, 2.8)]
+    if style == "neckband":      # a bud at the ear + a collar band at the neck
+        return [ellipse(cx - r * 0.5, cy + r * 0.05, 5, 5.5), arc_band(cx, cy + 4, r - 1, r + 5.5, 215, 330)]
+    return [ellipse(cx - r * 0.55, cy + r * 0.05, 7.5, 8), poly([(cx - r * 0.55 - 2, cy + 6), (cx - r * 0.55 + 2, cy + 6), (cx - r * 0.55 + 1, cy + 16), (cx - r * 0.55 - 3, cy + 16)])]
+
+
+PHONES_STYLE = os.environ.get("PHONES", "clip")
+
+
+def species(skull, eye, ears, body, hind, arm, tail, nodes, phones, joints, snout=None):
+    """Shapes + joints for one companion. `nodes` are accent dots (~2 px) on the tips of its
+    longest feature: the logo's line-ending-in-a-node, carried by the body itself."""
+    extra = snout.split(" | ") if snout else []
+    return {
+        "SHAPES": {
+            "body": [body],
+            "tail": [tail],
+            "hind": hind,
+            "arm": arm,
+            "head_open": [skull + " " + eye_open(*eye)] + extra,
+            "head_closed": [skull + " " + eye_closed(*eye)] + extra,
+            "ear_far": [ears[0]],
+            "ear_near": [ears[1]],
+        },
+        "NODES": nodes,        # {bone: [accent shapes]}
+        "EYE": eye,
+        "PHONES": phones,
+        "J": joints,
+    }
+
+
+# Proportions follow the cute-creature rule of thumb: head ~ 60 / body ~ 40 of the visual
+# mass (never 50/50), circles and triangles, short limbs; the one or two traits that
+# identify the animal are exaggerated so the black silhouette alone names it.
+SPECIES = {
+    "rabbit": species(
+        skull=ellipse(66, 58, 16, 14.5), snout=ellipse(77, 64, 8, 6.5),      # round head + cheek
+        eye=(72, 55),
+        ears=(leaf(58, 46, 47, 6, 14), leaf(66, 45, 65, 3, 15)),
+        body=ellipse(42, 82, 23, 16, -8),
+        hind=[ellipse(31, 86, 14.5, 13.5), rbar(26, 97.4, 50, 97.4, 2.6)],
+        arm=[rbar(58, 80, 61, 95, 4.4), ellipse(62.5, 97.2, 5, 2.8)],
+        tail=ellipse(17, 80, 6.5, 6),
+        nodes={"ear_far": [ellipse(48.6, 12.5, 3.3, 3.3, 0, 14)], "ear_near": [ellipse(65.2, 10, 3.5, 3.5, 0, 14)]},   # LEDs in the ear tips
+        phones=headphones(66, 58, 15, PHONES_STYLE),
+        joints={"root": (44, 100), "hip": (31, 86), "shoulder": (58, 80), "neck": (60, 68),
+                "ear_far": (58, 46), "ear_near": (66, 45), "tail": (19, 80)}),
+    "cat": species(
+        skull=ellipse(60, 53, 15.5, 13.5), eye=(66, 50),
+        snout=ellipse(69, 60, 7, 5),
+        ears=(tri_ear(51, 41, 44, 24, 19, 4), tri_ear(67, 40, 73, 23, 19, 4)),
+        body=ellipse(44, 79, 19, 19, -35),
+        hind=[ellipse(36, 87, 13.5, 12.5), rbar(30, 97.4, 48, 97.4, 2.6)],
+        arm=[rbar(53, 72, 56, 95, 4.4), ellipse(57, 97.2, 4.8, 2.8)],
+        tail=thick_curve((26, 93), (2, 92), (7, 66), 7, 6),
+        nodes={"tail": [ellipse(7, 65, 4.2, 4.2, 0, 14)]},
+        phones=headphones(60, 53, 14.5, PHONES_STYLE),
+        joints={"root": (42, 100), "hip": (36, 87), "shoulder": (53, 72), "neck": (54, 62),
+                "ear_far": (51, 41), "ear_near": (67, 40), "tail": (26, 93)}),
+    "fox": species(
+        skull=ellipse(61, 56, 14.5, 12.5), eye=(66, 53),
+        snout=poly([(68, 53), (83, 61), (82.5, 66), (67, 66.5)]) + " | " + ellipse(83.5, 63.5, 2.6, 2.6, 0, 12),
+        ears=(tri_ear(53, 45, 49, 25, 18, 4), tri_ear(66, 43, 71, 24, 18, 4)),
+        body=ellipse(42, 82, 24, 15, -10),
+        hind=[ellipse(31, 87, 13.5, 12.5), rbar(26, 97.4, 48, 97.4, 2.6)],
+        arm=[rbar(57, 82, 60, 95, 4.4), ellipse(61.5, 97.2, 4.8, 2.8)],
+        tail=thick_curve((21, 86), (-2, 96), (-9, 74), 12, 13) + " " + ellipse(-9.5, 72, 4.6, 4.6, 0, 16),
+        nodes={"tail": [ellipse(-9.5, 72, 2.8, 2.8, 0, 12)]},
+        phones=headphones(61, 56, 13.5, PHONES_STYLE),
+        joints={"root": (43, 100), "hip": (31, 87), "shoulder": (57, 82), "neck": (56, 66),
+                "ear_far": (53, 45), "ear_near": (66, 43), "tail": (21, 86)}),
+}
+SPECIES_NAME = os.environ.get("COMPANION", "rabbit")
+SHAPES, NODES, PHONES, J, EYE_AT = (SPECIES[SPECIES_NAME][k] for k in ("SHAPES", "NODES", "PHONES", "J", "EYE"))
+
+# Frame box (units): the ~93-unit rabbit is ~22 px tall in a 32 px icon; room for ears and squash.
+FX, FY, FW, FH = -20, -31, 135, 135
+GROUND = 100
+
+
+def pose(root=(0, 0, 0, 1, 1), eye="open", **bones):
+    return {"root": root, "eye": eye, **bones}
+
+
+def fill(d, cls=None):
+    if cls:
+        return f'<path class="{cls}" fill="#73d216" d="{d}"/>'
+    return f'<path fill="#bebebe" fill-rule="evenodd" d="{d}"/>'
+
+
+def bone(p, name, joint, inner):
+    dx, dy, rot, *ln = p.get(name, (0, 0, 0))
+    k = ln[0] if ln else 1
+    jx, jy = J[joint]
+    fold = f" translate({jx} {jy}) scale({k} {k}) translate({-jx} {-jy})" if k != 1 else ""
+    return f'<g transform="translate({dx} {dy}) rotate({rot} {jx} {jy}){fold}">{inner}</g>'
+
+
+def svg_body(p):
+    rdx, rdy, rrot, sx, sy = p["root"]
+    px, py = J["root"]
+    shapes = lambda k: "".join(fill(d) for d in SHAPES[k])
+    nodes = lambda b: "".join(fill(d, "success") for d in NODES.get(b, []))
+    phones = "".join(fill(d, "success") for d in PHONES) if p.get("phones") else ""
+    head = bone(p, "head", "neck",
+                bone(p, "ear_far", "ear_far", shapes("ear_far") + nodes("ear_far"))
+                + shapes("head_open" if p["eye"] == "open" else "head_closed")
+                + ("".join(fill(d, "success") for d in eye_accent(*EYE_AT, p.get("gaze", 0))) if p["eye"] == "open" else "") + phones
+                + bone(p, "ear_near", "ear_near", shapes("ear_near") + nodes("ear_near")))
+    body = (bone(p, "tail", "tail", shapes("tail") + nodes("tail")) + bone(p, "hind", "hip", shapes("hind")) + shapes("body")
+            + bone(p, "arm", "shoulder", shapes("arm")) + head)
+    return (f'<g transform="translate({rdx} {rdy}) translate({px} {py}) rotate({rrot}) scale({sx} {sy}) '
+            f'translate({-px} {-py})">{body}</g>')
+
+
+def bbox_of(svg_text):
     with tempfile.NamedTemporaryFile("w", suffix=".svg", delete=False) as f:
         f.write(svg_text)
-    subprocess.run(["inkscape", f.name, f"--actions={actions};export-plain-svg;export-filename:{out};export-do"],
-                   check=True, capture_output=True)
+    q = subprocess.run(["inkscape", "--query-all", f.name], capture_output=True, text=True, check=True).stdout
     os.unlink(f.name)
+    rows = {r.split(",")[0]: tuple(map(float, r.split(",")[1:])) for r in q.strip().splitlines()}
+    return rows["all"]
 
 
-def paths_of(svg_file):
-    s = open(svg_file).read()
-    return {m.group(1): m.group(2) for m in re.finditer(r'<path[^>]*?\sd="([^"]+)"[^>]*?id="([^"]+)"', s)} or \
-        {i: d for d, i in re.findall(r'<path[^>]*?id="([^"]+)"[^>]*?\sd="([^"]+)"', s)}
-
-
-def path_ds(svg_file):
-    # (id, d) pairs whatever the attribute order
-    out = {}
-    for tag in re.findall(r"<path\b[^>]*>", open(svg_file).read()):
-        out[re.search(r'\bid="([^"]+)"', tag).group(1)] = re.search(r'\sd="([^"]+)"', tag).group(1)
-    return out
-
-
-# ---------------------------------------------------------------- parts
-src = open(MARCA, encoding="utf-8").read()
-VB, D = re.search(r'coelho: \{ viewBox: "([^"]+)", d: "([^"]+)"', src).groups()
-VX, VY = map(float, VB.split()[:2])
-
-pieces_svg = os.path.join(CACHE, "pieces.svg")
-if not os.path.exists(pieces_svg):
-    inkscape(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{VB}"><path fill="#000" fill-rule="evenodd" d="{D}"/></svg>',
-             "select-all;path-break-apart;select-all;path-exclusion;select-all;path-split", pieces_svg)
-
-
-def bbox_all(svg_file):
-    q = subprocess.run(["inkscape", "--query-all", svg_file], capture_output=True, text=True, check=True).stdout
-    rows = [l.split(",") for l in q.strip().splitlines()[1:]]
-    return {r[0]: tuple(map(float, r[1:])) for r in rows}
-
-
-ds, boxes = path_ds(pieces_svg), bbox_all(pieces_svg)
-area = lambda i: boxes[i][2] * boxes[i][3]
-ids = sorted(ds, key=area)
-sliver = ids[0]                                   # half of the foot node
-rest = ids[1:]
-ear2 = min(rest, key=lambda i: boxes[i][1] + boxes[i][3])        # highest bottom edge: the short ear
-head = min((i for i in rest if i != ear2), key=lambda i: boxes[i][1])
-haunch = min((i for i in rest if i not in (ear2, head)), key=lambda i: boxes[i][0])
-body = next(i for i in rest if i not in (ear2, head, haunch))
-assert len({ear2, head, haunch, body}) == 4
-
-# Open eye: a bigger round hole than the logo's node, so it survives at ~18 px.
-EYE = (VX + 234.6, VY + 115.4)
-EYE_R = 15
-head_open_svg = os.path.join(CACHE, "head-open.svg")
-if not os.path.exists(head_open_svg):
-    inkscape(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{VB}"><path id="h" d="{ds[head]}"/>'
-             f'<circle id="e" cx="{EYE[0]}" cy="{EYE[1]}" r="{EYE_R}"/></svg>',
-             "select-all;path-difference", head_open_svg)
-HEAD_OPEN = next(iter(path_ds(head_open_svg).values()))
-
-PARTS = {
-    "haunch": [ds[haunch], ds[sliver]],
-    "body": [ds[body]],
-    "head": None,                                 # open or closed eye, per pose
-    "ear2": [ds[ear2]],
-}
-
-# Joints (absolute viewBox units) and the small-size "explode": the logo's ~10-unit gaps are under
-# 1 px at pill size, so parts move apart to keep about 1.5 px between them.
-J = {
-    "root": (VX + 150, VY + 259),                 # feet, bottom centre
-    "head": (VX + 186, VY + 147),                 # neck
-    "ear2": (VX + 213, VY + 73),                  # where the short ear meets the head
-    "haunch": (VX + 68, VY + 236),                # foot node
-    "body": (VX + 150, VY + 200),
-}
-EXPLODE = {"ear2": (4, -9), "head": (3, -6), "body": (0, 0), "haunch": (-7, 3)}
-
-# Frame box: rabbit plus room for ears going up and squash going wide.
-FX, FY, FW, FH = VX - 14, VY - 24, 340, 290
-
-
-def pose(root=(0, 0, 0, 1, 1), eye="open", **parts):
-    return {"root": root, "eye": eye, **parts}
+_ground = {}
 
 
 def svg_for(p):
-    rdx, rdy, rrot, sx, sy = p["root"]
-    px, py = J["root"]
-    g = [f'<g transform="translate({rdx} {rdy}) translate({px} {py}) rotate({rrot}) scale({sx} {sy}) translate({-px} {-py})">']
-    for name in ("haunch", "body", "head", "ear2"):
-        dx, dy, rot = p.get(name, (0, 0, 0))
-        ex, ey = EXPLODE[name]
-        jx, jy = J[name]
-        dlist = PARTS[name] or [HEAD_OPEN if p["eye"] == "open" else ds[head]]
-        g.append(f'<g transform="translate({dx + ex} {dy + ey}) rotate({rot} {jx} {jy})">'
-                 + "".join(f'<path fill="#bebebe" fill-rule="evenodd" d="{d}"/>' for d in dlist) + "</g>")
-    g.append("</g>")
-    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{FX} {FY} {FW} {FH}">{"".join(g)}</svg>\n'
+    inner = svg_body(p)
+    if inner not in _ground:   # measure, then sit the lowest point on the ground
+        b = bbox_of(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{FX} {FY} {FW} {FH}"><g id="all">{inner}</g></svg>')
+        _ground[inner] = GROUND - (FY + b[1] + b[3])
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{FX} {FY} {FW} {FH}">'
+            f'<g transform="translate(0 {_ground[inner]:.2f})">{inner}</g></svg>\n')
+
+
+def model_sheet(out_png, poses):
+    tiles = []
+    for i, p in enumerate(poses):
+        svg = svg_for(p).replace("#bebebe", "#c4c2cc").replace("#73d216", "#7aa2ff")
+        svg = svg.replace("</svg>", f'<line x1="{FX}" y1="{GROUND}" x2="{FX + FW}" y2="{GROUND}" stroke="#444" stroke-width="0.6"/></svg>')
+        f = os.path.join(CACHE, f"_try{i}.svg")
+        open(f, "w").write(svg)
+        for w, suf in ((200, "b"), (32, "s")):
+            subprocess.run(["inkscape", f, "-w", str(w), "-b", "#111", "-o", f"{f}.{suf}.png"], check=True, capture_output=True)
+        tiles.append(f)
+    subprocess.run(["magick", *[f"{t}.b.png" for t in tiles], "+append", f"{out_png}.b.png"], check=True)
+    subprocess.run(["magick", *[f"{t}.s.png" for t in tiles], "-scale", "400%", "+append", f"{out_png}.s.png"], check=True)
+    subprocess.run(["magick", f"{out_png}.b.png", f"{out_png}.s.png", "-append", out_png], check=True)
+
+
+if __name__ == "__main__" and sys.argv[1] == "--try":
+    raw = json.loads(sys.argv[3])
+    model_sheet(sys.argv[2], [pose(**{k: tuple(v) if isinstance(v, list) else v for k, v in kw.items()}) for kw in raw])
+    sys.exit(0)
 
 
 # ---------------------------------------------------------------- poses
-SIT = pose(root=(0, 0, -5, 0.88, 1.02), haunch=(3, -2, 8))
-P = lambda **k: pose(**{**{"root": SIT["root"]}, **k})
-CROUCH = P(root=(0, 0, -2, 1.06, 0.86))
-CROUCH2 = P(root=(0, 0, -1, 1.09, 0.81), haunch=(0, 0, 6))
-TAKEOFF = P(root=(0, 0, -6, 0.93, 1.1), haunch=(0, 0, -14), ear2=(0, 0, -8))
-AIR = P(root=(0, 0, -4, 1.0, 1.05), haunch=(0, 0, -6), ear2=(0, 0, -5))
-AIR2 = P(root=(0, 0, 2, 1.0, 1.0), haunch=(0, 0, 4), ear2=(0, 0, 4))
-LAND = P(root=(0, 0, 0, 1.09, 0.84), ear2=(0, 0, 10), head=(0, 0, 3))
-SETTLE = P(root=(0, 0, -2, 0.96, 0.96), ear2=(0, 0, 4))
-STAND = P(root=(0, 0, -24, 0.92, 1.14), ear2=(0, 0, -14), head=(0, 0, -8))
-THUMP = P(root=(0, 0, -22, 0.95, 1.08), ear2=(0, 0, -20), head=(0, 0, -8), haunch=(2, 8, 24))
-SLEEP = P(root=(0, 0, 3, 1.12, 0.74), ear2=(0, 0, 16), head=(0, 4, 8), eye="closed")
-FLOP = P(root=(0, 0, 0, 1.18, 0.6), ear2=(0, 0, 20), head=(0, 6, 10), eye="closed")
-STRETCH = P(root=(0, 0, -1, 1.18, 0.86), head=(0, 0, -12), ear2=(0, 0, 8))
+SIT = pose()
 
-# act: (frames, y offsets in px at 1x per frame, loopable)
+
+def P(**k):
+    return {**SIT, **k}
+
+
+EARS = lambda far, near=None: dict(ear_far=(0, 0, far), ear_near=(0, 0, far if near is None else near))
+CROUCH = P(root=(0, 0, 0, 1.05, 0.9), arm=(0, 0, 10), head=(0, 3, 5), tail=(0, 2, 0), **EARS(-6))
+CROUCH2 = P(root=(0, 0, 2, 1.08, 0.85), arm=(0, 0, 14), hind=(0, 0, -6), head=(0, 4, 7), tail=(0, 3, 0), **EARS(-10))
+TAKEOFF = P(root=(0, 0, -16, 1.04, 1.04), hind=(0, 0, 28), arm=(0, 0, -35), head=(0, 0, 4), **EARS(-14))
+LEAP = P(root=(0, 0, -10, 1.15, 0.92), hind=(0, 0, 35), arm=(0, 0, -55), head=(0, 0, -5), tail=(0, -2, 0), **EARS(-25))
+REACH = P(root=(0, 0, 4, 1.1, 0.95), hind=(0, 0, 20), arm=(0, 0, -30), head=(0, 0, 0), **EARS(-15))       # front paws reach for the ground
+LAND = P(root=(0, 0, 10, 1.05, 0.92), hind=(0, 0, -8), arm=(0, 0, -12), head=(0, 3, 8), tail=(0, 2, 0), **EARS(8))
+SETTLE = P(root=(0, 0, 2, 1.02, 0.96), head=(0, 1, 3), **EARS(4))
+STAND = P(root=(0, 0, -35, 1, 1), arm=(0, 0, -40, 0.8), head=(0, 0, 30), **EARS(10))
+THUMP = P(root=(0, 0, -30, 1, 0.97), arm=(0, 0, -35, 0.8), head=(0, 0, 26), hind=(0, 0, -6), **EARS(14, 18))
+BREATHE = P(root=(0, 0, 0, 0.99, 1.025), head=(0, -0.6, 0))                        # chest up: the in-breath
+LOAF = dict(arm=(0, 0, 30, 0.6), head=(0, 6, 8), eye="closed", **EARS(-35))
+SLEEP = P(root=(0, 0, 0, 1.05, 0.8), **LOAF)
+SLEEP_IN = P(root=(0, 0, 0, 1.04, 0.83), **LOAF)
+FLOP = P(root=(0, 0, 0, 1.18, 0.62), head=(0, 10, 30), hind=(0, 0, 40), arm=(0, 0, -60), eye="closed", **EARS(-40))
+STRETCH = P(root=(0, 0, 4, 1.16, 0.88), arm=(0, 0, -50), hind=(0, 0, 25), head=(0, 4, -10), **EARS(-20))
+TIRED = P(root=(0, 0, 0, 1.04, 0.84), arm=(0, 0, 25, 0.7), head=(0, 6, 12), eye="closed", **EARS(-28))
+TWITCH = dict(tail=(0, -3, 0))
+GROOM = lambda up, tilt: P(arm=(0, 0, -up, 0.8), head=(0, 4, tilt), **EARS(-4))
+
+# act: (frames, y offsets in px at 1x per frame)
 ACT_DEFS = {
     "sit":     ([SIT], [0]),
     "blink":   ([P(eye="closed"), P(eye="closed"), SIT], [0, 0, 0]),
-    "flick":   ([P(ear2=(0, 0, -16)), P(ear2=(0, 0, -26)), P(ear2=(0, 0, -12)), P(ear2=(0, 0, 4)), SIT], [0] * 5),
-    "nibble":  ([P(head=(0, 0, 8)), P(head=(0, 0, 14)), P(head=(0, 0, 11)), P(head=(0, 0, 14)), P(head=(0, 0, 11)), P(head=(0, 0, 6)), SIT], [0] * 7),
-    "look":    ([P(head=(0, 0, -6)), P(head=(0, 0, -10)), P(head=(0, 0, -10)), P(head=(0, 0, -10)), P(head=(0, 0, -5)), SIT], [0] * 6),
-    "perk":    ([P(ear2=(0, 0, -14), head=(0, 0, -4)), P(ear2=(0, 0, -22), head=(0, 0, -7)), P(ear2=(0, 0, -22), head=(0, 0, -7)), P(ear2=(0, 0, -10), head=(0, 0, -3)), SIT], [0] * 5),
-    "hop":     ([CROUCH, CROUCH2, TAKEOFF, AIR, AIR2, LAND, SETTLE, SIT], [0, 0, -2, -5, -4, 0, 0, 0]),
-    "run":     ([CROUCH, TAKEOFF, AIR, AIR2, LAND, SETTLE], [0, -1, -4, -3, 0, 0]),
+    "flick":   ([P(**EARS(0, 14), **TWITCH), P(**EARS(-4, 22)), P(**EARS(0, 8), **TWITCH), P(**EARS(2, -4)), SIT], [0] * 5),
+    "nibble":  ([P(head=(0, 4, 18)), P(head=(0, 6, 28), arm=(0, 0, 6)), P(head=(0, 5, 24)), P(head=(0, 6, 28), arm=(0, 0, 6)),
+                 P(head=(0, 5, 24)), P(head=(0, 3, 12)), SIT], [0] * 7),
+    "look":    ([P(head=(0, -1, -8)), P(head=(0, -2, -14), **EARS(6)), P(head=(0, -2, -14), **EARS(6), **TWITCH), P(head=(0, -2, -14), **EARS(4)),
+                 P(head=(0, -1, -6)), SIT], [0] * 6),
+    "perk":    ([P(head=(0, -1, -6), **EARS(10)), P(head=(0, -2, -10), **EARS(16), **TWITCH), P(head=(0, -2, -10), **EARS(16)),
+                 P(head=(0, -1, -4), **EARS(8)), SIT], [0] * 5),
+    "hop":     ([CROUCH, CROUCH2, TAKEOFF, LEAP, REACH, LAND, SETTLE, SIT], [0, 0, -2, -5, -4, 0, 0, 0]),
+    "run":     ([CROUCH, TAKEOFF, LEAP, REACH, LAND, SETTLE], [0, -1, -4, -3, 0, 0]),
     "thump":   ([STAND, STAND, THUMP, STAND, THUMP, STAND, SETTLE, SIT], [0, -1, 1, -1, 1, -1, 0, 0]),       # thump frames dip 1 px: the impact
-    "binky":   ([CROUCH, CROUCH2, TAKEOFF, P(root=(0, 0, 22, 1.0, 1.05), ear2=(0, 0, -14)), P(root=(0, 0, -18, 1.0, 1.05), ear2=(0, 0, 10)), AIR2, LAND, SETTLE, SIT],
+    "binky":   ([CROUCH, CROUCH2, TAKEOFF, P(**{**LEAP, "root": (0, 0, 18, 1.1, 0.95), "hind": (0, 0, 50), **EARS(-30, 10)}),
+                 P(**{**LEAP, "root": (0, 0, -22, 1.1, 0.95), "hind": (0, 0, 10), **EARS(10, -30)}), REACH, LAND, SETTLE, SIT],
                 [0, 0, -3, -7, -8, -5, 0, 0, 0]),
-    "stretch": ([STRETCH, STRETCH, P(root=(0, 0, -1, 1.18, 0.86), head=(0, 0, -16), eye="closed"), STRETCH, SETTLE, SIT], [0] * 6),
+    "stretch": ([STRETCH, STRETCH, P(**{**STRETCH, "eye": "closed", "head": (0, 2, -18)}), STRETCH, SETTLE, SIT], [0] * 6),
     "sleep":   ([SLEEP], [0]),
-    "flop":    ([SETTLE, P(root=(0, 0, 0, 1.12, 0.74), eye="closed"), FLOP], [0, 0, 0]),
-    "tired":   ([P(root=(0, 0, 2, 1.08, 0.8), ear2=(0, 0, 14), eye="closed")], [0]),
+    # rest-pose variants the player toggles on a slow timer: breathing
+    "breathe": ([BREATHE], [0]),
+    "sleepbreathe": ([SLEEP_IN], [0]),
+    "sniff":   ([P(head=(0, 0, -4)), P(head=(0, 1, 3)), P(head=(0, 0, -4), **TWITCH), P(head=(0, 1, 3)), P(head=(0, 0, -2)), SIT], [0] * 6),
+    "groom":   ([GROOM(45, 12), GROOM(80, 25), GROOM(70, 22), GROOM(80, 25), GROOM(60, 18), P(head=(0, 2, 8)), SIT], [0] * 7),
+    # music: head bobs on the beat, the ears swing after it, the hind foot taps
+    "bob":     ([P(head=(0, 2, 8), **EARS(4)), P(head=(0, 0, 0), hind=(0, 0, -8), **EARS(10)), P(head=(0, 2, 8), **EARS(2)),
+                 P(head=(0, 0, 0), hind=(0, 0, -8), **EARS(9)), P(head=(0, 2, 8), **EARS(3)), P(head=(0, 0, 0), hind=(0, 0, -8), **EARS(8)),
+                 P(head=(0, 1, 5)), SIT], [0] * 8),
+    "flop":    ([SETTLE, P(root=(0, 0, 0, 1.08, 0.78), head=(0, 6, 16), eye="closed", **EARS(-25)), FLOP], [0, 0, 0]),
+    # waking: a yawn (head back, eyes shut, mouth is implied by the tilt) and a shake (ears flap both ways)
+    "yawn":    ([P(head=(0, -2, -10), eye="closed", **EARS(-6)), P(head=(0, -4, -22), eye="closed", **EARS(-14)),
+                 P(head=(0, -4, -24), eye="closed", **EARS(-16)), P(head=(0, -4, -22), eye="closed", **EARS(-14)), P(head=(0, -2, -8), eye="closed"), SIT], [0] * 6),
+    "shake":   ([P(head=(0, 0, -6), **EARS(-30, 20)), P(head=(0, 0, 6), **EARS(26, -24)), P(head=(0, 0, -6), **EARS(-28, 18)),
+                 P(head=(0, 0, 5), **EARS(22, -20)), P(head=(0, 0, -3), **EARS(-12, 8)), P(head=(0, 0, 2), **EARS(6, -4)), SIT], [0] * 7),
+    # digging: head down, front paw scrabbles (the dust is drawn by the player)
+    "dig":     ([P(head=(0, 5, 22), arm=(0, 0, 25, 0.8), **EARS(-10)), P(head=(0, 6, 26), arm=(0, 0, -30, 0.85), **EARS(-14)),
+                 P(head=(0, 6, 26), arm=(0, 0, 28, 0.8), **EARS(-14)), P(head=(0, 6, 26), arm=(0, 0, -30, 0.85), **EARS(-14)),
+                 P(head=(0, 6, 26), arm=(0, 0, 28, 0.8), **EARS(-14)), P(head=(0, 4, 14), **EARS(-6)), SIT], [0] * 7),
+    # sitting up to sniff the air: tall, nose up, ears forward
+    "sniffup": ([P(root=(0, 0, -14, 0.98, 1.06), arm=(0, 0, -25, 0.85), head=(0, -1, -4), **EARS(8)),
+                 P(root=(0, 0, -22, 0.97, 1.1), arm=(0, 0, -40, 0.8), head=(0, -2, -12), **EARS(14)),
+                 P(root=(0, 0, -22, 0.97, 1.1), arm=(0, 0, -40, 0.8), head=(0, -2, -6), **EARS(16)),
+                 P(root=(0, 0, -22, 0.97, 1.1), arm=(0, 0, -40, 0.8), head=(0, -2, -12), **EARS(14)),
+                 P(root=(0, 0, -12, 0.98, 1.05), arm=(0, 0, -20, 0.85), head=(0, -1, -3), **EARS(6)), SIT], [0] * 6),
+    # petted: eyes shut, leans into the hand, ears relax
+    "pet":     ([P(root=(0, 0, -3, 1, 1), head=(0, 1, 6), eye="closed", **EARS(-10)), P(root=(0, 0, -6, 1.02, 0.98), head=(0, 2, 10), eye="closed", **EARS(-20)),
+                 P(root=(0, 0, -6, 1.02, 0.98), head=(0, 2, 10), eye="closed", **EARS(-20)), P(root=(0, 0, -6, 1.02, 0.98), head=(0, 2, 10), eye="closed", **EARS(-22)),
+                 P(root=(0, 0, -3, 1, 1), head=(0, 1, 5), eye="closed", **EARS(-10)), SIT], [0] * 6),
+    # shiver (rain): a 1 px side jitter, ears down
+    "shiver":  ([P(root=(-1, 0, 0, 1, 0.98), **EARS(-30)), P(root=(1, 0, 0, 1, 0.98), **EARS(-32)), P(root=(-1, 0, 0, 1, 0.98), **EARS(-30)), P(root=(0, 0, 0, 1, 0.99), **EARS(-28))], [0] * 4),
+    "tired":   ([TIRED], [0]),
+}
+# With music on, the idle acts play with headphones: "<act>@music".
+for act in ("sit", "breathe", "blink", "flick", "look", "sniff", "nibble", "groom", "bob", "hop", "dig", "sniffup", "pet", "shake"):
+    frames, ys = ACT_DEFS[act]
+    ACT_DEFS[act + "@music"] = ([{**f, "phones": True} for f in frames], ys)
+
+# Props on the grass (drawn in the pill's grey; the accent part is a "success" fill). Each is a
+# small symbolic icon in a 24x24 box with the ground at y=22. Food has three states.
+PROP_BOX = "0 0 24 24"
+PROPS = {
+    "mushroom": [fill(ellipse(12, 11, 9, 5.5)), fill(poly([(9, 12), (15, 12), (14.5, 22), (9.5, 22)])),
+                 fill(ellipse(8.5, 10.2, 1.8, 1.6), "success"), fill(ellipse(14.5, 9.4, 1.6, 1.4), "success")],
+    "bit": [fill(ellipse(12, 18, 3.6, 3.6, 0, 16), "success")],                        # the data bit it chases
+    "flower-bud": [fill(rbar(12, 22, 12, 13, 1.3)), fill(ellipse(12, 11, 3, 3.6))],
+    "flower": [fill(rbar(12, 22, 12, 14, 1.3))] + [fill(ellipse(12 + 4.2 * math.cos(math.radians(a)), 11 + 4.2 * math.sin(math.radians(a)), 3.2, 3.2, 0, 14)) for a in range(0, 360, 72)]
+              + [fill(ellipse(12, 11, 2.6, 2.6, 0, 14), "success")],
+    "leaf": [fill(poly([(2, 10), (12, 2), (22, 10), (12, 8)])), fill(rbar(12, 8, 12, 22, 1.4))],   # the rain shelter, a big leaf on a stem
+    "drop": [fill(rbar(12, 6, 12, 16, 2.2))],
+    "flake": [fill(ellipse(12, 12, 2.6, 2.6, 0, 12))],
+}
+FOOD = {
+    "rabbit": {"whole": [fill(poly([(6, 10), (20, 7), (21, 11), (8, 16)]), "success"), fill(poly([(19, 4), (23, 6), (21, 9)]))],   # carrot + leaves
+               "half": [fill(poly([(6, 10), (14, 8.3), (15, 12.3), (8, 16)]), "success")],
+               "stub": [fill(poly([(6, 11), (10, 10), (10.5, 14), (8, 16)]), "success")]},
+    "cat":    {"whole": [fill(ellipse(11, 12, 7, 4, -10)), fill(poly([(17, 12), (22, 8), (22, 16)]))],                          # fish
+               "half": [fill(ellipse(13, 12, 4.5, 3.6, -10)), fill(poly([(17, 12), (22, 8), (22, 16)]))],
+               "stub": [fill(poly([(17, 12), (22, 8), (22, 16)]))]},
+    "fox":    {"whole": [fill(ellipse(9, 13, 3.2, 3.2, 0, 12), "success"), fill(ellipse(14, 10, 3.2, 3.2, 0, 12), "success"), fill(ellipse(15, 15, 3, 3, 0, 12), "success")],   # berries
+               "half": [fill(ellipse(9, 13, 3.2, 3.2, 0, 12), "success"), fill(ellipse(15, 15, 3, 3, 0, 12), "success")],
+               "stub": [fill(ellipse(15, 15, 3, 3, 0, 12), "success")]},
 }
 
-# Unique frames get one file each; acts reference them by index.
-files, names, acts = {}, [], {}
-for act, (frames, ys) in ACT_DEFS.items():
-    assert len(frames) == len(ys), act
-    idx = []
-    for f in frames:
-        svg = svg_for(f)
-        if svg not in files:
-            files[svg] = f"rabbit-{len(names):02d}-symbolic.svg"
-            names.append(files[svg])
-            open(os.path.join(OUT, files[svg]), "w").write(svg)
-        idx.append(files[svg])
-    acts[act] = {"frames": idx, "y": ys}
-json.dump({"fps": 12, "acts": acts}, open(ACTS, "w"), indent=1)
-print(len(names), "frames,", len(acts), "acts")
+
+def write_props(out):
+    for name, shapes in PROPS.items():
+        open(os.path.join(out, f"prop-{name}-symbolic.svg"), "w").write(
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{PROP_BOX}">{"".join(shapes)}</svg>\n')
+    for state, shapes in FOOD[SPECIES_NAME].items():
+        open(os.path.join(out, f"food-{state}-symbolic.svg"), "w").write(
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{PROP_BOX}">{"".join(shapes)}</svg>\n')
+
+
+if __name__ == "__main__":
+    OUT, ACTS = sys.argv[1], sys.argv[2]
+    os.makedirs(OUT, exist_ok=True)
+    write_props(OUT)
+    files, names, acts = {}, [], {}
+    for act, (frames, ys) in ACT_DEFS.items():
+        assert len(frames) == len(ys), act
+        idx = []
+        for f in frames:
+            svg = svg_for(f)
+            if svg not in files:
+                files[svg] = f"rabbit-{len(names):02d}-symbolic.svg"
+                names.append(files[svg])
+                open(os.path.join(OUT, files[svg]), "w").write(svg)
+            idx.append(files[svg])
+        acts[act] = {"frames": idx, "y": ys}
+    json.dump({"fps": 12, "acts": acts}, open(ACTS, "w"), indent=1)
+    print(len(names), "frames,", len(acts), "acts")
