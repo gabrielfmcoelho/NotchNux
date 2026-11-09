@@ -148,6 +148,7 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
                 'a tab name to open it, n <note> to add to Notes. ' +
                 'In the dashboard: Left/Right switch tabs, Ctrl+1…9 open a tab, Esc closes.',
             subtitle_lines: 0,
+            use_markup: false,
         }));
     }
 
@@ -187,9 +188,10 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
             const needed = Gdk.ModifierType.SUPER_MASK | Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK;
             if (modifierKeys.includes(keyval) || !(mods & needed))
                 return Gdk.EVENT_STOP;
-            if (!Gtk.accelerator_valid(keyval, mods))
+            const lower = Gdk.keyval_to_lower(keyval);
+            if (!Gtk.accelerator_valid(lower, mods))
                 return Gdk.EVENT_STOP;
-            settings.set_strv('toggle-notch', [Gtk.accelerator_name(keyval, mods)]);
+            settings.set_strv('toggle-notch', [Gtk.accelerator_name(lower, mods)]);
             dialog.close();
             return Gdk.EVENT_STOP;
         });
