@@ -45,6 +45,7 @@ export class DeskNotes {
                 this.sync();
         });
         this._monitorsId = Main.layoutManager.connect('monitors-changed', () => this.sync());
+        this._overviewId = Main.overview.connect('showing', () => this._endDrag());
         this._sessionId = Main.sessionMode.connect('updated', () => this._syncVisible());
         this.sync();
     }
@@ -160,6 +161,8 @@ export class DeskNotes {
     // too so nothing can show through on the lock/unlock transitions.
     _syncVisible() {
         let show = !Main.sessionMode.isLocked;
+        if (!show)
+            this._endDrag();
         for (let { actor } of this._cards.values())
             actor.visible = show;
     }
@@ -186,6 +189,11 @@ export class DeskNotes {
         let d = this._drag;
         if (!d || d.id !== id)
             return Clutter.EVENT_PROPAGATE;
+        // The release never reached us (another grab was on top): stop following.
+        if (!(ev.get_state() & Clutter.ModifierType.BUTTON1_MASK)) {
+            this._endDrag();
+            return Clutter.EVENT_PROPAGATE;
+        }
         let [px, py] = ev.get_coords();
         if (!d.moved) {
             if (Math.hypot(px - d.sx, py - d.sy) < DRAG_THRESHOLD)
@@ -245,7 +253,9 @@ export class DeskNotes {
             Main.layoutManager.disconnect(this._monitorsId);
         if (this._sessionId)
             Main.sessionMode.disconnect(this._sessionId);
-        this._monitorsId = this._sessionId = 0;
+        if (this._overviewId)
+            Main.overview.disconnect(this._overviewId);
+        this._monitorsId = this._sessionId = this._overviewId = 0;
         for (let { actor } of this._cards.values())
             actor.destroy();
         this._cards.clear();
