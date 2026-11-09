@@ -182,6 +182,7 @@ export const FEATURE_DEFS = [
     { id: 'lyricsOnline',      label: 'Look up lyrics online', description: 'Fetch timed lyrics for the playing song from lrclib.net (sends the song’s title, artist, album and length).', default: true },
     { id: 'pillVpn',           label: 'VPN in the pill',      description: 'Show a VPN icon in the pill while Tailscale or the Forti VPN is connected. Checked every 30 seconds, only while on.', default: true },
     { id: 'claudeMonitor',     label: 'Claude Code in the pill', description: 'Show your Claude Code sessions and 5-hour usage in the pill, with an alert when one finishes or needs you. Reads ~/.claude/sessions on this computer.', default: false },
+    { id: 'activityApi',       label: 'Live activities API',  description: 'Let scripts and apps show a progress bar or message in the pill over D-Bus (io.github.notchnux). Text only, at most 8 at once.', default: true },
     { id: 'topScroll',         label: 'Scroll top edge to switch workspaces', description: 'Restore top-edge scroll-to-switch-workspace when the panel is hidden — scroll anywhere along the top of the screen to move between workspaces.', default: false }
 ];
 

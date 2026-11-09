@@ -33,6 +33,7 @@ import { installTray } from './tabs/tray.js';
 import { installClaude } from './tabs/claude.js';
 import { installDev } from './tabs/dev.js';
 import { installKeyboard } from './tabs/keyboard.js';
+import { installActivities } from './tabs/activities.js';
 import { logError } from './helpers/log.js';
 import { VERTICAL, HORIZONTAL, disableUnredirect, enableUnredirect } from './helpers/compat.js';
 
@@ -194,6 +195,8 @@ export const NotchNux = GObject.registerClass({
         this._initDev();
         // Global shortcut that toggles the notch.
         this._initKeyboard();
+        // D-Bus API for live activities (io.github.notchnux).
+        this._initActivities();
         // Recolour the active-state chrome to match the persisted accent.
         this._applyAccentStyles();
         // Shoulders + the (hidden unless enabled) glass backdrop.
@@ -535,6 +538,7 @@ export const NotchNux = GObject.registerClass({
         this._destroyVpn();
         this._destroyClaude();
         this._destroyDev();
+        this._destroyActivities();
         this._destroyKeyboard();
         this._destroyProductivity();
         stopSpring(this);
@@ -4459,6 +4463,9 @@ export const NotchNux = GObject.registerClass({
             case 'pillVpn':
                 this._syncVpnPoll();
                 break;
+            case 'activityApi':
+                this._syncActivityApi();
+                break;
             case 'claudeMonitor':
                 this._onClaudeFeatureToggled();
                 break;
@@ -6714,3 +6721,4 @@ installTray(NotchNux.prototype);
 installClaude(NotchNux.prototype);
 installDev(NotchNux.prototype);
 installKeyboard(NotchNux.prototype);
+installActivities(NotchNux.prototype);

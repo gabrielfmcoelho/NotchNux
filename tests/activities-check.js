@@ -1,4 +1,5 @@
 // Run: gjs -m tests/activities-check.js  (exit 1 on the first failure)
+import { AlertQueue } from '../src/helpers/alerts.js';
 import { normalizeActivity, ActivityTable } from '../src/helpers/activities.js';
 
 let n = 0;
@@ -86,5 +87,25 @@ ok(t4.show(':1.7', {}), 'slot freed');
 eq(t4.endSender(':1.5'), ids.slice(0, 5), 'endSender returns only its ids');
 eq(t4.endSender(':1.5'), [], 'endSender twice empty');
 eq(t4.get(ids[5]) !== null, true, 'other sender untouched');
+
+// the rate-window map is pruned
+t = 50000;
+const t5 = new ActivityTable({ now: () => t });
+t5.show(':1.8', {}); t5.show(':1.9', {});
+eq(t5._calls.size, 2, 'two senders tracked');
+t5.endSender(':1.8');
+eq(t5._calls.size, 1, 'endSender drops its window');
+t += 2000;
+t5.show(':1.10', {});
+eq([...t5._calls.keys()], [':1.10'], 'stale windows swept');
+
+// AlertQueue.dropKind
+const q = new AlertQueue();
+q.enqueue({ kind: 'a' }); q.enqueue({ kind: 'b' }); q.enqueue({ kind: 'c' });
+eq(q.dropKind('b'), true, 'dropKind pending');
+eq(q.dropKind('b'), false, 'dropKind nothing');
+eq(q.dropKind('a'), true, 'dropKind current');
+eq(q.current, null, 'current cleared');
+eq(q.promote().kind, 'c', 'rest of the queue survives');
 
 print(`activities-check: ${n} checks passed`);

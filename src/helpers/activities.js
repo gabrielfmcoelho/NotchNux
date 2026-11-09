@@ -36,6 +36,9 @@ export class ActivityTable {
 
     _limit(sender) {
         const t = this._now();
+        // Forget senders whose whole window has gone stale.
+        for (const [s, ts] of this._calls)
+            if (s !== sender && ts.every(x => t - x >= 1000)) this._calls.delete(s);
         const recent = (this._calls.get(sender) ?? []).filter(x => t - x < 1000);
         if (recent.length >= this._perSecond) {
             this._calls.set(sender, recent);
@@ -68,6 +71,7 @@ export class ActivityTable {
         const gone = [];
         for (const [id, e] of this._items) if (e.sender === sender) gone.push(id);
         for (const id of gone) this._items.delete(id);
+        this._calls.delete(sender);
         return gone;
     }
 
