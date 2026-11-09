@@ -19,6 +19,11 @@ nnx_check command-note "(() => { const n = $NNX; n._toggleFromKeyboard(); n._com
 nnx_check command-closes "(() => { const n = $NNX; return [n.isExpanded, n._kbGrab === null, n._commandBar.visible]; })()" '[false,true,false]'
 # Notes editor stays bound to the note it showed: a note added meanwhile is not overwritten.
 nnx_check notes-editor-bound "(() => { const n = $NNX; n.collapse(); n._prod.addNote('first note'); n.expand(); n._switchTab('notes'); const a = n._prod.notes[0].id; const b = n._prod.addNote('other note'); const shown = n._notesUi.entry.get_text(); n._notesUi.entry.set_text('edited'); const r = [shown, n._prod.getNote(a).text, n._prod.getNote(b).text]; n.collapse(); return r; })()" '["other note","first note","edited"]'
+# An outside change while the editor has focus marks the tab dirty; it shows once focus leaves.
+nnx_check notes-dirty-while-focused "(() => { const n = $NNX; n.collapse(); n.expand(); n._switchTab('notes'); n._notesUi.entry.clutter_text.grab_key_focus(); n._prod.addNote('ext note'); return n._tabHosts.get('notes')._dirty === true; })()" true
+nnx_check notes-focus-leaves "(() => { const n = $NNX; n._tabButtons[n._activeTab].grab_key_focus(); return true; })()" true
+sleep 0.5
+nnx_check notes-shows-newest "(() => { const n = $NNX; const r = n._notesUi.entry.get_text(); n.collapse(); return r; })()" '"ext note"'
 # A tab command opens that tab and stays open.
 nnx_check command-tab "(() => { const n = $NNX; n._toggleFromKeyboard(); n._commandEntry.text = 'home'; n._submitCommand(); const r = n.isExpanded; n.collapse(); return [r, n._kbGrab === null]; })()" '[true,true]'
 # A plain (hover-style) open does not show the bar.

@@ -119,9 +119,10 @@ export const ProductivityTabs = {
             // nothing re-renders under the user's caret.
             if (this._notesSelf || !this._notesUi)
                 break;
+            this._markTabDirty('notes');
+            // Not under the user's caret: it re-renders when focus leaves.
             if (global.stage.get_key_focus() === this._notesUi.entry.clutter_text)
                 break;
-            this._markTabDirty('notes');
             if (this.isExpanded && this._activeTab === 'notes')
                 this._showActiveTab();
             break;
@@ -863,6 +864,16 @@ export const ProductivityTabs = {
             });
         });
         text.connect('destroy', () => { if (typingId) GLib.Source.remove(typingId); });
+        // An outside change that arrived while typing is shown once the
+        // caret leaves the editor.
+        text.connect('key-focus-out', () => {
+            GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                if (this._notesUi?.entry === entry && this._tabHosts?.get('notes')?._dirty &&
+                    this.isExpanded && this._activeTab === 'notes')
+                    this._showActiveTab();
+                return GLib.SOURCE_REMOVE;
+            });
+        });
         // Keep the caret in view as the note grows past the scroll area.
         text.connect('cursor-changed', () => {
             let adj = scroll.get_vadjustment();
