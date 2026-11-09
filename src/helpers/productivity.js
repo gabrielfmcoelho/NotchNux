@@ -398,8 +398,6 @@ export class ProductivityStore {
                     pinned: !!x.pinned,
                     pos,
                 });
-                if (out.length >= MAX_NOTE_COUNT)
-                    break;
             }
             return out;
         } catch (e) {

@@ -113,6 +113,22 @@ function open(dir) {
     eq(s.notes.length, 50, 'restore of a present id is a no-op');
     s.destroy();
 }
+// Undo past the cap must survive a reload (loading never drops valid notes)
+{
+    let d = tmp();
+    let s = open(d);
+    for (let i = 0; i < 50; i++)
+        s.addNote(`n${i}`);
+    let removed = s.removeNote(s.notes[0].id);
+    s.addNote('replacement');
+    s.restoreNote(removed);
+    eq(s.notes.length, 51, 'restore ignores the cap');
+    s.destroy();
+    let s2 = open(d);
+    eq(s2.notes.length, 51, 'reload keeps all 51');
+    ok(!!s2.getNote(removed.id), 'restored id survives reload');
+    s2.destroy();
+}
 // colors, ordering, updated semantics, clamping
 {
     let d = tmp();

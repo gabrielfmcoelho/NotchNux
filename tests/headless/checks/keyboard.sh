@@ -17,6 +17,8 @@ nnx_check command-task "(() => { const n = $NNX; n._commandEntry.text = 't smoke
 # The n command adds a post-it note.
 nnx_check command-note "(() => { const n = $NNX; n._toggleFromKeyboard(); n._commandEntry.text = 'n smoke note'; n._submitCommand(); return n._prod.notes.some(x => x.text === 'smoke note'); })()" true
 nnx_check command-closes "(() => { const n = $NNX; return [n.isExpanded, n._kbGrab === null, n._commandBar.visible]; })()" '[false,true,false]'
+# Notes editor stays bound to the note it showed: a note added meanwhile is not overwritten.
+nnx_check notes-editor-bound "(() => { const n = $NNX; n.collapse(); n._prod.addNote('first note'); n.expand(); n._switchTab('notes'); const a = n._prod.notes[0].id; const b = n._prod.addNote('other note'); const shown = n._notesUi.entry.get_text(); n._notesUi.entry.set_text('edited'); const r = [shown, n._prod.getNote(a).text, n._prod.getNote(b).text]; n.collapse(); return r; })()" '["other note","first note","edited"]'
 # A tab command opens that tab and stays open.
 nnx_check command-tab "(() => { const n = $NNX; n._toggleFromKeyboard(); n._commandEntry.text = 'home'; n._submitCommand(); const r = n.isExpanded; n.collapse(); return [r, n._kbGrab === null]; })()" '[true,true]'
 # A plain (hover-style) open does not show the bar.

@@ -19,6 +19,7 @@ import { FocusRing, AlbumArtDisc, BREAK_GREEN, accentHex, accentRgbStr } from '.
 import { addPressFeedback } from '../helpers/motion.js';
 import { fmt } from '../helpers/format.js';
 import { VERTICAL, HORIZONTAL } from '../helpers/compat.js';
+import { logError } from '../helpers/log.js';
 
 const HOME_TASKS = 4;
 
@@ -113,6 +114,17 @@ export const ProductivityTabs = {
                 this._showActiveTab();
             break;
         }
+        case 'notes':
+            // Edits made by the Notes editor itself don't refresh it, and
+            // nothing re-renders under the user's caret.
+            if (this._notesSelf || !this._notesUi)
+                break;
+            if (global.stage.get_key_focus() === this._notesUi.entry.clutter_text)
+                break;
+            this._markTabDirty('notes');
+            if (this.isExpanded && this._activeTab === 'notes')
+                this._showActiveTab();
+            break;
         case 'tasks':
             if (this._invalidateTab('tasks', 'home')) {
                 if (this._activeTab === 'tasks') this._tasksUi?.fill();
@@ -759,7 +771,10 @@ export const ProductivityTabs = {
     _renderNotesTab() {
         // Until the post-it board lands this tab edits the most recently
         // updated note (one is created on the first edit).
-        let current = () => this._prod.notes[0] ?? null;
+        // The id is resolved once here and the editor stays bound to it, so a
+        // note added meanwhile can never be overwritten with this text.
+        let boundId = this._prod.notes[0]?.id ?? null;
+        let current = () => (boundId ? this._prod.getNote(boundId) : null);
         let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-notes', ...VERTICAL, x_expand: true });
 
         let head = new St.BoxLayout({ style_class: 'nook-section-head', x_expand: true });
@@ -827,10 +842,17 @@ export const ProductivityTabs = {
         text.connect('text-changed', () => {
             let t = entry.get_text();
             let cur = current();
-            if (cur)
-                this._prod.updateNote(cur.id, t);
-            else if (t)
-                this._prod.addNote(t);
+            this._notesSelf = true;
+            try {
+                if (cur)
+                    this._prod.updateNote(cur.id, t);
+                else if (t)
+                    boundId = this._prod.addNote(t);
+            } catch (e) {
+                logError('notes editor save failed', e);
+            } finally {
+                this._notesSelf = false;
+            }
             status.set_text('Editing…');
             words();
             if (typingId) GLib.Source.remove(typingId);
