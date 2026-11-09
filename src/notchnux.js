@@ -530,6 +530,7 @@ export const NotchNux = GObject.registerClass({
         // The process is exiting, so stop our own sources and skip those.
         let shellGone = !this._disabling;
         this._releaseKeyboard();
+        this._notesClearUndo?.();
         if (!shellGone)
             this._closeScanOverlay();
         this._destroyLedge();
@@ -2093,6 +2094,8 @@ export const NotchNux = GObject.registerClass({
         }
         if (tab === 'launcher')
             this._launcherEdit = false;
+        if (tab === 'notes')
+            this._leaveNotesTab();
         if (tab === 'claude')
             this._leaveClaudeTab();
         if (tab === 'dev')

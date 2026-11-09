@@ -843,12 +843,70 @@ export const ProductivityTabs = {
         this._mount(panel);
     },
 
+    // Only the latest deletion is undoable. It lives here, not in an actor,
+    // so a re-render of the board keeps showing the bar until it times out.
+    _notesSetUndo(note) {
+        this._notesClearUndo();
+        let u = { note, id: 0 };
+        u.id = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
+            u.id = 0;
+            if (this._destroyed || this._notesUndo !== u)
+                return GLib.SOURCE_REMOVE;
+            this._notesUndo = null;
+            if (this._notesUi && !this._notesUi.openId)
+                this._notesUi.showBoard();
+            return GLib.SOURCE_REMOVE;
+        });
+        this._notesUndo = u;
+    },
+
+    _notesClearUndo() {
+        if (this._notesUndo?.id)
+            GLib.Source.remove(this._notesUndo.id);
+        this._notesUndo = null;
+    },
+
+    // Leaving the tab (switch or collapse) with an empty note open drops it.
+    _leaveNotesTab() {
+        let ui = this._notesUi;
+        if (!ui?.openId)
+            return;
+        let n = this._prod.getNote(ui.openId);
+        if (n && !n.text.trim()) {
+            this._notesSelf = true;
+            try {
+                this._prod.removeNote(n.id);
+            } finally {
+                this._notesSelf = false;
+            }
+        }
+        if (!this._prod.getNote(ui.openId)) {
+            ui.openId = this._notesOpenId = null;
+            this._markTabDirty('notes');
+        }
+    },
+
     _fillNotesBoard(body, ui, own) {
         let notes = this._prod.notes;
         let head = new St.BoxLayout({ style_class: 'nook-section-head', x_expand: true });
         head.add_child(label('Notes', 'nook-section-title'));
         head.add_child(label(`${notes.length}`, 'nook-card-meta nook-notes-status'));
         body.add_child(head);
+        if (this._notesUndo) {
+            let bar = new St.BoxLayout({ style_class: 'nook-postit-undo', x_expand: true });
+            bar.add_child(label('Note deleted', 'nook-card-meta'));
+            bar.add_child(new St.Widget({ x_expand: true }));
+            let undo = new St.Button({ style_class: 'nook-clear-btn', label: 'Undo', can_focus: true });
+            undo.connect('clicked', () => {
+                let note = this._notesUndo?.note;
+                this._notesClearUndo();
+                if (note)
+                    this._prod.restoreNote(note);
+                this._notesUi?.showBoard();
+            });
+            bar.add_child(undo);
+            body.add_child(bar);
+        }
 
         let scroll = new St.ScrollView({ style_class: 'nook-postit-scroll', x_expand: true });
         scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
@@ -893,8 +951,6 @@ export const ProductivityTabs = {
                     return;
                 }
                 addLabel.set_text('50 max');
-                this._pushAlert({ kind: 'notes-full', icon: 'dialog-warning-symbolic',
-                    title: '50 notes is the limit', ms: 3000 });
                 return;
             }
             this._notesUi?.showEditor(id);
@@ -948,11 +1004,9 @@ export const ProductivityTabs = {
         let del = new St.Button({ style_class: 'nook-clear-btn nook-danger', label: 'Delete', can_focus: true });
         del.connect('clicked', () => {
             let removed = own(() => this._prod.removeNote(id));
+            if (removed)
+                this._notesSetUndo(removed);
             ui.showBoard();
-            if (removed) {
-                this._pushAlert({ kind: 'notes-deleted', icon: 'user-trash-symbolic', title: 'Note deleted',
-                    value: 'Undo', ms: 5000, onClick: () => this._prod.restoreNote(removed) });
-            }
         });
         head.add_child(del);
         body.add_child(head);

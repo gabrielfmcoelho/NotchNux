@@ -2061,6 +2061,7 @@
 .nook-postit-empty { color: rgba(255, 255, 255, 0.4); font-style: italic; }
 .nook-postit-age { font-size: 10px; }
 .nook-postit-bar { spacing: 6px; }
+.nook-postit-undo { spacing: 8px; padding: 2px 4px 6px 4px; }
 .nook-postit-dot {
     width: 16px;
     height: 16px;
