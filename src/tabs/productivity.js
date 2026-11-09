@@ -200,11 +200,13 @@ export const ProductivityTabs = {
                 this._taskSource.refresh();
         }
         if (!google) {
-            this._stopTasksRefresh();
             this._edsClient?.destroy();
             this._edsClient = null;
             this._taskLists = null;
         }
+        // Only a Google list re-syncs on a timer.
+        if (this._taskSource.kind !== 'eds')
+            this._stopTasksRefresh();
         this._tasksPickerOpen = false;
         if (this._invalidateTab('tasks', 'home'))
             this._renderActiveTab();
@@ -627,14 +629,16 @@ export const ProductivityTabs = {
 
     // One task row: check circle · text (click to edit) · star · delete.
     _buildTaskRow(task, { compact = false } = {}) {
+        // Still being saved to Google: shown dimmed, nothing to act on yet
+        // (the source ignores it until the worker answers).
+        let live = !task.pending;
         let row = new St.BoxLayout({
-            style_class: `nook-task-row${compact ? ' nook-task-row-compact' : ''}${task.done ? ' nook-task-done' : ''}`,
+            style_class: `nook-task-row${compact ? ' nook-task-row-compact' : ''}${task.done ? ' nook-task-done' : ''}${live ? '' : ' nook-task-pending'}`,
             x_expand: true, reactive: true, track_hover: true });
-        // Still being saved to Google: shown, but nothing to act on yet.
-        if (task.pending)
+        if (!live)
             row.opacity = 150;
 
-        let check = new St.Button({ style_class: 'nook-task-check', can_focus: true,
+        let check = new St.Button({ style_class: 'nook-task-check', can_focus: live, reactive: live,
             y_align: Clutter.ActorAlign.CENTER, accessible_name: task.done ? 'Mark as not done' : 'Mark as done' });
         check.set_child(new St.Icon({ icon_name: 'object-select-symbolic', icon_size: 12 }));
         if (task.done)
@@ -653,7 +657,7 @@ export const ProductivityTabs = {
         addPressFeedback(check, 0.88);
         row.add_child(check);
 
-        let text = new St.Label({ style_class: 'nook-task-text', x_expand: true, y_align: Clutter.ActorAlign.CENTER, reactive: !compact });
+        let text = new St.Label({ style_class: 'nook-task-text', x_expand: true, y_align: Clutter.ActorAlign.CENTER, reactive: !compact && live });
         text.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         let escaped = GLib.markup_escape_text(task.text, -1);
         text.clutter_text.set_markup(task.done ? `<s>${escaped}</s>` : escaped);
@@ -669,7 +673,7 @@ export const ProductivityTabs = {
         }
 
         // Click the text to edit it in place; Enter saves, Escape cancels.
-        if (!task.done) {
+        if (!task.done && live) {
             text.connect('button-release-event', () => {
                 let edit = new St.Entry({ style_class: 'nook-input nook-task-edit', text: task.text, x_expand: true, can_focus: true });
                 let done = save => {
@@ -702,6 +706,8 @@ export const ProductivityTabs = {
         let actions = new St.BoxLayout({ style_class: 'nook-task-actions', y_align: Clutter.ActorAlign.CENTER });
         actions.add_child(star);
         actions.add_child(del);
+        for (let b of [star, del])
+            b.reactive = b.can_focus = live;
         actions.opacity = task.starred ? 255 : 0;
         del.opacity = 0;
         row.connect('notify::hover', () => {

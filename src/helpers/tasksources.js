@@ -9,7 +9,8 @@
 //   remove(id), clearDone(), refresh() → Promise, settled() → Promise,
 //   subscribe(cb) → unsubscribe, destroy()
 // `cb(event)` gets no argument for a plain change, or { failed: { op, reason,
-// text, timedOut } } when a Google write didn't go through.
+// text, timedOut } } when a Google write didn't go through (`timedOut`: its
+// outcome is unknown — a timeout or the worker restarting/exiting).
 //
 // No shell imports here: prefs.js uses taskListChoices() too, and the tests
 // run it under plain `gjs -m`.
@@ -43,9 +44,11 @@ function countDoneToday(done) {
     return done.filter(t => t.doneAt && todayKey(new Date(t.doneAt)) === key).length;
 }
 
-// EdsClient rejects a call that took too long with "… timed out": the worker
-// may still carry the write out, so its outcome is unknown.
-const isTimeout = e => /timed out$/.test(e?.message ?? '');
+// A write whose outcome is unknown: EdsClient gave up waiting ("… timed
+// out"; the worker may still carry it out) or the worker went away while it
+// was in flight ("Google sync worker restarted" / "… exited"; it may have
+// been done just before). Such writes re-list instead of rolling back.
+const outcomeUnknown = e => /timed out$|^Google sync worker (restarted|exited)$/.test(e?.message ?? '');
 
 // "<list> — <account>": two Google accounts often share list names.
 export function taskListLabel(source) {
@@ -322,7 +325,7 @@ export class EdsTaskSource {
             if (this._destroyed)
                 return;
             let reason = e?.message ?? String(e);
-            let timedOut = isTimeout(e);
+            let timedOut = outcomeUnknown(e);
             if (timedOut) {
                 // Unknown outcome: show whatever the worker ends up with.
                 this._tasks = this._tasks.filter(t => !(info.tempId && t.id === info.tempId));
@@ -471,7 +474,7 @@ export class EdsTaskSource {
                 let reason = failed.reason?.message ?? String(failed.reason);
                 this._error = reason;
                 this._errorOp = 'clear';
-                this._notify({ failed: { op: 'clear', reason, text: null, timedOut: isTimeout(failed.reason) } });
+                this._notify({ failed: { op: 'clear', reason, text: null, timedOut: outcomeUnknown(failed.reason) } });
             });
         this._inflight.add(p);
         p.finally(() => this._inflight.delete(p));

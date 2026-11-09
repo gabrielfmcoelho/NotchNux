@@ -1,7 +1,8 @@
 # Google Tasks mode of the Tasks tab (sourced by tests/headless-smoke.sh --script).
 # Runs against a FAKE EdsClient injected through Eval: the real EDS worker is
-# never started and no Google account is involved. Its `tasks.create` always
-# rejects with 'offline' to exercise the rollback path.
+# never started and no Google account is involved. Its `tasks.create` rejects
+# with 'offline' to exercise the rollback path, except for 'hold', which never
+# answers (a row still being saved).
 
 FAKE="{ calls: [], resets: 0, destroyed: false,
   call(op, args) { this.calls.push(op);
@@ -10,7 +11,7 @@ FAKE="{ calls: [], resets: 0, destroyed: false,
       { uid: 'g2', name: 'My Tasks', account: 'you@example.com', backend: 'gtasks', writable: true, color: null },
       { uid: 'ro', name: 'Holidays', account: 'me@example.com', backend: 'caldav', writable: false, color: null }], calendars: [] });
     if (op === 'tasks.list') return Promise.resolve([{ uid: 't1', summary: 'from google', done: false, due: null, notes: '', updated: 1 }]);
-    if (op === 'tasks.create') return Promise.reject(new Error('offline'));
+    if (op === 'tasks.create') return args.summary === 'hold' ? new Promise(() => {}) : Promise.reject(new Error('offline'));
     return Promise.resolve({}); },
   reset() { this.resets++; }, destroy() { this.destroyed = true; } }"
 
@@ -31,6 +32,17 @@ nnx_check gtasks-picked "(() => { const n = $NNX; $FIND return [n._config.tasksS
 nnx_eval "(() => { const n = $NNX; n._tasksUi.entry.set_text('will fail'); n._tasksUi.entry.clutter_text.emit('activate'); return true; })()" >/dev/null; sleep 1
 nnx_check gtasks-add-rollback "(() => { const n = $NNX; $FIND const err = find(host, 'nook-task-error'); return [n._taskSource.open.map(t => t.text), n._taskSource.error, n._tasksUi.entry.get_text(), err.visible, err.get_text().startsWith('Couldn'), err.get_text().endsWith('save to Google — offline'), n._alerts._pending.some(a => a.kind === 'gtasks')]; })()" '[["from google"],"offline","will fail",true,true,true,true]'
 nnx_shot tab-tasks-google
+
+# The 5-min re-sync runs for a Google list only.
+nnx_check gtasks-timer-on "$NNX._tasksRefreshId > 0" true
+
+# A row still being saved can't be ticked, edited, starred or deleted.
+nnx_eval "(() => { const n = $NNX; n._tasksUi.entry.set_text(''); n._taskSource.add('hold'); return true; })()" >/dev/null; sleep 0.5
+nnx_check gtasks-pending-inert "(() => { const n = $NNX; $FIND const row = find(host, 'nook-task-pending'); const check = find(row, 'nook-task-check'); const text = find(row, 'nook-task-text'); const acts = find(row, 'nook-task-actions').get_children(); return [!!row, row.opacity < 255, check.reactive, text.reactive, acts.length, acts.some(b => b.reactive)]; })()" '[true,true,false,false,2,false]'
+
+# Back to Local with the flag still on: the re-sync timer stops.
+nnx_eval "(() => { const n = $NNX; n._pickTaskList('local'); return true; })()" >/dev/null; sleep 0.5
+nnx_check gtasks-local-timer-off "[$NNX._taskSource.kind, $NNX._tasksRefreshId]" '["local",0]'
 nnx_eval "$NNX.collapse(), true" >/dev/null; sleep 1
 nnx_check gtasks-alert-after-collapse "(() => { const n = $NNX; return [n._alerts.current?.kind, n._alertTitle.get_text() === \"Couldn't save to Google\", n._alertValue.get_text()]; })()" '["gtasks",true,"offline"]'
 

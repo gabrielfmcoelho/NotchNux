@@ -178,6 +178,38 @@ const gtask = (uid, summary, done = false, updated = 1000) => ({ uid, summary, d
     src.destroy();
 }
 
+// ---- a worker that restarted/exited mid-write: unknown outcome too ----
+for (let why of ['Google sync worker restarted', 'Google sync worker exited']) {
+    let dir = tmp();
+    let listed = [gtask('a', 'alpha')];
+    let client = new FakeClient({
+        'tasks.list': () => listed,
+        'tasks.update': () => {
+            listed = [gtask('a', 'alpha', true, Date.now())]; // it did go through
+            return new Error(why);
+        },
+        'tasks.delete': new Error('Google said no'),
+    });
+    let src = new EdsTaskSource(client, 'L', path(dir, 's.json'));
+    await src.refresh();
+    let events = [];
+    src.subscribe(ev => events.push(ev ?? null));
+    let before = client.calls.length;
+    src.toggle('a');
+    await src.settled();
+    eq(client.ops().slice(before), ['tasks.update', 'refresh', 'tasks.list'], `${why} → refresh, not rollback`);
+    eq(src.done.map(x => x.id), ['a'], `${why}: worker's state kept`);
+    eq(src.error, why, `${why}: error kept`);
+    ok(events.some(e => e?.failed?.op === 'toggle' && e.failed.timedOut), `${why}: reported as unknown outcome`);
+    // An ordinary refusal still rolls back.
+    before = client.calls.length;
+    src.remove('a');
+    await src.settled();
+    eq(client.ops().slice(before), ['tasks.delete'], 'plain refusal: no re-list');
+    eq(src.done.map(x => x.id), ['a'], 'plain refusal rolled back');
+    src.destroy();
+}
+
 // ---- refresh: syncs then lists; failures set error; success clears it ----
 {
     let dir = tmp();
