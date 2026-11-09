@@ -8,13 +8,15 @@
 #       (the service reads an empty title/body, or progress -2, as "keep").
 #   notchnux-activity end ID
 #       prints true/false.
+#
+# An activity stays until `end`, its timeout, or a click on the bar.
 set -u
 
 DEST=io.github.notchnux
 OBJ=/io/github/notchnux/Activities
 IFACE=io.github.notchnux.Activities
 
-usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 call() { gdbus call --session --dest "$DEST" --object-path "$OBJ" --method "$IFACE.$1" -- "${@:2}"; }
 # Strip the gdbus tuple: ('a1',) -> a1, (true,) -> true.
 clean() { sed -E "s/^\(//; s/,\)\$//; s/^'//; s/'\$//"; }

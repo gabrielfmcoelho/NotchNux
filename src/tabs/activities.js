@@ -16,6 +16,10 @@ const BUS_NAME = 'io.github.notchnux';
 const OBJECT_PATH = '/io/github/notchnux/Activities';
 const ERR = 'io.github.notchnux.Error';
 
+// Activities persist until End, their own timeout (1-600 s, default 8 s) or a
+// click on the bar; they are NOT tied to the caller staying on the bus (the CLI
+// is a separate short-lived process per call).
+//
 // Update: an empty title or body, or a progress of KEEP_PROGRESS (-2), keeps
 // the old value. A progress of -1 (or any other negative) clears the bar.
 const KEEP_PROGRESS = -2;
@@ -50,7 +54,6 @@ const ActivityFeatures = {
         this._actTable = null;
         this._actExport = null;
         this._actOwnId = 0;
-        this._actWatches = new Map();  // sender -> {watchId, ids:Set}
         this._actTimers = new Map();   // id -> GLib source id
         this._syncActivityApi();
     },
@@ -93,9 +96,6 @@ const ActivityFeatures = {
         this._actExport = null;
         for (let id of [...(this._actTimers?.keys() ?? [])])
             this._actEndId(id, !this._destroyed);
-        for (let w of this._actWatches?.values() ?? [])
-            Gio.bus_unwatch_name(w.watchId);
-        this._actWatches?.clear();
         this._actTable = null;
     },
 
@@ -121,9 +121,7 @@ const ActivityFeatures = {
     },
 
     _actShow(inv, [title, body, icon, progress, timeout]) {
-        let sender = inv.get_sender();
-        let id = this._actTable.show(sender, { title, body, icon, progress, timeout });
-        this._actWatch(sender, id);
+        let id = this._actTable.show(inv.get_sender(), { title, body, icon, progress, timeout });
         this._actPush(id);
         return new GLib.Variant('(s)', [id]);
     },
@@ -149,7 +147,9 @@ const ActivityFeatures = {
         let a = this._actTable?.get(id);
         if (!a) return;
         this._pushAlert({ kind: `act:${id}`, icon: a.icon, title: a.title, value: a.body,
-            level: a.level, color: accentHex(), ms: a.ms });
+            level: a.level, color: accentHex(), ms: a.ms,
+            // A click dismisses the bar; it ends the activity too.
+            onClick: () => this._actEndId(id, false) });
         let old = this._actTimers.get(id);
         if (old) GLib.Source.remove(old);
         this._actTimers.set(id, GLib.timeout_add(GLib.PRIORITY_DEFAULT, a.ms, () => {
@@ -160,9 +160,8 @@ const ActivityFeatures = {
         }));
     },
 
-    // End one activity: table, timer, pill, sender watch.
+    // End one activity: table, timer, pill.
     _actEndId(id, dismissVisible = true) {
-        let sender = this._actTable?.get(id)?.sender;
         this._actTable?.end(id);
         let t = this._actTimers.get(id);
         if (t) GLib.Source.remove(t);
@@ -172,43 +171,6 @@ const ActivityFeatures = {
             if (dismissVisible) this._dismissAlert();
         } else {
             this._alerts?.dropKind(kind);
-        }
-        let w = sender && this._actWatches.get(sender);
-        if (w) {
-            w.ids.delete(id);
-            if (w.ids.size === 0) {
-                Gio.bus_unwatch_name(w.watchId);
-                this._actWatches.delete(sender);
-            }
-        }
-    },
-
-    // A crashed script must not leave a bar up: end its activities when it
-    // drops off the bus.
-    _actWatch(sender, id) {
-        let w = this._actWatches.get(sender);
-        if (!w) {
-            w = { watchId: 0, ids: new Set() };
-            this._actWatches.set(sender, w);
-            w.watchId = Gio.bus_watch_name_on_connection(Gio.DBus.session, sender,
-                Gio.BusNameWatcherFlags.NONE, null, () => this._actSenderGone(sender));
-        }
-        w.ids.add(id);
-    },
-
-    _actSenderGone(sender) {
-        let ids = this._actTable?.endSender(sender) ?? [];
-        for (let id of ids) {
-            let t = this._actTimers.get(id);
-            if (t) GLib.Source.remove(t);
-            this._actTimers.delete(id);
-            if (this._alerts?.current?.kind === `act:${id}`) this._dismissAlert();
-            else this._alerts?.dropKind(`act:${id}`);
-        }
-        let w = this._actWatches.get(sender);
-        if (w) {
-            Gio.bus_unwatch_name(w.watchId);
-            this._actWatches.delete(sender);
         }
     },
 };

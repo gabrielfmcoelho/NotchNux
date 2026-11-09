@@ -10,14 +10,9 @@ act_eq() { # name expected cmd...
     if [ "$got" = "$want" ]; then echo "PASS $name"; else nnx_fail "$name" "expected $want, got $got"; fi
 }
 
-# Every gdbus call is its own bus sender and a vanished sender's activities are
-# reaped, so a helper process holds the sender open for the Show.
 # The smoke run leaves the notch open; alerts only show on the collapsed pill.
 nnx_eval "$NNX.collapse(), true" >/dev/null; sleep 1
-HOLD="gjs -m $SRC/tests/headless/activity-holder.js"
-$HOLD 25 "Build" "linking" "system-run-symbolic" 0.4 30 > "$NNX_OUT/hold1.txt" 2>&1 &
-sleep 1.5
-act_eq show a1 cat "$NNX_OUT/hold1.txt"
+act_eq show "('a1',)" $ACT.Show "Build" "linking" "system-run-symbolic" 0.4 30
 sleep 1
 nnx_shot pill-activity 660 0 600 80
 nnx_check alert-current "$NNX._alerts.current?.kind === 'act:a1'" true
@@ -30,21 +25,17 @@ act_eq end-again "(false,)" $ACT.End a1
 act_eq update-unknown "(false,)" $ACT.Update -- zz "x" "" -2
 nnx_check alert-gone "$NNX._alerts.current === null" true
 
-# CLI round trip: show prints an id; update/end work from other processes on
-# an activity whose sender is still alive.
-id=$("$CLI" show "Copy" --body "1/3" --progress 0.3 --icon edit-copy-symbolic --timeout 20)
+# CLI round trip, one process per call
+id=$("$CLI" show Build --progress 0.2 --timeout 60)
 if [ "$id" = a2 ]; then echo "PASS cli-show ($id)"; else nnx_fail cli-show "got '$id'"; fi
 sleep 1
-nnx_check cli-show-reaped "$NNX._actTable.get('a2') === null" true
-$HOLD 25 "Copy" "1/3" "edit-copy-symbolic" 0.3 20 > "$NNX_OUT/hold2.txt" 2>&1 &
-sleep 1.5
-id=$(cat "$NNX_OUT/hold2.txt")
-act_eq cli-update true "$CLI" update "$id" --progress 0.9 --body "2/3"
+nnx_check cli-survives-sender "$NNX._actTable.get('a2') !== null" true
+act_eq cli-update true "$CLI" update "$id" --progress 0.8
 act_eq cli-end true "$CLI" end "$id"
 act_eq cli-end-again false "$CLI" end "$id"
 act_eq cli-unknown false "$CLI" update zz --title x
 
-# A sender that exits without End: its activity and bar go away.
-$ACT.Show "Ghost" "" "dialog-information-symbolic" 0.5 60 >/dev/null
-sleep 1
-nnx_check sender-vanished "(() => { const n = $NNX; return [n._actTable._items.size, (n._alerts.current?.kind ?? '').startsWith('act:'), n._actWatches.size]; })()" '[0,false,0]'
+# A click on the bar ends the activity too.
+id=$("$CLI" show Click --timeout 60)
+nnx_check click-dismiss "(() => { const n = $NNX; const a = n._alerts.current; n._dismissAlert(); a.onClick(); return n._actTable.get('$id') === null; })()" true
+act_eq update-after-click false "$CLI" update "$id" --title x
