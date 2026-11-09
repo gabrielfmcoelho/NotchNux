@@ -46,7 +46,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {
     SESSIONS_DIR, USAGE_PATH, SESSION_FILE, statsPath, parseSessionStats, fmtCost, recordUsage, usageForecast,
     parseSession, procStat, isLive, alertFor,
-    parseUsage, sortSessions, pillDots, fmtAge,
+    parseUsage, sortSessions, pillDots, companionMood, fmtAge,
     APPROVE_PATH, HOOK_TIMEOUT_S, approveSocketPath, passThrough, asksAtOnce, describeRequest, decisionBody, describeActivity, activityFromPrefix, ACTIVITY_PATH,
     MCP_AUTH_PATH, parseNeedsAuth, newAuthNames, parseMcpList, mcpSummary, claudeBinary,
     SAFE_MODES, rulesOf, removeRule, setDefaultMode, claudeSettingsFiles, readSettingsAsync, writeSettingsAsync,
@@ -689,6 +689,9 @@ const ClaudeFeatures = {
         let c = this._claude;
         let show = this._config.isFeatureEnabled('claudeMonitor') && c.sessions.size > 0;
         let dots = show ? pillDots(c.sessions.values(), c.unseen) : [];
+        let mood = companionMood(dots.map(d => d.kind));
+        let fresh = dots.filter(d => d.kind === 'fresh').reduce((n, d) => n + (d.count || 1), 0);
+        this._pillRabbit?.setClaude(mood, fresh, mood === 'idle' ? null : dotColor(mood));
         let pct = show && c.usage?.fiveHour ? Math.round(c.usage.fiveHour.pct) : null;
         let sig = JSON.stringify([dots, pct, accentHex()]);
         if (sig === c.pillSig && show === box.visible)

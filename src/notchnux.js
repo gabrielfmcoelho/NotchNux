@@ -27,6 +27,7 @@ import { TAB_DEFS, FEATURE_DEFS, blurPreset } from './helpers/config.js';
 import { fmt } from './helpers/format.js';
 import { GlassBackdrop, createShoulder, SHOULDER_SIZE, PILL_HEIGHT } from './helpers/island.js';
 import { springTo, stopSpring, addPressFeedback } from './helpers/motion.js';
+import { RabbitCompanion } from './helpers/companion.js';
 import { installProductivity } from './tabs/productivity.js';
 import { installLedge, swapContent } from './tabs/ledge.js';
 import { installTray } from './tabs/tray.js';
@@ -191,6 +192,11 @@ export const NotchNux = GObject.registerClass({
         this._initClaude();
         // Dev tab: Docker containers (and their crash alerts), ports, projects.
         this._initDev();
+        // The rabbit companion goes in last, at index 0, so it stays left of the
+        // live-activity zones that the inits above inserted by index.
+        this._pillRabbit = new RabbitCompanion(() => this._companionState());
+        this._pillRabbit.visible = this._config.isFeatureEnabled('rabbitCompanion');
+        this._pill.insert_child_at_index(this._pillRabbit, 0);
         // Recolour the active-state chrome to match the persisted accent.
         this._applyAccentStyles();
         // Shoulders + the (hidden unless enabled) glass backdrop.
@@ -345,6 +351,19 @@ export const NotchNux = GObject.registerClass({
             try { global.display.disconnect(this._wpFullscreenId); } catch (e) {}
             this._wpFullscreenId = 0;
         }
+    }
+
+    // What the pill rabbit reacts to besides Claude (see helpers/companion-brain.js).
+    _companionState() {
+        let bat = this._system.getBatteryInfo();
+        return {
+            focus: this._prod?.focus.phase ?? 'idle',
+            music: !!this._musicPlaying,
+            low: bat.percentage <= 15,
+            charging: bat.isCharging,
+            hour: new Date().getHours(),
+            calm: this._config.isFeatureEnabled('rabbitCalm'),
+        };
     }
 
     // Follow the laptop battery (UPower display device): the pill readout and
@@ -2465,6 +2484,7 @@ export const NotchNux = GObject.registerClass({
         let showMusic = info.hasMedia && !this._prod?.focusActive && !this._prod?.stopwatch.running &&
             (info.status === 'Playing' || info.status === 'Paused');
         this._musicPlaying = showMusic && info.status === 'Playing';
+        this._pillRabbit?.update();
         let wasVisible = this._pillMusicBox.visible;
         this._pillMusicBox.visible = showMusic;
 
@@ -2619,6 +2639,8 @@ export const NotchNux = GObject.registerClass({
         // Collect the widths of the zones that are actually visible, in flow
         // order. The clock is always present; music/battery/priv are optional.
         let zones = [];
+        if (this._pillRabbit?.visible)
+            zones.push(this._pillRabbit.get_preferred_width(-1)[1]);
         if (this._pillFocusBox?.visible)
             zones.push(this._pillFocusBox.get_preferred_width(-1)[1]);
         if (this._pillSwBox?.visible)
@@ -4422,6 +4444,15 @@ export const NotchNux = GObject.registerClass({
                 this._system.setPrivacyPolling(on);
                 this._updatePrivacyIndicators();
                 break;
+            case 'rabbitCompanion':
+                this._pillRabbit.visible = on;
+                this._pillRabbit.update();
+                if (!this.isExpanded && !this._alertShowing)
+                    this._applyPillWidth();
+                break;
+            case 'rabbitCalm':
+                this._pillRabbit.update();
+                break;
             case 'pillMarquee':
                 // Re-run the live refresh so the marquee starts/stops.
                 this._stopPillMarquee();
@@ -5301,6 +5332,7 @@ export const NotchNux = GObject.registerClass({
     // other peeks wait it out (Claude Code approvals). opts.onMainClick
     // replaces activating the notification; the banner stays up.
     _showNotificationPeek(title, body, gicon, notification = null, actions = [], opts = {}) {
+        this._pillRabbit?.react('notification');   // perks up once the pill is back
         if (this._destroyed) return;
         if (!this._notifBanner) return;
         // Nowhere to show it (docking, hotplug): touch nothing, or a sticky
@@ -6645,6 +6677,7 @@ export const NotchNux = GObject.registerClass({
         let date = new Date();
         this._checkEventHeadsUp?.();
         this._pillClock.set_text(pillClockText(date));
+        this._pillRabbit?.update();   // hour (night sleep) and battery
 
         let showBattery = this._config.isFeatureEnabled('showBattery');
         this._pillBatteryBox.visible = showBattery;

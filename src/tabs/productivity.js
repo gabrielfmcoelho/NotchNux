@@ -157,6 +157,7 @@ export const ProductivityTabs = {
         let changed = active !== this._pillFocusBox.visible;
         this._pillFocusBox.visible = active;
         this._tickPillFocus();
+        this._pillRabbit?.update();   // focus sits still, a break flops
         if (changed) {
             // Music (and the stopwatch) yield to the timer, and come back after.
             this._syncPillStopwatch?.();

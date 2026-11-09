@@ -164,6 +164,8 @@ export function blurPreset(id) {
 export const FEATURE_DEFS = [
     { id: 'showBattery',       label: 'Battery on pill',      description: 'Show the battery indicator on the collapsed pill.',        default: true },
     { id: 'showPrivacy',       label: 'Privacy indicators',   description: 'Show mic/camera in-use dots on the collapsed pill.',        default: true },
+    { id: 'rabbitCompanion',   label: 'Rabbit companion',     description: 'The Inova Data rabbit at the left of the pill: it reacts to Claude Code, the focus timer, notifications, music and battery.', default: true },
+    { id: 'rabbitCalm',        label: 'Calm rabbit',          description: 'Keep the rabbit’s reactions but drop its idle moves (blinks, ear flicks, nibbles).', default: false },
     { id: 'pillMarquee',       label: 'Scrolling track title', description: 'Scroll long track titles across the pill while playing.',  default: true },
     { id: 'weatherAutoRefresh', label: 'Auto-refresh weather', description: 'Periodically refresh weather in the background.',           default: true },
     { id: 'calendarSync',      label: 'Calendar sync',        description: 'Pull events from GNOME Online Accounts into the Calendar tab.', default: true },

@@ -5,7 +5,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import Soup from 'gi://Soup?version=3.0';
 import {
-    parseSession, procStat, isLive, alertFor, parseUsage, sortSessions, pillDots,
+    parseSession, procStat, isLive, alertFor, parseUsage, sortSessions, pillDots, companionMood,
     SETTINGS_PATH, fmtAge, wrapCommand, unwrapCommand, isConnected, connectStatusLine, disconnectStatusLine,
     SOCKET_NAME, approveSocketPath, approveCommand, passThrough, asksAtOnce, describeRequest, decisionBody,
     isApproveConnected, connectApproveHook, disconnectApproveHook,
@@ -90,6 +90,10 @@ eq(pillDots([mk(2, 'approval', 0), mk(1, 'working', 0), mk(3, 'done', 0), mk(4, 
 eq(pillDots([mk(1, 'working', 0), mk(2, 'working', 0), mk(3, 'approval', 0), mk(4, 'done', 0), mk(5, 'done', 0)], unseen),
     [{ kind: 'waiting', count: 1 }, { kind: 'working', count: 2 }, { kind: 'done', count: 2 }], '5 sessions collapse to counts');
 eq([fmtAge(10000), fmtAge(4 * 60000), fmtAge(125 * 60000)], ['now', '4m', '2h 5m'], 'fmtAge');
+eq(companionMood([]), 'idle', 'rabbit idle without sessions');
+eq(companionMood(['done', 'fresh']), 'idle', 'rabbit idle when all done');
+eq(companionMood(['done', 'working']), 'working', 'rabbit works while any session works');
+eq(companionMood(['working', 'waiting']), 'waiting', 'waiting on you beats working');
 
 // ---- status-line connect / disconnect ----
 const ponytail = 'bash "/home/u/.claude/plugins/cache/ponytail/ponytail/4.8.4/hooks/ponytail-statusline.sh"';

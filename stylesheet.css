@@ -119,6 +119,11 @@
     color: rgba(255, 255, 255, 0.75);
 }
 
+/* Inova Data rabbit companion at the pill's left edge; Claude moods recolour it inline */
+.nn-pill-rabbit {
+    color: rgba(255, 255, 255, 0.75);
+}
+
 .notchnux-pill-clock {
     font-weight: bold;
     font-size: 13px;

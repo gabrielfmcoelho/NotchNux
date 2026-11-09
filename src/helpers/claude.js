@@ -157,6 +157,13 @@ export function pillDots(list, unseen) {
         .filter(d => d.count > 0);
 }
 
+// The pill rabbit's mood from the pill dot kinds: waiting on you wins, then working.
+export function companionMood(kinds) {
+    if (kinds.includes('waiting'))
+        return 'waiting';
+    return kinds.includes('working') ? 'working' : 'idle';
+}
+
 // "now", "4m", "2h 5m".
 export function fmtAge(ms) {
     let m = Math.floor(Math.max(0, ms) / 60000);
