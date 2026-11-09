@@ -17,7 +17,8 @@ import { logError } from './log.js';
 
 export const DATA_DIR = GLib.build_filenamev([GLib.get_user_data_dir(), 'notchnux']);
 
-export const NOTE_COLORS = { yellow: '#ffd60a', green: '#30d158', blue: '#64d2ff', pink: '#ff6482', purple: '#bf5af2' };
+// 'clear' is a see-through note (no tint): its hex is only the dot's outline.
+export const NOTE_COLORS = { yellow: '#ffd60a', green: '#30d158', blue: '#64d2ff', pink: '#ff6482', purple: '#bf5af2', clear: '#ffffff' };
 const MAX_NOTE_COUNT = 50;
 
 export const FOCUS_PRESETS = [15, 25, 50];   // minutes

@@ -2116,21 +2116,42 @@
 }
 
 /* Post-it board */
-.nook-postit-scroll { height: 250px; }
+.nook-postit-scroll { height: 250px; margin-top: 8px; }
 .nook-postit-edit {
-    height: 232px;
+    height: 224px;
+    margin-top: 10px;
     border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     background-color: rgba(255, 255, 255, 0.063);
 }
 
 
 .nook-postit {
     border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-left: 3px solid rgba(255, 255, 255, 0.3);
     background-color: rgba(255, 255, 255, 0.08);
     padding: 10px 12px;
     text-align: left;
 }
+.nook-postit-clear { background-color: rgba(255, 255, 255, 0.04); border-left-color: rgba(255, 255, 255, 0.25); }
+.nook-postit-clear:hover, .nook-postit-clear:focus { background-color: rgba(255, 255, 255, 0.10); }
+.nook-postit-del {
+    color: rgba(255, 255, 255, 0.75);
+    padding: 3px;
+    border-radius: 999px;
+    background-color: rgba(0, 0, 0, 0.35);
+}
+.nook-postit-del:hover { color: #ff6482; }
+.nook-notes-search {
+    width: 150px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #f0f0f3;
+}
+.nook-notes-search StLabel.hint-text { color: rgba(255, 255, 255, 0.4); }
 .nook-postit:hover, .nook-postit:focus { background-color: rgba(255, 255, 255, 0.14); }
 .nook-postit-yellow { background-color: rgba(255, 214, 10, 0.22); border-left-color: #ffd60a; }
 .nook-postit-green { background-color: rgba(48, 209, 88, 0.22); border-left-color: #30d158; }
@@ -2150,7 +2171,7 @@
 .nook-postit-text { font-size: 12px; color: #f0f0f3; }
 .nook-postit-empty { color: rgba(255, 255, 255, 0.4); font-style: italic; }
 .nook-postit-age { font-size: 10px; }
-.nook-postit-bar { spacing: 6px; }
+.nook-postit-bar { spacing: 6px; padding-bottom: 2px; }
 .nook-postit-undo { spacing: 8px; padding: 2px 4px 6px 4px; }
 .nook-postit-dot {
     width: 16px;

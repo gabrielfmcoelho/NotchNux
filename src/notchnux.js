@@ -5628,8 +5628,9 @@ export const NotchNux = GObject.registerClass({
         this._notifBanner.translation_y = -8;
         this._notifBanner.visible = true;
 
+        let peekW = this._peekWidth();
         let targetHeight = this._measurePeekHeight();
-        let targetX = monitor.x + Math.floor((monitor.width - PEEK_WIDTH) / 2);
+        let targetX = monitor.x + Math.floor((monitor.width - peekW) / 2);
 
         this._surface.ease({
             scale_x: 1.0, scale_y: 1.0, duration: 200,
@@ -5642,10 +5643,18 @@ export const NotchNux = GObject.registerClass({
         this._notifBanner.ease({
             opacity: 255, translation_y: 0,
             delay: 60, duration: PEEK_ENTER_MS, mode: Clutter.AnimationMode.EASE_OUT_QUINT });
-        springTo(this, { x: targetX, y: monitor.y, width: PEEK_WIDTH, height: targetHeight },
+        springTo(this, { x: targetX, y: monitor.y, width: peekW, height: targetHeight },
             { duration: 520, damping: 0.78 });
 
         this._armPeekDismissTimer();
+    }
+
+    // The banner's width: the designed one, or wider when the pill's content
+    // (a playing track, the companion's wide meadow) needs more, so the pill
+    // pinned above the banner is never squeezed and the battery never kisses
+    // the edge.
+    _peekWidth() {
+        return Math.max(PEEK_WIDTH, this._pillWidth() + 16);
     }
 
     // Natural height of the banner content at the peek width, floored to the
@@ -5656,13 +5665,14 @@ export const NotchNux = GObject.registerClass({
         // came out a line short and the buttons covered its last line.
         this._surface.ensure_style();
         let node = this._surface.get_theme_node();
-        let [, nat] = this._notifBanner.get_preferred_height(PEEK_WIDTH - node.get_horizontal_padding());
+        let peekW = this._peekWidth();
+        let [, nat] = this._notifBanner.get_preferred_height(peekW - node.get_horizontal_padding());
         // The pill now stays pinned above the banner, so the peek box must be
         // tall enough for both. Add the pill height plus its bottom margin (10px,
         // set on .notchnux-island-peek .notchnux-pill-content in the stylesheet).
         let pillH = 0;
         if (this._pill && this._pill.visible) {
-            let [, natPillH] = this._pill.get_preferred_height(PEEK_WIDTH);
+            let [, natPillH] = this._pill.get_preferred_height(peekW);
             pillH = Math.ceil(natPillH) + 10;
         }
         return Math.max(PEEK_HEIGHT, Math.ceil(nat + node.get_vertical_padding()) + pillH);
@@ -5673,9 +5683,10 @@ export const NotchNux = GObject.registerClass({
         if (!this._peekActive) return;
         let monitor = Main.layoutManager.primaryMonitor;
         if (!monitor) return;
+        let peekW = this._peekWidth();
         let targetHeight = this._measurePeekHeight();
-        let targetX = monitor.x + Math.floor((monitor.width - PEEK_WIDTH) / 2);
-        springTo(this, { x: targetX, width: PEEK_WIDTH, height: targetHeight },
+        let targetX = monitor.x + Math.floor((monitor.width - peekW) / 2);
+        springTo(this, { x: targetX, width: peekW, height: targetHeight },
             { duration: 360, damping: 0.9 });
     }
 

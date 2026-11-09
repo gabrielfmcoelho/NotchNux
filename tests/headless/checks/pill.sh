@@ -18,3 +18,5 @@ nnx_check pill-hide-clock "(() => { let n = $NNX; let w0 = n._pillWidth(); n._co
 # back to defaults
 nnx_eval "$NNX._config.setPillOrder([]), $NNX._applyPillOrder(), true" >/dev/null
 nnx_check pill-restored "$ORDER" '["companion","focus","stopwatch","stats","music","<","clock",">","claude","battery","alerts","privacy"]'
+# The notification banner is never narrower than the pill's content (music, the wide meadow).
+nnx_check peek-width "(() => { let n = $NNX; return n._peekWidth() >= n._pillWidth() + 16 && n._peekWidth() >= 420; })()" true

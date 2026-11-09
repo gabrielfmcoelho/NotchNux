@@ -24,6 +24,9 @@ const DRAG_THRESHOLD = 4;
 const DOUBLE_CLICK_MS = 400;
 
 function cardStyle(color) {
+    if (color === 'clear')   // a see-through desktop note: dark glass with a faint edge
+        return 'background-color: rgba(28, 28, 32, 0.72); border: 1px solid rgba(255, 255, 255, 0.18); '
+            + 'border-radius: 12px; padding: 14px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);';
     let hex = NOTE_COLORS[color] ?? NOTE_COLORS.yellow;
     let n = parseInt(hex.slice(1), 16);
     return `background-color: rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, 0.85); `

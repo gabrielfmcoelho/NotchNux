@@ -1163,7 +1163,14 @@ export const ProductivityTabs = {
         let notes = this._prod.notes;
         let head = new St.BoxLayout({ style_class: 'nook-section-head', x_expand: true });
         head.add_child(label('Notes', 'nook-section-title'));
-        head.add_child(label(`${notes.length}`, 'nook-card-meta nook-notes-status'));
+        let count = label(`${notes.length}`, 'nook-card-meta nook-notes-status');
+        head.add_child(count);
+        head.add_child(new St.Widget({ x_expand: true }));
+        // Search filters the board in place, so the field keeps the focus while you type.
+        let search = new St.Entry({ style_class: 'nook-notes-search', hint_text: 'Search…', can_focus: true, text: ui.query ?? '' });
+        search.set_primary_icon(new St.Icon({ icon_name: 'edit-find-symbolic', icon_size: 12 }));
+        this._makeTypable(search);
+        head.add_child(search);
         body.add_child(head);
         if (this._notesUndo) {
             let bar = new St.BoxLayout({ style_class: 'nook-postit-undo', x_expand: true });
@@ -1187,11 +1194,26 @@ export const ProductivityTabs = {
         let layout = new Clutter.GridLayout({ column_homogeneous: true, column_spacing: 8, row_spacing: 8 });
         let grid = new St.Widget({ layout_manager: layout, x_expand: true });
 
-        let cards = notes.map(n => {
+        let card = n => {
             let btn = new St.Button({ style_class: `nook-postit nook-postit-${n.color}`, can_focus: true,
                 x_expand: true, reactive: true });
             btn.set_height(NOTE_CARD_H);
-            let box = new St.BoxLayout({ ...VERTICAL, x_expand: true });
+            // the text column fills the card; a delete cross sits in its top-right corner,
+            // shown on hover. An icon, not a button, so the card's own click stays intact:
+            // its press is stopped here.
+            let stack = new St.Widget({ layout_manager: new Clutter.BinLayout(), x_expand: true, y_expand: true });
+            let del = new St.Icon({ icon_name: 'window-close-symbolic', icon_size: 12, style_class: 'nook-postit-del',
+                reactive: true, opacity: 0, x_align: Clutter.ActorAlign.END, y_align: Clutter.ActorAlign.START });
+            del.connect('button-press-event', () => {
+                let removed = own(() => this._prod.removeNote(n.id));
+                if (removed)
+                    this._notesSetUndo(removed);
+                this._notesUi?.render();
+                return Clutter.EVENT_STOP;
+            });
+            btn.connect('enter-event', () => { del.opacity = 255; return Clutter.EVENT_PROPAGATE; });
+            btn.connect('leave-event', () => { del.opacity = 0; return Clutter.EVENT_PROPAGATE; });
+            let box = new St.BoxLayout({ ...VERTICAL, x_expand: true, y_expand: true });
             let lines = n.text.split('\n').slice(0, 4).join('\n');
             let t = label(lines.trim() ? lines : 'Empty note', 'nook-postit-text');
             if (!lines.trim())
@@ -1203,11 +1225,13 @@ export const ProductivityTabs = {
             box.add_child(t);
             box.add_child(new St.Widget({ y_expand: true }));
             box.add_child(label(`edited ${noteAgo(n.updated)}`, 'nook-card-meta nook-postit-age'));
-            btn.set_child(box);
+            stack.add_child(box);
+            stack.add_child(del);
+            btn.set_child(stack);
             let id = n.id;
             btn.connect('clicked', () => this._notesUi?.showEditor(id));
             return btn;
-        });
+        };
 
         let add = new St.Button({ style_class: 'nook-postit nook-postit-add', can_focus: true, x_expand: true,
             reactive: true });
@@ -1229,9 +1253,27 @@ export const ProductivityTabs = {
             }
             this._notesUi?.showEditor(id);
         });
-        cards.push(add);
-
-        cards.forEach((c, i) => layout.attach(c, i % 2, Math.floor(i / 2), 1, 1));
+        let fill = () => {
+            // the note cards are rebuilt; the add card is one actor reused across fills
+            for (let c of grid.get_children()) {
+                if (c === add)
+                    grid.remove_child(c);
+                else
+                    c.destroy();
+            }
+            let q = (ui.query ?? '').trim().toLowerCase();
+            let shown = q ? notes.filter(n => n.text.toLowerCase().includes(q)) : notes;
+            count.set_text(q ? `${shown.length} of ${notes.length}` : `${notes.length}`);
+            let cards = shown.map(card);
+            if (!q)
+                cards.push(add);
+            cards.forEach((c, i) => layout.attach(c, i % 2, Math.floor(i / 2), 1, 1));
+        };
+        search.clutter_text.connect('text-changed', () => {
+            ui.query = search.get_text();
+            fill();
+        });
+        fill();
         let wrap = new St.BoxLayout({ ...VERTICAL, x_expand: true });
         wrap.add_child(grid);
         scroll.set_child(wrap);
@@ -1251,11 +1293,14 @@ export const ProductivityTabs = {
                 if (c === note()?.color) d.add_style_class_name('nook-postit-dot-on');
                 else d.remove_style_class_name('nook-postit-dot-on');
             }
-            scroll.set_style(`background-color: ${rgba(hex(), 0.22)}; border-left: 3px solid ${hex()};`);
+            if (note()?.color === 'clear')
+                scroll.set_style('background-color: rgba(255, 255, 255, 0.04); border-left: 3px solid rgba(255, 255, 255, 0.25);');
+            else
+                scroll.set_style(`background-color: ${rgba(hex(), 0.22)}; border-left: 3px solid ${hex()};`);
         };
         for (let c of Object.keys(NOTE_COLORS)) {
             let d = new St.Button({ style_class: 'nook-postit-dot', can_focus: true, reactive: true });
-            d.set_style(`background-color: ${NOTE_COLORS[c]};`);
+            d.set_style(c === 'clear' ? 'background-color: transparent; border-color: rgba(255, 255, 255, 0.45);' : `background-color: ${NOTE_COLORS[c]};`);
             d.accessible_name = `${c} note`;
             d.connect('clicked', () => {
                 own(() => this._prod.setNoteColor(id, c));
