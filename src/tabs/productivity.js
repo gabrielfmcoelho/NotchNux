@@ -14,12 +14,29 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 
-import { ProductivityStore, FOCUS_PRESETS, fmtCountdown } from '../helpers/productivity.js';
+import { ProductivityStore, FOCUS_PRESETS, NOTE_COLORS, fmtCountdown } from '../helpers/productivity.js';
 import { FocusRing, AlbumArtDisc, BREAK_GREEN, accentHex, accentRgbStr } from '../helpers/widgets.js';
 import { addPressFeedback } from '../helpers/motion.js';
 import { fmt } from '../helpers/format.js';
 import { VERTICAL, HORIZONTAL } from '../helpers/compat.js';
 import { logError } from '../helpers/log.js';
+
+const NOTE_CARD_H = 120;
+const NOTE_TEXT_H = 64;
+
+function rgba(hex, a) {
+    let n = parseInt(hex.slice(1), 16);
+    return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+// "just now", "5 min ago", "2 h ago", "3 d ago".
+function noteAgo(ms) {
+    let s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+    if (s < 45) return 'just now';
+    if (s < 3600) return `${Math.max(1, Math.round(s / 60))} min ago`;
+    if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+    return `${Math.round(s / 86400)} d ago`;
+}
 
 const HOME_TASKS = 4;
 
@@ -120,9 +137,17 @@ export const ProductivityTabs = {
             if (this._notesSelf || !this._notesUi)
                 break;
             this._markTabDirty('notes');
-            // Not under the user's caret: it re-renders when focus leaves.
-            if (global.stage.get_key_focus() === this._notesUi.entry.clutter_text)
-                break;
+            if (this._notesUi.openId) {
+                // Deleted elsewhere: back to the board. Never re-created.
+                if (!this._prod.getNote(this._notesUi.openId)) {
+                    this._notesUi.showBoard();
+                    break;
+                }
+                // Not under the user's caret: it stays dirty and re-renders
+                // the next time the tab is shown.
+                if (global.stage.get_key_focus() === this._notesUi.entry?.clutter_text)
+                    break;
+            }
             if (this.isExpanded && this._activeTab === 'notes')
                 this._showActiveTab();
             break;
@@ -770,109 +795,210 @@ export const ProductivityTabs = {
     // ------------------------------------------------------------ Notes
 
     _renderNotesTab() {
-        // Until the post-it board lands this tab edits the most recently
-        // updated note (one is created on the first edit).
-        // The id is resolved once here and the editor stays bound to it, so a
-        // note added meanwhile can never be overwritten with this text.
-        let boundId = this._prod.notes[0]?.id ?? null;
-        let current = () => (boundId ? this._prod.getNote(boundId) : null);
         let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-notes', ...VERTICAL, x_expand: true });
+        let ui = { openId: null, entry: null };
+        this._notesUi = ui;
+        // Every store write the board itself makes is wrapped in this, so the
+        // 'notes' event it triggers does not rebuild what it just built.
+        let own = fn => {
+            this._notesSelf = true;
+            try {
+                return fn();
+            } finally {
+                this._notesSelf = false;
+            }
+        };
+        let body = new St.BoxLayout({ ...VERTICAL, x_expand: true, y_expand: true });
+        panel.add_child(body);
 
-        let head = new St.BoxLayout({ style_class: 'nook-section-head', x_expand: true });
-        head.add_child(label('Notes', 'nook-section-title'));
-        let status = label('Saved', 'nook-card-meta nook-notes-status');
-        head.add_child(status);
-        head.add_child(new St.Widget({ x_expand: true }));
-        let copy = new St.Button({ style_class: 'nook-clear-btn', label: 'Copy', can_focus: true });
-        copy.connect('clicked', () => {
-            St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, current()?.text ?? '');
-            status.set_text('Copied');
-        });
-        head.add_child(copy);
-        // Two-step clear: the first click arms it for 3 s.
-        let clear = new St.Button({ style_class: 'nook-clear-btn', label: 'Clear', can_focus: true });
-        let armed = 0;
-        clear.connect('clicked', () => {
-            if (!armed) {
-                clear.label = 'Really clear?';
-                clear.add_style_class_name('nook-danger');
-                armed = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 3000, () => {
-                    armed = 0;
-                    clear.label = 'Clear';
-                    clear.remove_style_class_name('nook-danger');
-                    return GLib.SOURCE_REMOVE;
-                });
+        ui.showBoard = () => {
+            this._releaseKeyboard();
+            // Leaving a note with no text drops it, without an Undo.
+            if (ui.openId) {
+                let n = this._prod.getNote(ui.openId);
+                if (n && !n.text.trim())
+                    own(() => this._prod.removeNote(n.id));
+            }
+            ui.openId = this._notesOpenId = null;
+            ui.entry = null;
+            body.destroy_all_children();
+            this._fillNotesBoard(body, ui, own);
+        };
+        // The editor binds to this note id once; it survives a re-render of
+        // the tab through _notesOpenId.
+        ui.showEditor = id => {
+            if (!this._prod.getNote(id)) {
+                ui.showBoard();
                 return;
             }
-            GLib.Source.remove(armed);
-            armed = 0;
-            clear.label = 'Clear';
-            clear.remove_style_class_name('nook-danger');
-            entry.set_text('');
-        });
-        clear.connect('destroy', () => { if (armed) GLib.Source.remove(armed); });
-        head.add_child(clear);
-        panel.add_child(head);
+            ui.openId = this._notesOpenId = id;
+            body.destroy_all_children();
+            this._fillNotesEditor(body, ui, own, id);
+        };
 
-        let scroll = new St.ScrollView({ style_class: 'nook-notes-scroll', x_expand: true });
+        if (this._notesOpenId && this._prod.getNote(this._notesOpenId))
+            ui.showEditor(this._notesOpenId);
+        else
+            ui.showBoard();
+        this._mount(panel);
+    },
+
+    _fillNotesBoard(body, ui, own) {
+        let notes = this._prod.notes;
+        let head = new St.BoxLayout({ style_class: 'nook-section-head', x_expand: true });
+        head.add_child(label('Notes', 'nook-section-title'));
+        head.add_child(label(`${notes.length}`, 'nook-card-meta nook-notes-status'));
+        body.add_child(head);
+
+        let scroll = new St.ScrollView({ style_class: 'nook-postit-scroll', x_expand: true });
         scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
         scroll.set_overlay_scrollbars(true);
+        let layout = new Clutter.GridLayout({ column_homogeneous: true, column_spacing: 8, row_spacing: 8 });
+        let grid = new St.Widget({ layout_manager: layout, x_expand: true });
+
+        let cards = notes.map(n => {
+            let btn = new St.Button({ style_class: `nook-postit nook-postit-${n.color}`, can_focus: true,
+                x_expand: true, reactive: true });
+            btn.set_height(NOTE_CARD_H);
+            let box = new St.BoxLayout({ ...VERTICAL, x_expand: true });
+            let lines = n.text.split('\n').slice(0, 4).join('\n');
+            let t = label(lines.trim() ? lines : 'Empty note', 'nook-postit-text');
+            if (!lines.trim())
+                t.add_style_class_name('nook-postit-empty');
+            t.clutter_text.line_wrap = true;
+            t.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+            t.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+            t.set_height(NOTE_TEXT_H);
+            box.add_child(t);
+            box.add_child(new St.Widget({ y_expand: true }));
+            box.add_child(label(`edited ${noteAgo(n.updated)}`, 'nook-card-meta nook-postit-age'));
+            btn.set_child(box);
+            let id = n.id;
+            btn.connect('clicked', () => this._notesUi?.showEditor(id));
+            return btn;
+        });
+
+        let add = new St.Button({ style_class: 'nook-postit nook-postit-add', can_focus: true, x_expand: true,
+            reactive: true });
+        add.set_height(NOTE_CARD_H);
+        let addLabel = label('+', 'nook-postit-plus', { x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER });
+        add.set_child(addLabel);
+        add.connect('clicked', () => {
+            let id;
+            try {
+                id = own(() => this._prod.addNote('', 'yellow'));
+            } catch (e) {
+                if (e.message !== 'TooManyNotes') {
+                    logError(e, 'notes: add failed');
+                    return;
+                }
+                addLabel.set_text('50 max');
+                this._pushAlert({ kind: 'notes-full', icon: 'dialog-warning-symbolic',
+                    title: '50 notes is the limit', ms: 3000 });
+                return;
+            }
+            this._notesUi?.showEditor(id);
+        });
+        cards.push(add);
+
+        cards.forEach((c, i) => layout.attach(c, i % 2, Math.floor(i / 2), 1, 1));
         let wrap = new St.BoxLayout({ ...VERTICAL, x_expand: true });
+        wrap.add_child(grid);
+        scroll.set_child(wrap);
+        body.add_child(scroll);
+    },
+
+    _fillNotesEditor(body, ui, own, id) {
+        let note = () => this._prod.getNote(id);
+        let hex = () => NOTE_COLORS[note()?.color] ?? NOTE_COLORS.yellow;
+        let scroll = new St.ScrollView({ style_class: 'nook-postit-edit', x_expand: true });
+
+        let head = new St.BoxLayout({ style_class: 'nook-section-head nook-postit-bar', x_expand: true });
+        head.add_child(iconButton('go-previous-symbolic', 'nook-clear-btn', () => ui.showBoard(), 'Back to notes'));
+        let dots = new Map();
+        let paint = () => {
+            for (let [c, d] of dots) {
+                if (c === note()?.color) d.add_style_class_name('nook-postit-dot-on');
+                else d.remove_style_class_name('nook-postit-dot-on');
+            }
+            scroll.set_style(`background-color: ${rgba(hex(), 0.22)}; border-left: 3px solid ${hex()};`);
+        };
+        for (let c of Object.keys(NOTE_COLORS)) {
+            let d = new St.Button({ style_class: 'nook-postit-dot', can_focus: true, reactive: true });
+            d.set_style(`background-color: ${NOTE_COLORS[c]};`);
+            d.accessible_name = `${c} note`;
+            d.connect('clicked', () => {
+                own(() => this._prod.setNoteColor(id, c));
+                paint();
+            });
+            dots.set(c, d);
+            head.add_child(d);
+        }
+        head.add_child(new St.Widget({ x_expand: true }));
+        let pin = new St.Button({ style_class: 'nook-clear-btn nook-postit-pin', label: 'Pin to desktop',
+            toggle_mode: true, can_focus: true, checked: !!note()?.pinned });
+        pin.connect('clicked', () => own(() => this._prod.pinNote(id, pin.checked)));
+        head.add_child(pin);
+        let copy = new St.Button({ style_class: 'nook-clear-btn', label: 'Copy', can_focus: true });
+        copy.connect('clicked', () => {
+            St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, note()?.text ?? '');
+            copy.label = 'Copied';
+        });
+        head.add_child(copy);
+        let del = new St.Button({ style_class: 'nook-clear-btn nook-danger', label: 'Delete', can_focus: true });
+        del.connect('clicked', () => {
+            let removed = own(() => this._prod.removeNote(id));
+            ui.showBoard();
+            if (removed) {
+                this._pushAlert({ kind: 'notes-deleted', icon: 'user-trash-symbolic', title: 'Note deleted',
+                    value: 'Undo', ms: 5000, onClick: () => this._prod.restoreNote(removed) });
+            }
+        });
+        head.add_child(del);
+        body.add_child(head);
+
+        scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
+        scroll.set_overlay_scrollbars(true);
         let entry = new St.Entry({ style_class: 'nook-notes-entry', hint_text: 'Jot something down… it saves as you type.',
-            can_focus: true, x_expand: true, text: current()?.text ?? '' });
+            can_focus: true, x_expand: true, text: note()?.text ?? '' });
         let text = entry.clutter_text;
         text.single_line_mode = false;
         text.activatable = false;
         text.line_wrap = true;
         text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+        // Connected before _makeTypable's handler, which stops Esc.
+        text.connect('key-press-event', (a, ev) => {
+            if (ev.get_key_symbol() !== Clutter.KEY_Escape)
+                return Clutter.EVENT_PROPAGATE;
+            ui.showBoard();
+            return Clutter.EVENT_STOP;
+        });
         this._makeTypable(entry);
+        ui.entry = entry;
+        let wrap = new St.BoxLayout({ ...VERTICAL, x_expand: true });
         wrap.add_child(entry);
         scroll.set_child(wrap);
-        panel.add_child(scroll);
+        body.add_child(scroll);
 
         let footer = label('', 'nook-card-meta');
-        panel.add_child(footer);
+        body.add_child(footer);
         let words = () => {
             let t = entry.get_text().trim();
             let n = t ? t.split(/\s+/).length : 0;
             footer.set_text(`${n} word${n === 1 ? '' : 's'} · saved on this computer only`);
         };
         words();
+        paint();
 
-        let typingId = 0;
         text.connect('text-changed', () => {
-            let t = entry.get_text();
-            let cur = current();
-            this._notesSelf = true;
-            try {
-                if (cur)
-                    this._prod.updateNote(cur.id, t);
-                else if (t)
-                    boundId = this._prod.addNote(t);
-            } catch (e) {
-                logError('notes editor save failed', e);
-            } finally {
-                this._notesSelf = false;
+            if (note()) {
+                try {
+                    own(() => this._prod.updateNote(id, entry.get_text()));
+                } catch (e) {
+                    logError(e, 'notes editor save failed');
+                }
             }
-            status.set_text('Editing…');
             words();
-            if (typingId) GLib.Source.remove(typingId);
-            typingId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 800, () => {
-                typingId = 0;
-                status.set_text('Saved');
-                return GLib.SOURCE_REMOVE;
-            });
-        });
-        text.connect('destroy', () => { if (typingId) GLib.Source.remove(typingId); });
-        // An outside change that arrived while typing is shown once the
-        // caret leaves the editor.
-        text.connect('key-focus-out', () => {
-            GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-                if (this._notesUi?.entry === entry && this._tabHosts?.get('notes')?._dirty &&
-                    this.isExpanded && this._activeTab === 'notes')
-                    this._showActiveTab();
-                return GLib.SOURCE_REMOVE;
-            });
         });
         // Keep the caret in view as the note grows past the scroll area.
         text.connect('cursor-changed', () => {
@@ -884,9 +1010,8 @@ export const ProductivityTabs = {
             else if (y + lineH > adj.value + adj.page_size)
                 adj.value = y + lineH - adj.page_size + 8;
         });
-
-        this._mount(panel);
-        this._notesUi = { entry };
+        if (!note()?.text)
+            text.grab_key_focus();
     },
 };
 

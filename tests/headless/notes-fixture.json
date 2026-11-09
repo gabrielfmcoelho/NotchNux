@@ -1,0 +1,5 @@
+[
+  {"id": "fx-yellow", "text": "Buy milk\neggs\nbread\nand coffee beans for the week", "color": "yellow", "created": 1794000000000, "updated": 1794200000000, "pinned": false, "pos": null},
+  {"id": "fx-green", "text": "Ideas for the weekend hike near the lake", "color": "green", "created": 1793900000000, "updated": 1794100000000, "pinned": false, "pos": null},
+  {"id": "fx-blue", "text": "Call the dentist", "color": "blue", "created": 1793400000000, "updated": 1793500000000, "pinned": false, "pos": null}
+]

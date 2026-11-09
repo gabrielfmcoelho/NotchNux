@@ -2025,6 +2025,51 @@
     color: rgba(255, 255, 255, 0.32);
 }
 
+/* Post-it board */
+.nook-postit-scroll { height: 250px; }
+.nook-postit-edit {
+    height: 232px;
+    border-radius: 14px;
+    background-color: rgba(255, 255, 255, 0.063);
+}
+
+
+.nook-postit {
+    border-radius: 12px;
+    border-left: 3px solid rgba(255, 255, 255, 0.3);
+    background-color: rgba(255, 255, 255, 0.08);
+    padding: 10px 12px;
+    text-align: left;
+}
+.nook-postit:hover, .nook-postit:focus { background-color: rgba(255, 255, 255, 0.14); }
+.nook-postit-yellow { background-color: rgba(255, 214, 10, 0.22); border-left-color: #ffd60a; }
+.nook-postit-green { background-color: rgba(48, 209, 88, 0.22); border-left-color: #30d158; }
+.nook-postit-blue { background-color: rgba(100, 210, 255, 0.22); border-left-color: #64d2ff; }
+.nook-postit-pink { background-color: rgba(255, 100, 130, 0.22); border-left-color: #ff6482; }
+.nook-postit-purple { background-color: rgba(191, 90, 242, 0.22); border-left-color: #bf5af2; }
+.nook-postit-yellow:hover, .nook-postit-yellow:focus { background-color: rgba(255, 214, 10, 0.32); }
+.nook-postit-green:hover, .nook-postit-green:focus { background-color: rgba(48, 209, 88, 0.32); }
+.nook-postit-blue:hover, .nook-postit-blue:focus { background-color: rgba(100, 210, 255, 0.32); }
+.nook-postit-pink:hover, .nook-postit-pink:focus { background-color: rgba(255, 100, 130, 0.32); }
+.nook-postit-purple:hover, .nook-postit-purple:focus { background-color: rgba(191, 90, 242, 0.32); }
+.nook-postit-add {
+    border: 1px dashed rgba(255, 255, 255, 0.25);
+    background-color: transparent;
+}
+.nook-postit-plus { font-size: 30px; color: rgba(255, 255, 255, 0.5); }
+.nook-postit-text { font-size: 12px; color: #f0f0f3; }
+.nook-postit-empty { color: rgba(255, 255, 255, 0.4); font-style: italic; }
+.nook-postit-age { font-size: 10px; }
+.nook-postit-bar { spacing: 6px; }
+.nook-postit-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    border: 2px solid transparent;
+}
+.nook-postit-dot-on { border-color: #ffffff; }
+.nook-postit-pin:checked { background-color: rgba(255, 255, 255, 0.22); }
+
 /* ---------- Weather: next hours ---------- */
 .nook-wx-hourly {
     spacing: 6px;
