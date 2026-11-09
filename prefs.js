@@ -207,6 +207,21 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         });
         page.add(group);
 
+        // GNOME 47+ exposes the system accent; 46 has no such key, so the
+        // Auto option is hidden there.
+        const hasSystemAccent = !!Gio.SettingsSchemaSource.get_default()
+            ?.lookup('org.gnome.desktop.interface', true)?.has_key('accent-color');
+        let modeRow = null;
+        if (hasSystemAccent) {
+            modeRow = new Adw.ComboRow({
+                title: 'Accent',
+                subtitle: 'Custom, or follow the system accent (Settings → Appearance)',
+                model: Gtk.StringList.new(['Custom', 'System']),
+                selected: config.accentMode === 'system' ? 1 : 0,
+            });
+            group.add(modeRow);
+        }
+
         // Preset swatches. Clicking one commits it and syncs the picker/entry.
         const swatchRow = new Adw.ActionRow({ title: 'Presets' });
         const swatchBox = new Gtk.Box({
@@ -310,6 +325,20 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         hexEntry.add_controller(focusCtl);
         hexRow.add_suffix(hexEntry);
         group.add(hexRow);
+
+        // The custom controls are inert while the system accent is in charge.
+        if (modeRow) {
+            const syncSensitive = () => {
+                const custom = modeRow.selected !== 1;
+                for (const w of [swatchRow, pickerRow, hexRow])
+                    w.sensitive = custom;
+            };
+            modeRow.connect('notify::selected', () => {
+                config.setAccentMode(modeRow.selected === 1 ? 'system' : 'custom');
+                syncSensitive();
+            });
+            syncSensitive();
+        }
     }
 
     // ---- Glass & Blur ----

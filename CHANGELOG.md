@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — follow the system accent
+- On GNOME 47+, Preferences → Appearance has an **Accent** choice: *Custom* or
+  *System*. With System the notch uses GNOME's accent colour and recolours live
+  when it changes in Settings → Appearance. GNOME 46 has no such setting, so the
+  option is hidden there and the custom accent is used.
+
 ### Added — keyboard shortcut, command bar and keyboard navigation
 - **Super+/** toggles the notch from anywhere and opens it with a command bar
   (change or disable the shortcut in Preferences → Keyboard). The bar takes

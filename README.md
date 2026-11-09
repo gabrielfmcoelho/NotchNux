@@ -45,7 +45,7 @@ NotchNux replaces the default GNOME top-bar clock with a **living pill**. At a g
 | 📋 | **Clipboard** | The last 20 text clips with search and pins. Passwords are skipped; only pinned clips are saved. |
 | ⏲️ | **Stopwatch, Keep Awake, Stats** | A stopwatch with laps, a keep-awake toggle, and memory/CPU (plus, optionally, the CPU, SSD or GPU temperature) in the pill. Two-finger swipe skips tracks; right-click the pill for a quick menu. |
 | ⌨️ | **Keyboard shortcut & command bar** | **Super+/** (change it in Preferences → Keyboard) opens the notch with a command bar: `t <task>` adds a task (`!` stars it), `25` / `25m` / `1h` starts a focus timer, `=` does math, a tab name opens that tab, `n <note>` appends to Notes. In the dashboard, ←/→ switch tabs, Ctrl+1…9 open a tab by position, Tab / Shift+Tab move focus, Esc closes. |
-| 🎨 | **Theming** | Pick any accent color — the whole UI, dials and highlights recolor live. Reorder or hide dashboard tabs, and toggle individual features on/off, from a **native preferences window**. |
+| 🎨 | **Theming** | Pick any accent color, or on GNOME 47+ follow the system accent (Settings → Appearance) — the whole UI, dials and highlights recolor live. Reorder or hide dashboard tabs, and toggle individual features on/off, from a **native preferences window**. |
 
 ### Collapsed pill indicators
 - 📆 Date & time (pill sizes to its content so the clock never truncates)

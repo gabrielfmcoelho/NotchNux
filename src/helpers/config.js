@@ -189,6 +189,23 @@ export const FEATURE_DEFS = [
 
 const DEFAULT_ACCENT = '#7aa2ff';
 
+// GNOME 47+ system accent (org.gnome.desktop.interface accent-color), as the
+// libadwaita values.
+export const SYSTEM_ACCENTS = {
+    blue: '#3584e4', teal: '#2190a4', green: '#3a944a', yellow: '#c88800',
+    orange: '#ed5b00', red: '#e62d42', pink: '#d56199', purple: '#9141ac',
+    slate: '#6f8396',
+};
+export const ACCENT_MODES = ['custom', 'system'];
+
+// The hex the UI should use: the system accent in 'system' mode when GNOME
+// reports a known one (null on GNOME 46, which has no such key), else custom.
+export function resolveAccent(mode, customHex, systemName) {
+    if (mode === 'system' && systemName && Object.hasOwn(SYSTEM_ACCENTS, systemName))
+        return SYSTEM_ACCENTS[systemName];
+    return customHex;
+}
+
 // Up to `pinnedMax` tabs (1–MAX_PINNED, set in Preferences) sit beside Home
 // in the dashboard header; everything else is one click away in the grid.
 export const MAX_PINNED = 8;
@@ -292,6 +309,7 @@ export class ConfigStore {
             features[f.id] = f.default;
         return {
             accent: DEFAULT_ACCENT,
+            accentMode: 'custom',
             tabOrder: TAB_DEFS.map(t => t.id),
             tabs,
             features,
@@ -387,6 +405,7 @@ export class ConfigStore {
                     ? parsed.trayMirrorItems.filter(it => it && typeof it.id === 'string')
                     : [];
                 data.accent = normalizeHex(parsed.accent) ?? DEFAULT_ACCENT;
+                data.accentMode = ACCENT_MODES.includes(parsed.accentMode) ? parsed.accentMode : 'custom';
                 data.pinnedTabs = this._cleanPinned(parsed.pinnedTabs ?? DEFAULT_PINNED);
                 data.pinnedMax = clampPinnedMax(parsed.pinnedMax);
                 data.pillTemp = PILL_TEMPS.includes(parsed.pillTemp) ? parsed.pillTemp : 'off';
@@ -477,6 +496,17 @@ export class ConfigStore {
             return false;
         this._refresh();
         this._data.accent = norm;
+        this._save();
+        return true;
+    }
+    get accentMode() {
+        return this._data.accentMode;
+    }
+    setAccentMode(mode) {
+        if (!ACCENT_MODES.includes(mode))
+            return false;
+        this._refresh();
+        this._data.accentMode = mode;
         this._save();
         return true;
     }

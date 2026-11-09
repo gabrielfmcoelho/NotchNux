@@ -24,7 +24,7 @@ import { WallpaperHelper } from './helpers/wallpaper.js';
 import { ScreenShareWatch } from './helpers/screenshare.js';
 import { SlitDeck } from './helpers/slitdeck.js';
 import { Vinyl, AlbumArtDisc, Knob, AnalogClock, EqBars, CameraView, ACCENT, setAccent, accentHex, accentRgbStr } from './helpers/widgets.js';
-import { TAB_DEFS, FEATURE_DEFS, blurPreset } from './helpers/config.js';
+import { TAB_DEFS, FEATURE_DEFS, blurPreset, resolveAccent, hexToRgb01 } from './helpers/config.js';
 import { fmt } from './helpers/format.js';
 import { GlassBackdrop, createShoulder, SHOULDER_SIZE, PILL_HEIGHT } from './helpers/island.js';
 import { springTo, stopSpring, addPressFeedback } from './helpers/motion.js';
@@ -88,7 +88,8 @@ export const NotchNux = GObject.registerClass({
         // Load persisted preferences and apply the accent colour before any
         // Cairo widget draws, so the very first render uses the user's colour.
         this._config = config;
-        setAccent(this._config.accentRgb);
+        this._watchSystemAccent();
+        setAccent(hexToRgb01(this._resolvedAccent()));
         this.isExpanded = false;
         this._isExpanding = false;
         this._pointerInside = false;
@@ -393,7 +394,7 @@ export const NotchNux = GObject.registerClass({
         for (let f of FEATURE_DEFS)
             features[f.id] = this._config.isFeatureEnabled(f.id);
         return {
-            accent: this._config.accent,
+            accent: this._resolvedAccent(),
             tabsKey: JSON.stringify(this._config.visibleTabs),
             features,
             wallpaperKey: JSON.stringify(this._config.wallpaper),
@@ -455,12 +456,8 @@ export const NotchNux = GObject.registerClass({
         let next = this._configSnapshot();
         this._configState = next;
 
-        if (next.accent !== prev.accent) {
-            setAccent(this._config.accentRgb);
-            this._applyAccentStyles();
-            // Tab content bakes the accent into inline styles.
-            this._invalidateAllTabs();
-        }
+        if (next.accent !== prev.accent)
+            this._applyAccent();
 
         // Blur/glass changed in prefs: re-apply the preset + current-state
         // radius. _applyBlur reads the new config and enables/disables the
@@ -542,6 +539,9 @@ export const NotchNux = GObject.registerClass({
         this._destroyClaude();
         this._destroyDev();
         this._destroyActivities();
+        if (this._ifaceSettings && this._ifaceAccentId)
+            this._ifaceSettings.disconnect(this._ifaceAccentId);
+        this._ifaceSettings = null;
         this._screenShare?.destroy();
         this._screenShare = null;
         this._destroyKeyboard();
@@ -1764,6 +1764,34 @@ export const NotchNux = GObject.registerClass({
     // accent is user-chosen); the others fall back to the stylesheet.
     _tintTabButton(id, active) {
         this._tabButtons?.[id]?.set_style(active ? `color: ${accentHex()};` : null);
+    }
+
+    // GNOME 47+ has an accent-color key; 46 does not, so Auto is unavailable
+    // there and a stored 'system' mode falls back to the custom accent.
+    _watchSystemAccent() {
+        let schema = Gio.SettingsSchemaSource.get_default()
+            ?.lookup('org.gnome.desktop.interface', true);
+        if (!schema?.has_key('accent-color'))
+            return;
+        this._ifaceSettings = new Gio.Settings({ schema_id: 'org.gnome.desktop.interface' });
+        this._ifaceAccentId = this._ifaceSettings.connect('changed::accent-color', () => {
+            if (this._destroyed || this._config.accentMode !== 'system')
+                return;
+            this._applyConfigChange();
+        });
+    }
+
+    _resolvedAccent() {
+        let name = this._ifaceSettings?.get_string('accent-color') ?? null;
+        return resolveAccent(this._config.accentMode, this._config.accent, name);
+    }
+
+    // Recolour everything from the resolved accent (custom or system).
+    _applyAccent() {
+        setAccent(hexToRgb01(this._resolvedAccent()));
+        this._applyAccentStyles();
+        // Tab content bakes the accent into inline styles.
+        this._invalidateAllTabs();
     }
 
     _applyAccentStyles() {
