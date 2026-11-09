@@ -5,7 +5,7 @@
 import GLib from 'gi://GLib';
 import System from 'system';
 import { ProductivityStore } from '../src/helpers/productivity.js';
-import { LocalTaskSource, EdsTaskSource, taskListChoices, taskListLabel } from '../src/helpers/tasksources.js';
+import { LocalTaskSource, EdsTaskSource, taskListChoices, taskListLabel, LIST_GONE, listGone } from '../src/helpers/tasksources.js';
 
 let n = 0;
 function ok(cond, what) {
@@ -270,6 +270,86 @@ for (let why of ['Google sync worker restarted', 'Google sync worker exited']) {
     release(new Error('late'));
     await flush();
     eq(heard, h, 'no notification after destroy');
+}
+
+// ---- the list is gone (account removed / list deleted on the web) ----
+{
+    let dir = tmp();
+    let gone = false;
+    let client = new FakeClient({
+        'tasks.list': () => (gone ? new Error('unknown source L') : [gtask('a', 'alpha'), gtask('d', 'done', true)]),
+        'tasks.update': () => new Error('unknown source L'),
+    });
+    let src = new EdsTaskSource(client, 'L', path(dir, 's.json'), { timeout: () => 1, clearTimeout: () => {} });
+    await src.refresh();
+    eq([src.open.length, src.gone], [1, false], 'list there');
+    gone = true;
+    await src.refresh();
+    eq([src.error, src.errorOp, src.gone], [LIST_GONE, 'refresh', true], 'unknown source → "this list is gone"');
+    eq([src.open, src.done], [[], []], 'the stale tasks are dropped');
+    let before = client.calls.length;
+    eq(src.add('new one'), null, 'no add against a gone list');
+    src.toggle('a');
+    src.clearDone();
+    await src.settled();
+    eq(client.calls.length, before, 'no writes sent to a gone list');
+    gone = false;
+    await src.refresh();
+    eq([src.error, src.gone, src.open.length], [null, false, 1], 'back once the list answers again');
+    // A write refused because the list is gone drops the list too.
+    src.toggle('a');
+    await src.settled();
+    eq([src.error, src.gone, src.open.length], [LIST_GONE, true, 0], 'write: unknown source → gone');
+    eq(listGone(new Error('unknown source x')), true, 'listGone matches the worker error');
+    eq(listGone(new Error('offline')), false, 'listGone: other errors');
+    src.destroy();
+}
+
+// ---- the first refresh failing (login: offline, accounts late) retries once after 30 s ----
+{
+    let dir = tmp();
+    let timers = new Map(), nextId = 1, cleared = [];
+    let timeout = (s, fn) => {
+        let id = nextId++;
+        timers.set(id, { s, fn });
+        return id;
+    };
+    let clearTimeout = id => {
+        cleared.push(id);
+        timers.delete(id);
+    };
+    let fail = true;
+    let client = new FakeClient({ refresh: () => (fail ? new Error('no network') : {}), 'tasks.list': () => (fail ? new Error('no network') : [gtask('a', 'alpha')]) });
+    let src = new EdsTaskSource(client, 'L', path(dir, 's.json'), { timeout, clearTimeout });
+    await src.refresh();
+    eq(src.error, 'no network', 'first refresh failed');
+    eq([...timers.values()].map(t => t.s), [30], 'one retry in 30 s');
+    await src.refresh();
+    eq(timers.size, 1, 'a second failure adds no other retry');
+    fail = false;
+    let [[id, t]] = [...timers.entries()];
+    timers.delete(id);
+    ok(t.fn() === false, 'the retry runs once (SOURCE_REMOVE)');
+    await src.settled();
+    eq([src.error, src.open.map(x => x.id)], [null, ['a']], 'the retry lists the tasks');
+    fail = true;
+    await src.refresh();
+    eq(timers.size, 0, 'only the first refresh retries');
+    src.destroy();
+
+    // Destroyed (source changed / disabled) before it fires: the timeout goes.
+    let src2 = new EdsTaskSource(client, 'L', path(dir, 's2.json'), { timeout, clearTimeout });
+    await src2.refresh();
+    let [pending] = [...timers.keys()];
+    src2.destroy();
+    ok(cleared.includes(pending) && !timers.has(pending), 'destroy removes the pending retry');
+
+    // A good first refresh schedules nothing.
+    fail = false;
+    let src3 = new EdsTaskSource(client, 'L', path(dir, 's3.json'), { timeout, clearTimeout });
+    await src3.refresh();
+    eq(timers.size, 0, 'no retry after a good first refresh');
+    src3.destroy();
 }
 
 // ---- LocalTaskSource wraps the store unchanged ----

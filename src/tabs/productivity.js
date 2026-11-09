@@ -15,7 +15,7 @@ import St from 'gi://St';
 
 
 import { ProductivityStore, FOCUS_PRESETS, NOTE_COLORS, DATA_DIR, fmtCountdown } from '../helpers/productivity.js';
-import { LocalTaskSource, EdsTaskSource, taskListChoices } from '../helpers/tasksources.js';
+import { LocalTaskSource, EdsTaskSource, taskListChoices, LIST_GONE } from '../helpers/tasksources.js';
 import { EdsClient } from '../helpers/eds.js';
 import { FocusRing, AlbumArtDisc, BREAK_GREEN, accentHex, accentRgbStr } from '../helpers/widgets.js';
 import { addPressFeedback } from '../helpers/motion.js';
@@ -529,6 +529,12 @@ export const ProductivityTabs = {
             list.destroy_all_children();
             let open = this._taskSource.open;
             count.set_text(open.length ? `${open.length} open` : `${this._taskSource.doneToday} done today`);
+            // The picked Google list went away: say so, not "nothing to do".
+            if (this._taskSource.gone) {
+                count.set_text('');
+                list.add_child(label(LIST_GONE, 'nook-home-empty nook-task-gone'));
+                return;
+            }
             if (open.length === 0) {
                 list.add_child(label('Nothing on your list. Nice.', 'nook-home-empty'));
                 return;
@@ -792,7 +798,7 @@ export const ProductivityTabs = {
             let current = this._taskSource.kind === 'eds' ? this._taskSource.sourceUid : 'local';
             let choices = [...(this._taskLists ?? taskListChoices(null))];
             if (!choices.some(c => c.id === current))
-                choices.push({ id: current, label: this._taskLists ? 'Saved list (not found)' : 'Google list' });
+                choices.push({ id: current, label: this._taskLists || this._taskSource.gone ? LIST_GONE : 'Google list' });
             pickerLabel.set_text(choices.find(c => c.id === current).label);
             pickerList.visible = !!this._tasksPickerOpen;
             pickerList.destroy_all_children();
@@ -847,7 +853,9 @@ export const ProductivityTabs = {
                 refresh.visible = this._taskSource.kind === 'eds';
                 let err = this._taskSource.error;
                 errorLabel.visible = !!err;
-                if (err)
+                if (err && this._taskSource.gone)
+                    errorLabel.set_text(err);
+                else if (err)
                     errorLabel.set_text(`${this._taskSource.errorOp === 'refresh' ? "Couldn't reach Google" : "Couldn't save to Google"} — ${err}`);
             }
             badgeLabel.set_text(String(open.length));

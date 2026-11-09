@@ -23,7 +23,10 @@ import { ConfigStore, TAB_DEFS, FEATURE_DEFS, WALLPAPER_DEFAULTS, ENHANCE_AUTO, 
 import { discoverHwmon, pickSensors, pickFan, fanUsable, SENSOR_KINDS, FAN_GUARD_C } from './src/helpers/sensors.js';
 import { TERMINALS } from './src/helpers/dev.js';
 import { EdsClient } from './src/helpers/eds.js';
-import { taskListChoices } from './src/helpers/tasksources.js';
+import { taskListChoices, LIST_GONE } from './src/helpers/tasksources.js';
+
+// Evolution Data Server's GObject bindings (Google Tasks, calendar editing).
+const EDS_INSTALL_APT = 'sudo apt install gir1.2-ecal-2.0 gir1.2-edataserver-1.2';
 import {
     SETTINGS_PATH, isConnected, connectStatusLine, disconnectStatusLine, statusLineOutdated, updateStatusLine,
     isApproveConnected, connectApproveHook, disconnectApproveHook,
@@ -871,9 +874,10 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         }
     }
 
-    // ---- Google: Tasks through GNOME Online Accounts (helpers/eds.js) ----
-    // Off by default. Nothing is started until the switch is on; then one
-    // check (the EDS worker's hello + its task lists) runs once per dialog.
+    // ---- Google: Tasks and calendar events through GNOME Online Accounts
+    // (helpers/eds.js). Off by default. Nothing is started until a switch is
+    // on; then one check (the EDS worker's hello + its sources) runs once per
+    // dialog, its Status row covering both features.
     _addGoogleGroup(page, config) {
         const group = new Adw.PreferencesGroup({
             title: 'Google',
@@ -908,48 +912,83 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
             const saved = config.tasksSource;
             choices = taskListChoices(list);
             if (!choices.some(c => c.id === saved))
-                choices.push({ id: saved, label: 'Saved list (not found)' });
+                choices.push({ id: saved, label: LIST_GONE });
             model.splice(0, model.get_n_items(), choices.map(c => c.label));
             listRow.selected = Math.max(0, choices.findIndex(c => c.id === saved));
             filling = false;
         };
 
+        // Calendar events: the same worker and bindings as Google Tasks, so
+        // the Status row checks them when either switch is on.
+        const calDef = FEATURE_DEFS.find(f => f.id === 'calendarEdit');
+        const calRow = new Adw.SwitchRow({ title: calDef.label, use_markup: false, active: config.isFeatureEnabled(calDef.id) });
+        calRow.subtitle = calDef.description;
+        group.add(calRow);
+
+        // Shown with the install command when the bindings are missing.
+        const copy = new Gtk.Button({ icon_name: 'edit-copy-symbolic', valign: Gtk.Align.CENTER, visible: false,
+            tooltip_text: 'Copy the install command (Ubuntu/Debian)' });
+        copy.add_css_class('flat');
+        copy.connect('clicked', () => Gdk.Display.get_default().get_clipboard().set(EDS_INSTALL_APT));
+        status.add_suffix(copy);
+
         const check = async () => {
             const probe = await EdsClient.probe();
-            if (!probe.available)
-                return { error: `Not available — ${probe.reason}. Needs Evolution Data Server’s GObject bindings (gir1.2-ecal-2.0, gir1.2-edataserver-1.2).` };
+            if (!probe.available) {
+                return {
+                    missing: true,
+                    error: `Not available — ${probe.reason}. Google Tasks and calendar editing need Evolution Data Server’s GObject bindings. On Ubuntu/Debian run: ${EDS_INSTALL_APT} (on Fedora they come with the evolution-data-server package). Then log out and back in.`,
+                };
+            }
             const client = new EdsClient();
             try {
-                return { lists: (await client.call('sources'))?.tasks ?? [] };
+                const res = await client.call('sources');
+                return { lists: res?.tasks ?? [], calendars: res?.calendars ?? [] };
             } catch (e) {
-                return { error: `Couldn’t list your task lists — ${e.message}` };
+                return { error: `Couldn’t list your task lists and calendars — ${e.message}` };
             } finally {
                 client.destroy();
             }
         };
 
         const refresh = () => {
-            if (!enable.active) {
-                status.subtitle = 'Off. The Tasks tab uses the tasks stored on this computer.';
+            const tasksOn = enable.active, calOn = calRow.active;
+            copy.visible = false;
+            if (!tasksOn)
                 listRow.sensitive = false;
+            if (!tasksOn && !calOn) {
+                status.subtitle = 'Off. The Tasks tab uses the tasks stored on this computer; calendar events are read-only.';
                 return;
             }
             status.subtitle = 'Checking…';
             checked ??= check();
             checked.then(r => {
-                if (!enable.active)
+                const tasks = enable.active, cal = calRow.active;
+                if (!tasks && !cal)
                     return;
                 if (r.error) {
                     status.subtitle = r.error;
+                    copy.visible = !!r.missing;
                     listRow.sensitive = false;
                     return;
                 }
-                const google = r.lists.filter(l => l.backend === 'gtasks').length;
-                status.subtitle = google
-                    ? `${google} Google Tasks ${google === 1 ? 'list' : 'lists'} found.`
-                    : 'No Google Tasks lists found. Add a Google account in Settings → Online Accounts.';
-                showChoices(r.lists);
-                listRow.sensitive = true;
+                const parts = [];
+                if (tasks) {
+                    const google = r.lists.filter(l => l.backend === 'gtasks').length;
+                    parts.push(google
+                        ? `${google} Google Tasks ${google === 1 ? 'list' : 'lists'} found.`
+                        : 'No Google Tasks lists found. Add a Google account in Settings → Online Accounts.');
+                    showChoices(r.lists);
+                    listRow.sensitive = true;
+                    if (choices.find(c => c.id === config.tasksSource)?.label === LIST_GONE)
+                        parts.push(`The saved Tasks list: ${LIST_GONE}.`);
+                } else {
+                    parts.push('Google Tasks is off: the Tasks tab uses the tasks stored on this computer.');
+                }
+                parts.push(cal
+                    ? `Calendar editing is on (${r.calendars.length} ${r.calendars.length === 1 ? 'calendar' : 'calendars'}).`
+                    : 'Calendar editing is off.');
+                status.subtitle = parts.join(' ');
             });
         };
 
@@ -957,15 +996,11 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
             config.setFeatureEnabled(def.id, enable.active);
             refresh();
         });
+        calRow.connect('notify::active', () => {
+            config.setFeatureEnabled(calDef.id, calRow.active);
+            refresh();
+        });
         refresh();
-
-        // Calendar events: nothing to check here; the Calendar tab starts the
-        // worker only once the switch is on.
-        const calDef = FEATURE_DEFS.find(f => f.id === 'calendarEdit');
-        const calRow = new Adw.SwitchRow({ title: calDef.label, use_markup: false, active: config.isFeatureEnabled(calDef.id) });
-        calRow.subtitle = calDef.description;
-        calRow.connect('notify::active', () => config.setFeatureEnabled(calDef.id, calRow.active));
-        group.add(calRow);
     }
 
     // ---- Temperatures & fan (helpers/sensors.js) ----

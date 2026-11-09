@@ -10,6 +10,7 @@ FAKE="{ calls: [], resets: 0, destroyed: false,
       { uid: 'g1', name: 'My Tasks', account: 'me@example.com', backend: 'gtasks', writable: true, color: null },
       { uid: 'g2', name: 'My Tasks', account: 'you@example.com', backend: 'gtasks', writable: true, color: null },
       { uid: 'ro', name: 'Holidays', account: 'me@example.com', backend: 'caldav', writable: false, color: null }], calendars: [] });
+    if (this.gone && (op === 'refresh' || op === 'tasks.list')) return Promise.reject(new Error('unknown source ' + args.source));
     if (op === 'tasks.list') return Promise.resolve([{ uid: 't1', summary: 'from google', done: false, due: null, notes: '', updated: 1 }]);
     if (op === 'tasks.create') return args.summary === 'hold' ? new Promise(() => {}) : Promise.reject(new Error('offline'));
     return Promise.resolve({}); },
@@ -39,6 +40,16 @@ nnx_check gtasks-timer-on "$NNX._tasksRefreshId > 0" true
 # A row still being saved can't be ticked, edited, starred or deleted.
 nnx_eval "(() => { const n = $NNX; n._tasksUi.entry.set_text(''); n._taskSource.add('hold'); return true; })()" >/dev/null; sleep 0.5
 nnx_check gtasks-pending-inert "(() => { const n = $NNX; $FIND const row = find(host, 'nook-task-pending'); const check = find(row, 'nook-task-check'); const text = find(row, 'nook-task-text'); const acts = find(row, 'nook-task-actions').get_children(); return [!!row, row.opacity < 255, check.reactive, text.reactive, acts.length, acts.some(b => b.reactive)]; })()" '[true,true,false,false,2,false]'
+
+# The list is gone (account removed / list deleted on the web): the header
+# says so, the stale tasks go, adds don't run; Home shows the same hint.
+GONE="'This list is gone ' + String.fromCharCode(8212) + ' pick another list'"
+nnx_eval "(() => { const n = $NNX; globalThis.__nnxFake.gone = true; n._taskSource.refresh(); return true; })()" >/dev/null; sleep 1
+nnx_check gtasks-gone "(() => { const n = $NNX; $FIND const err = find(host, 'nook-task-error'); const before = globalThis.__nnxFake.calls.length; const added = n._taskSource.add('nope'); return [n._taskSource.gone, n._taskSource.open.length, err.visible, err.get_text() === $GONE, added, globalThis.__nnxFake.calls.length === before]; })()" '[true,0,true,true,null,true]'
+nnx_eval "(() => { const n = $NNX; n._switchTab('home'); return true; })()" >/dev/null; sleep 1
+nnx_check gtasks-gone-home "(() => { const n = $NNX; const find = (x, cls) => { if (x.has_style_class_name && x.has_style_class_name(cls)) return x; for (const c of x.get_children()) { const r = find(c, cls); if (r) return r; } return null; }; const hint = find(n._tabHosts.get('home'), 'nook-task-gone'); return [!!hint, !!hint && hint.get_text() === $GONE]; })()" '[true,true]'
+nnx_eval "(() => { const n = $NNX; globalThis.__nnxFake.gone = false; n._switchTab('tasks'); return true; })()" >/dev/null; sleep 1
+nnx_check gtasks-back "(() => { const n = $NNX; return [n._taskSource.gone, n._taskSource.open.map(t => t.text)]; })()" '[false,["from google"]]'
 
 # Back to Local with the flag still on: the re-sync timer stops.
 nnx_eval "(() => { const n = $NNX; n._pickTaskList('local'); return true; })()" >/dev/null; sleep 0.5

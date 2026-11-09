@@ -3,7 +3,8 @@
 // imports, so tests/calevents-check.js runs it under plain `gjs -m`.
 //
 // A form: { title, date: 'YYYY-MM-DD', start: 'HH:MM', end: 'HH:MM', allDay,
-//           days (an all-day event's length), location, calendar (source uid) }
+//           days (an all-day event's length), location, calendar (source uid),
+//           spanDays (a timed event's end date − start date; absent = 0) }
 
 export const DEFAULT_MINUTES = 30;
 
@@ -65,6 +66,10 @@ export function eventForm(ev, calendar = null) {
     let start = ev.start, end = ev.end instanceof Date && ev.end > ev.start ? ev.end : ev.start;
     let allDay = !!ev.allDay || (isMidnight(start) && isMidnight(end) && end > start);
     let days = allDay ? Math.max(1, Math.round((end - start) / 86400000)) : 1;
+    // A timed event over several days keeps its end that many dates later
+    // when only a time is edited (the editor shows one date).
+    let midnight = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    let spanDays = allDay ? 0 : Math.max(0, Math.round((midnight(end) - midnight(start)) / 86400000));
     // An all-day event's hidden times are where "All day" off starts: 09:00
     // for DEFAULT_MINUTES, as for a new event on another day.
     let times = allDay
@@ -72,7 +77,7 @@ export function eventForm(ev, calendar = null) {
         : { start: hm(start), end: hm(end) };
     return {
         title: ev.title ?? '', date: dayIso(start), ...times,
-        allDay, days, location: ev.location ?? '', calendar,
+        allDay, days, location: ev.location ?? '', calendar, spanDays,
     };
 }
 
@@ -89,12 +94,14 @@ export function eventTimes(form, tzid) {
     let s = parseHm(form.start), e = parseHm(form.end);
     if (s === null || e === null)
         return { error: 'Times must look like 15:00' };
-    if (e === s)
+    let span = Math.max(0, Math.floor(form.spanDays || 0));
+    if (e === s && !span)
         return { error: 'The end must be after the start' };
     let start = at(day, s);
-    let end = at(day, e);
-    if (e < s) // ends after midnight
-        end = at(new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1), e);
+    let dayPlus = n => new Date(day.getFullYear(), day.getMonth(), day.getDate() + n);
+    // Several days long: the end stays `span` dates after the start.
+    // Otherwise an end before the start ends after midnight.
+    let end = at(dayPlus(span || (e < s ? 1 : 0)), e);
     // Compared as instants: a time skipped by a DST change moves forward
     // (02:30 → 03:30), which can put the end at or before the start.
     if (end <= start)

@@ -50,6 +50,15 @@ function countDoneToday(done) {
 // been done just before). Such writes re-list instead of rolling back.
 export const outcomeUnknown = e => /timed out$|^Google sync worker (restarted|exited)$/.test(e?.message ?? '');
 
+// The worker doesn't know the picked list any more: its Google account was
+// removed, or the list was deleted on the web.
+export const listGone = e => /^unknown source /.test(e?.message ?? '');
+export const LIST_GONE = 'This list is gone — pick another list';
+
+// The first refresh failing (at login: offline, the accounts service not up
+// yet) is tried once more after this long.
+export const FIRST_RETRY_S = 30;
+
 // "<list> — <account>": two Google accounts often share list names.
 export function taskListLabel(source) {
     return source.account ? `${source.name} — ${source.account}` : source.name;
@@ -157,9 +166,21 @@ export class LocalTaskSource {
 // write is undone (only that change: other edits made meanwhile stay), sets
 // `error` and tells listeners. A timed-out write re-lists from the worker
 // instead, since it may have gone through after all. Stars are ours only
-// (Google Tasks has none): a uid list in `starsPath`.
+// (Google Tasks has none): a uid list in `starsPath`. A list the worker no
+// longer knows (listGone) is dropped: no tasks, `gone`, LIST_GONE as the
+// error, and no writes until a refresh finds it again.
+// `timeout(seconds, fn)` / `clearTimeout(id)`: the first-refresh retry's
+// timer (tests inject one).
 export class EdsTaskSource {
-    constructor(client, sourceUid, starsPath) {
+    constructor(client, sourceUid, starsPath, {
+        timeout = (secs, fn) => GLib.timeout_add_seconds(GLib.PRIORITY_LOW, secs, fn),
+        clearTimeout = id => GLib.Source.remove(id),
+    } = {}) {
+        this._timeout = timeout;
+        this._clearTimeout = clearTimeout;
+        this._retryId = 0;
+        this._refreshedOnce = false;
+        this._gone = false;
         this._client = client;
         this._source = sourceUid;
         this._starsPath = starsPath;
@@ -197,6 +218,18 @@ export class EdsTaskSource {
 
     get sourceUid() {
         return this._source;
+    }
+
+    get gone() {
+        return this._gone;
+    }
+
+    // The list went away: forget its tasks, say so.
+    _markGone(op) {
+        this._gone = true;
+        this._tasks = [];
+        this._error = LIST_GONE;
+        this._errorOp = op;
     }
 
     // Open tasks: starred first, then in the list's own order.
@@ -299,8 +332,25 @@ export class EdsTaskSource {
         }
         if (this._destroyed)
             return;
-        this._error = err ? err.message ?? String(err) : null;
-        this._errorOp = 'refresh';
+        if (err && listGone(err)) {
+            this._markGone('refresh');
+        } else {
+            this._error = err ? err.message ?? String(err) : null;
+            this._errorOp = 'refresh';
+            if (!err)
+                this._gone = false;
+        }
+        // Only the first: later failures wait for the periodic re-sync.
+        if (!this._refreshedOnce) {
+            this._refreshedOnce = true;
+            if (err) {
+                this._retryId = this._timeout(FIRST_RETRY_S, () => {
+                    this._retryId = 0;
+                    this.refresh();
+                    return GLib.SOURCE_REMOVE;
+                });
+            }
+        }
         this._notify();
     }
 
@@ -326,6 +376,11 @@ export class EdsTaskSource {
                 return;
             let reason = e?.message ?? String(e);
             let timedOut = outcomeUnknown(e);
+            if (listGone(e)) {
+                this._markGone(info.op);
+                this._notify({ failed: { op: info.op, reason: LIST_GONE, text: info.text ?? null, timedOut: false } });
+                return;
+            }
             if (timedOut) {
                 // Unknown outcome: show whatever the worker ends up with.
                 this._tasks = this._tasks.filter(t => !(info.tempId && t.id === info.tempId));
@@ -346,7 +401,7 @@ export class EdsTaskSource {
 
     add(text) {
         let parsed = parseNewTask(text);
-        if (!parsed)
+        if (!parsed || this._gone)
             return null;
         let task = {
             id: `pending:${GLib.uuid_string_random()}`, text: parsed.text, done: false, starred: parsed.starred,
@@ -482,6 +537,10 @@ export class EdsTaskSource {
 
     destroy() {
         this._destroyed = true;
+        if (this._retryId) {
+            this._clearTimeout(this._retryId);
+            this._retryId = 0;
+        }
         this._cancellable.cancel();
         this._listeners.clear();
     }

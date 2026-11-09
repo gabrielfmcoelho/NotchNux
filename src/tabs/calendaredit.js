@@ -27,7 +27,7 @@ import { addPressFeedback } from '../helpers/motion.js';
 import { accentHex } from '../helpers/widgets.js';
 import { fmt } from '../helpers/format.js';
 import { VERTICAL, HORIZONTAL } from '../helpers/compat.js';
-import { logError } from '../helpers/log.js';
+import { logDebug } from '../helpers/log.js';
 import { SYS } from './ledge.js';
 
 // Writability answers are re-asked on tab open once older than this.
@@ -85,12 +85,18 @@ export const CalendarEdit = {
         if (!this._calEditOn())
             return;
         this._calClient?.reset();
-        if (this._calWritable && Date.now() - this._calWritable.at > WRITABLE_STALE_MS)
+        if (this._calWritable?.error) {
+            // Asked again on the next event opened (bindings installed since?).
+            this._calWritable = null;
+        } else if (this._calWritable && Date.now() - this._calWritable.at > WRITABLE_STALE_MS) {
             this._loadCalendarWritability();
+        }
     },
 
     // Ask the worker which calendars take writes (connecting each once).
-    // Kept for the session; concurrent calls share one request.
+    // Kept for the session; concurrent calls share one request. A failure
+    // (no ECal bindings, worker can't start) is kept as { error } and shown
+    // in the sheet; it is asked again only when the tab is shown again.
     _loadCalendarWritability() {
         if (this._calWritableLoading)
             return this._calWritableLoading;
@@ -102,7 +108,10 @@ export const CalendarEdit = {
             let calendars = Array.isArray(res?.calendars) ? res.calendars : [];
             this._calWritable = { at: Date.now(), calendars, choices: writableCalendars(calendars) };
         }, e => {
-            logError('listing calendars failed', e);
+            // Shown in the sheet ("Calendar editing isn't available"), so not an error here.
+            logDebug('listing calendars failed', e);
+            if (this._calClient === client)
+                this._calWritable = { at: Date.now(), calendars: [], choices: [], error: e?.message ?? String(e) };
         }).finally(() => {
             // Only our own: an off/on may have started a newer request.
             if (this._calWritableLoading === loading)
@@ -130,6 +139,13 @@ export const CalendarEdit = {
         if (!c)
             return null;
         return c.account ? `${c.name} — ${c.account}` : c.name;
+    },
+
+    // Why events can't be edited at all (the calendars couldn't be listed),
+    // or null.
+    _calendarEditUnavailable() {
+        let reason = this._calWritable?.error;
+        return reason ? `Calendar editing isn't available — ${reason}` : null;
     },
 
     _defaultCalendar() {
@@ -219,6 +235,11 @@ export const CalendarEdit = {
         let caret = field ? focus.get_cursor_position() : -1;
         let fresh = this._buildCalendarSheet();
         panel.replace_child(old, fresh);
+        // replace_child only unparents: destroy the old sheet now, or its
+        // fields linger until GC, where a modal grab that remembered one as
+        // the previous focus can't hear its 'destroy' and pops onto a
+        // disposed actor.
+        old.destroy();
         this._calSheetActor = fresh;
         let text = field ? this._calSheetUi[field]?.clutter_text : null;
         if (text) {
@@ -280,6 +301,9 @@ export const CalendarEdit = {
             box.add_child(label(calName, 'nook-calendar-sheet-meta'));
         let error = label(sheet.error ?? '', 'nook-task-error nook-calendar-sheet-error', { visible: !!sheet.error });
         box.add_child(error);
+        let unavailable = this._calendarEditUnavailable();
+        if (unavailable)
+            box.add_child(label(unavailable, 'nook-task-error nook-calendar-unavailable', { x_expand: true }));
 
         let writable = this._calendarWritable(sheet.ids.source) === true;
         let actions = new St.BoxLayout({ style_class: 'nook-calendar-sheet-actions', ...HORIZONTAL, x_expand: true });
@@ -322,6 +346,16 @@ export const CalendarEdit = {
             form[key] = entry.get_text();
         });
         entry.clutter_text.connect('activate', () => this._saveCalendarSheet());
+        // Connected before _makeTypable's handler, which stops Esc: Esc in a
+        // field backs out of the sheet like Esc anywhere else in it.
+        entry.clutter_text.connect('key-press-event', (a, ev) => {
+            if (ev.get_key_symbol() !== Clutter.KEY_Escape || !this._calendarEscape())
+                return Clutter.EVENT_PROPAGATE;
+            // The field is gone with the sheet: let go of the grab (kept
+            // for a keyboard-opened dashboard, as when focus leaves a field).
+            this._queueKeyboardRelease();
+            return Clutter.EVENT_STOP;
+        });
         this._makeTypable(entry);
         return entry;
     },
@@ -359,7 +393,13 @@ export const CalendarEdit = {
         }
 
         // The calendar: picked for a new event; an existing one stays put.
-        if (sheet.mode === 'new') {
+        let unavailable = this._calendarEditUnavailable();
+        if (sheet.mode === 'new' && unavailable) {
+            let why = label(unavailable, 'nook-task-error nook-calendar-unavailable', { x_expand: true });
+            why.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+            why.clutter_text.line_wrap = true;
+            box.add_child(why);
+        } else if (sheet.mode === 'new') {
             let choices = this._calWritable?.choices ?? [];
             let current = choices.find(c => c.id === form.calendar);
             let text = current?.label ?? (this._calWritableLoading ? 'Loading calendars…'
@@ -439,7 +479,8 @@ export const CalendarEdit = {
         sheet.busy = true;
         sheet.error = null;
         this._redrawCalendarSheet();
-        this._calendarEditClient().call(op, args).then(() => {
+        let client = this._calendarEditClient();
+        client.call(op, args).then(() => {
             if (this._destroyed || this._calSheet !== sheet)
                 return;
             // Show the day the event is on; the CalendarServer brings it in.
@@ -448,7 +489,7 @@ export const CalendarEdit = {
                 this._selectedCalendarDate = day;
             this._requestCalendarServerRange(45, false);
             this._closeCalendarSheet();
-        }, e => this._onCalendarWriteFailed(sheet, e));
+        }, e => this._onCalendarWriteFailed(sheet, e, client));
     },
 
     _deleteCalendarEvent(all) {
@@ -459,21 +500,26 @@ export const CalendarEdit = {
         sheet.error = null;
         this._redrawCalendarSheet();
         let { source, uid, rid } = sheet.ids;
-        this._calendarEditClient().call('events.delete', { source, uid, rid: rid || null, all: !!all }).then(() => {
+        let client = this._calendarEditClient();
+        client.call('events.delete', { source, uid, rid: rid || null, all: !!all }).then(() => {
             if (!this._destroyed && this._calSheet === sheet)
                 this._closeCalendarSheet();
-        }, e => this._onCalendarWriteFailed(sheet, e));
+        }, e => this._onCalendarWriteFailed(sheet, e, client));
     },
 
     // A refused write: the alert (it waits while the notch is open), the
     // reason inline, the sheet open with the user's input. An unknown outcome
     // (timeout, worker gone) may have gone through: re-read the range instead.
-    _onCalendarWriteFailed(sheet, e) {
+    // A client dropped meanwhile (calendarEdit switched off mid-save) is no
+    // failure to report.
+    _onCalendarWriteFailed(sheet, e, client) {
         if (this._destroyed)
             return;
         let reason = e?.message ?? String(e);
+        if (this._calClient !== client || reason === 'EdsClient destroyed')
+            return;
         this._pushAlert({ kind: 'gcal', icon: 'dialog-warning-symbolic', color: SYS.red,
-            title: "Couldn't save to Google", value: reason });
+            title: "Couldn't save the event", value: reason });
         if (this._calSheet !== sheet)
             return;
         sheet.busy = false;

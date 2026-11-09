@@ -84,6 +84,21 @@ eq(eventPatch(initial, { ...initial, end: '10:45' }, TZ).patch,
 eq(eventPatch(holiday, { ...holiday, start: '08:00' }, TZ), { patch: {} }, 'hidden time fields of an all-day event ignored');
 ok(eventPatch(initial, { ...initial, title: '' }, TZ).error, 'empty title refused');
 
+// A timed event over several days (Mon 10:00 → Wed 12:00): editing a time
+// keeps the end two days after the start, not one day.
+let conf = eventForm({ title: 'Conference', start: new Date(2026, 10, 9, 10), end: new Date(2026, 10, 11, 12), allDay: false }, 'cal-1');
+eq([conf.allDay, conf.date, conf.start, conf.end], [false, '2026-11-09', '10:00', '12:00'], 'multi-day timed form');
+eq(eventPatch(conf, { ...conf, start: '11:00' }, TZ).patch,
+    { start: localIso(new Date(2026, 10, 9, 11)), end: localIso(new Date(2026, 10, 11, 12)), allDay: false, tzid: TZ },
+    'multi-day: start time edit keeps the end date');
+eq(eventPatch(conf, { ...conf, end: '09:00' }, TZ).patch?.end, localIso(new Date(2026, 10, 11, 9)),
+    'multi-day: end time before the start time keeps the end date');
+eq(eventPatch(conf, { ...conf, date: '2026-11-16' }, TZ).patch?.end, localIso(new Date(2026, 10, 18, 12)),
+    'multi-day: a new date moves the whole span');
+// Overnight (23:30 → 00:30 next day) still ends the next day.
+let late = eventForm({ title: 'Late', start: new Date(2026, 10, 9, 23, 30), end: new Date(2026, 10, 10, 0, 30) }, 'cal-1');
+eq(eventPatch(late, { ...late, end: '01:00' }, TZ).patch?.end, localIso(new Date(2026, 10, 10, 1)), 'overnight edit');
+
 // The picker: writable calendars only.
 eq(writableCalendars([
     { uid: 'a', name: 'Work', account: 'me@example.com', writable: true, color: '#f00' },

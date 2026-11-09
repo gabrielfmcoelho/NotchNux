@@ -68,16 +68,41 @@ nnx_check caledit-delete-this "(() => { const n = $NNX; $LAST const [, a] = last
 
 # A refused save keeps the editor open with the input, inline error + alert.
 nnx_eval "(() => { const n = $NNX; $FIND find(host, 'nook-calendar-add').emit('clicked', 1); n._calSheetUi.title.set_text('fail'); n._calSheetUi.location.set_text('Room 9'); find(host, 'nook-calendar-save').emit('clicked', 1); return true; })()" >/dev/null; sleep 1
-nnx_check caledit-save-rejected "(() => { const n = $NNX; $FIND const err = find(host, 'nook-calendar-sheet-error'); return [n._calSheet && n._calSheet.mode, n._calSheetUi.title.get_text(), n._calSheetUi.location.get_text(), err.visible, err.get_text(), n._alerts._pending.some(a => a.kind === 'gcal' && a.title === \"Couldn't save to Google\" && a.value === 'offline')]; })()" '["new","fail","Room 9",true,"offline",true]'
+nnx_check caledit-save-rejected "(() => { const n = $NNX; $FIND const err = find(host, 'nook-calendar-sheet-error'); return [n._calSheet && n._calSheet.mode, n._calSheetUi.title.get_text(), n._calSheetUi.location.get_text(), err.visible, err.get_text(), n._alerts._pending.some(a => a.kind === 'gcal' && a.title === \"Couldn't save the event\" && a.value === 'offline')]; })()" '["new","fail","Room 9",true,"offline",true]'
 nnx_shot caledit-save-rejected
 
-# Keyboard: Esc in an editor field releases the grab only (sheet and input stay).
+# Keyboard: Esc in an editor field (a real key press) closes the editor like
+# Esc anywhere in the sheet; the notch stays open and the grab goes.
 nnx_eval "(() => { const n = $NNX; n._calSheetUi.title.clutter_text.grab_key_focus(); return true; })()" >/dev/null; sleep 0.5
 nnx_check caledit-field-grab "(() => { const n = $NNX; return [n._kbGrab !== null, global.stage.get_key_focus() === n._calSheetUi.title.clutter_text]; })()" '[true,true]'
 press KEY_Escape
-nnx_check caledit-field-esc "(() => { const n = $NNX; return [n.isExpanded, n._kbGrab === null, n._calSheet && n._calSheet.mode, n._calSheetUi.title.get_text()]; })()" '[true,true,"new","fail"]'
+nnx_check caledit-field-esc "(() => { const n = $NNX; $FIND return [n.isExpanded, n._kbGrab === null, n._calSheet, !!find(host, 'nook-calendar-sheet'), !!find(host, 'nook-calendar-event-btn')]; })()" '[true,true,null,false,true]'
+# Esc in the time field of an edit sheet: closes it too, one Esc only.
+nnx_eval "(() => { const n = $NNX; $FIND n._openCalendarEvent(n._calendarServerEvents.get(ID('w', 'ev1', ''))); find(host, 'nook-calendar-edit').emit('clicked', 1); n._calSheetUi.start.clutter_text.grab_key_focus(); return true; })()" >/dev/null; sleep 0.5
+nnx_check caledit-edit-field-grab "(() => { const n = $NNX; return [n._calSheet && n._calSheet.mode, n._kbGrab !== null]; })()" '["edit",true]'
+press KEY_Escape
+nnx_check caledit-edit-field-esc "(() => { const n = $NNX; return [n.isExpanded, n._kbGrab === null, n._calSheet]; })()" '[true,true,null]'
+
+# Turned off mid-save: the dropped client's rejection raises no alert.
+nnx_eval "(() => { const n = $NNX; $FIND const orig = globalThis.__nnxCal.call.bind(globalThis.__nnxCal); globalThis.__nnxCalOrig = globalThis.__nnxCal.call; globalThis.__nnxCal.call = (op, args) => op === 'events.create' ? new Promise((r, j) => { globalThis.__nnxCalReject = j; }) : orig(op, args); find(host, 'nook-calendar-add').emit('clicked', 1); n._calSheetUi.title.set_text('Mid'); find(host, 'nook-calendar-save').emit('clicked', 1); return true; })()" >/dev/null; sleep 0.5
+nnx_eval "(() => { const n = $NNX; n._setFeature('calendarEdit', false); globalThis.__nnxCalReject(new Error('EdsClient destroyed')); return true; })()" >/dev/null; sleep 0.5
+nnx_check caledit-off-mid-save "(() => { const n = $NNX; return [n._calClient, typeof globalThis.__nnxCalReject, [n._alerts.current, ...n._alerts._pending].some(a => a && a.value === 'EdsClient destroyed')]; })()" '[null,"function",false]'
+nnx_eval "(() => { const n = $NNX; globalThis.__nnxCal.call = globalThis.__nnxCalOrig; n._calClient = globalThis.__nnxCal; globalThis.__nnxCal.destroyed = false; n._setFeature('calendarEdit', true); return true; })()" >/dev/null; sleep 0.5
 
 # Flag off again: the sheet and the client go, the tab is as before.
 nnx_eval "(() => { const n = $NNX; n._setFeature('calendarEdit', false); return true; })()" >/dev/null; sleep 1
 nnx_check caledit-off-again "(() => { const n = $NNX; $FIND return [globalThis.__nnxCal.destroyed, n._calClient, n._calSheet, !!find(host, 'nook-calendar-add'), !!find(host, 'nook-calendar-event-btn')]; })()" '[true,null,null,false,false]'
+
+# No EDS bindings: the sources call fails once; the editor and the detail
+# sheet say why instead of a dead picker, and opening again doesn't re-ask.
+WHY="'Calendar editing isn' + String.fromCharCode(39) + 't available — ECal not installed'"
+NOECAL="{ calls: [], call(op, args) { this.calls.push(op); return op === 'sources' ? Promise.reject(new Error('ECal not installed')) : Promise.resolve({}); }, reset() {}, destroy() {} }"
+nnx_eval "(() => { const n = $NNX; globalThis.__nnxNoEcal = $NOECAL; n._calClient = globalThis.__nnxNoEcal; n._setFeature('calendarEdit', true); return true; })()" >/dev/null; sleep 1
+nnx_eval "(() => { const n = $NNX; $FIND find(host, 'nook-calendar-add').emit('clicked', 1); return true; })()" >/dev/null; sleep 1
+nnx_check caledit-unavailable-editor "(() => { const n = $NNX; $FIND const why = find(host, 'nook-calendar-unavailable'); return [n._calSheet && n._calSheet.mode, !!why && why.get_text() === $WHY, !!find(host, 'nook-calendar-picker')]; })()" '["new",true,false]'
+nnx_shot caledit-unavailable
+nnx_eval "(() => { const n = $NNX; $FIND n._closeCalendarSheet(); n._openCalendarEvent(n._calendarServerEvents.get(ID('w', 'ev1', ''))); return true; })()" >/dev/null; sleep 1
+nnx_check caledit-unavailable-detail "(() => { const n = $NNX; $FIND const why = find(host, 'nook-calendar-unavailable'); return [n._calSheet && n._calSheet.mode, !!why && why.get_text() === $WHY, !!find(host, 'nook-calendar-edit'), globalThis.__nnxNoEcal.calls.filter(c => c === 'sources').length]; })()" '["detail",true,false,1]'
+nnx_eval "(() => { const n = $NNX; n._closeCalendarSheet(); n._setFeature('calendarEdit', false); delete globalThis.__nnxNoEcal; return true; })()" >/dev/null; sleep 0.5
+
 nnx_eval "(() => { const n = $NNX; $ID for (const id of [ID('w', 'ev1', ''), ID('h', 'hol1', ''), ID('w', 'rec1', '20261109T130000Z')]) n._calendarServerEvents.delete(id); n.collapse(); delete globalThis.__nnxCal; return true; })()" >/dev/null
