@@ -21,6 +21,7 @@ import { MediaHelper } from './helpers/media.js';
 import { ShelfHelper } from './helpers/shelf.js';
 import { FileDropBridge } from './helpers/filedrop.js';
 import { WallpaperHelper } from './helpers/wallpaper.js';
+import { ScreenShareWatch } from './helpers/screenshare.js';
 import { SlitDeck } from './helpers/slitdeck.js';
 import { Vinyl, AlbumArtDisc, Knob, AnalogClock, EqBars, CameraView, ACCENT, setAccent, accentHex, accentRgbStr } from './helpers/widgets.js';
 import { TAB_DEFS, FEATURE_DEFS, blurPreset } from './helpers/config.js';
@@ -197,6 +198,8 @@ export const NotchNux = GObject.registerClass({
         this._initKeyboard();
         // D-Bus API for live activities (io.github.notchnux).
         this._initActivities();
+        // Screen sharing / recording indicator for the pill.
+        this._screenShare = new ScreenShareWatch(() => this._updatePrivacyIndicators());
         // Recolour the active-state chrome to match the persisted accent.
         this._applyAccentStyles();
         // Shoulders + the (hidden unless enabled) glass backdrop.
@@ -539,6 +542,8 @@ export const NotchNux = GObject.registerClass({
         this._destroyClaude();
         this._destroyDev();
         this._destroyActivities();
+        this._screenShare?.destroy();
+        this._screenShare = null;
         this._destroyKeyboard();
         this._destroyProductivity();
         stopSpring(this);
@@ -908,6 +913,19 @@ export const NotchNux = GObject.registerClass({
             icon_size: 13,
             visible: false,
             y_align: Clutter.ActorAlign.CENTER });
+        this._pillShare = new St.Icon({
+            icon_name: 'screen-shared-symbolic',
+            style_class: 'notchnux-pill-priv priv-red',
+            icon_size: 13,
+            visible: false,
+            reactive: true,
+            y_align: Clutter.ActorAlign.CENTER });
+        // A click here opens the Stop peek, not the dashboard.
+        this._pillShare.connect('button-press-event', (a, e) => {
+            if (e.get_button() === 1) this._showScreenSharePeek();
+            return Clutter.EVENT_STOP;
+        });
+        this._pillPrivBox.add_child(this._pillShare);
         this._pillPrivBox.add_child(this._pillMic);
         this._pillPrivBox.add_child(this._pillCam);
         this._pill.add_child(this._pillPrivBox);
@@ -2566,15 +2584,26 @@ export const NotchNux = GObject.registerClass({
     _updatePrivacyIndicators() {
         if (this._destroyed) return;
         if (!this._pillMic) return;
-        let before = this._pillMic.visible + '|' + this._pillCam.visible;
+        let before = this._pillMic.visible + '|' + this._pillCam.visible + '|' + this._pillShare.visible;
 
-        // Feature off: hide both dots and reflow if that changed anything.
+        // Feature off: hide the dots and reflow if that changed anything.
         if (!this._config.isFeatureEnabled('showPrivacy')) {
             this._pillMic.visible = false;
             this._pillCam.visible = false;
-            if (before !== 'false|false' && !this.isExpanded)
+            this._pillShare.visible = false;
+            if (before !== 'false|false|false' && !this.isExpanded)
                 this._applyPillWidth();
             return;
+        }
+
+        // Screen share / recording (red). Also needs its own flag.
+        let share = this._screenShare;
+        if (share?.active && this._config.isFeatureEnabled('showScreenShare')) {
+            this._pillShare.icon_name = share.recording ?
+                'media-record-symbolic' : 'screen-shared-symbolic';
+            this._pillShare.visible = true;
+        } else {
+            this._pillShare.visible = false;
         }
 
         let micMuted = this._system.isMicMuted();
@@ -2603,11 +2632,24 @@ export const NotchNux = GObject.registerClass({
         }
 
         // Reflow the pill if an indicator appeared/disappeared.
-        let after = this._pillMic.visible + '|' + this._pillCam.visible;
+        let after = this._pillMic.visible + '|' + this._pillCam.visible + '|' + this._pillShare.visible;
         if (after !== before && !this.isExpanded)
             this._applyPillWidth();
         if (after !== before)
             this._updateTuck?.();
+    }
+
+    // Peek offered by the pill's share icon: what is going on, and a Stop.
+    _showScreenSharePeek() {
+        let share = this._screenShare;
+        if (!share) return;
+        let recording = share.recording;
+        this._showNotificationPeek(
+            recording ? 'Screen is being recorded' : 'Screen is being shared',
+            '',
+            new Gio.ThemedIcon({ name: recording ? 'media-record-symbolic' : 'screen-shared-symbolic' }),
+            null,
+            [{ label: 'Stop', callback: () => this._screenShare?.stop() }]);
     }
 
     // Even gap (px) the pill keeps between neighbouring zones — the "slot" width
@@ -4435,6 +4477,9 @@ export const NotchNux = GObject.registerClass({
                 break;
             case 'showPrivacy':
                 this._system.setPrivacyPolling(on);
+                this._updatePrivacyIndicators();
+                break;
+            case 'showScreenShare':
                 this._updatePrivacyIndicators();
                 break;
             case 'pillMarquee':
