@@ -65,3 +65,27 @@ eq([cfg({}).isFeatureEnabled('calendarEdit'), FEATURE_DEFS.find(f => f.id === 'c
 'calendarEdit off by default');
 
 print(`config-check: ${n} checks passed`);
+
+// ---- the pill's zones: order reconciles like tabs, hidden flags, feature-backed zones
+{
+    const { PILL_ZONES, reconcileOrder } = await import('../src/helpers/config.js');
+    const ids = PILL_ZONES.map(z => z.id);
+    eq(cfg({}).pillOrder, ids, 'default pill order is the table order');
+    let o = cfg({ pillOrder: ['clock', 'companion'] }).pillOrder;
+    ok(o.indexOf('clock') < o.indexOf('companion') && o.length === ids.length, 'a stored relative order is kept, missing zones fill in');
+    eq(cfg({ pillOrder: ['battery', 'nope', 'battery'] }).pillOrder.length, ids.length, 'unknown and duplicate ids drop, the rest fills in');
+    eq(reconcileOrder(['c'], ['a', 'b', 'c', 'd']), ['a', 'b', 'c', 'd'], 'missing ids slot in around the kept one');
+    let c = cfg({ pillZones: { music: false, alerts: 'no' } });
+    eq([c.isPillZoneShown('music'), c.isPillZoneShown('alerts'), c.isPillZoneShown('clock'), c.isPillZoneShown('nope')], [false, true, true, false], 'hidden flags, non-booleans ignored');
+    eq(cfg({ features: { showBattery: false } }).isPillZoneShown('battery'), false, 'battery follows its feature switch');
+    let d = cfg({});
+    d.setPillZoneShown('battery', false);
+    eq([d.isFeatureEnabled('showBattery'), d.isPillZoneShown('battery')], [false, false], 'hiding battery flips the feature, not a flag');
+    d.setPillZoneShown('music', false);
+    d.setPillOrder(['clock', 'music']);
+    let [order, shown] = JSON.parse(d.pillKey);
+    ok(order.indexOf('clock') < order.indexOf('music') && shown[ids.indexOf('music')] === false && d.pillKey !== cfg({}).pillKey,
+        'pillKey carries the order and the hidden zones');
+    eq(cfg({}).isFeatureEnabled('pillTrackTitle'), true, 'the track title is on by default');
+    print('config-check (pill): ok');
+}

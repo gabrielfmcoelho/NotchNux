@@ -19,7 +19,7 @@ import GioUnix from 'gi://GioUnix';
 
 import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
-import { ConfigStore, TAB_DEFS, FEATURE_DEFS, COMPANION_SPECIES, WALLPAPER_DEFAULTS, ENHANCE_AUTO, ENHANCE_RANGE, normalizeHex, BLUR_PRESETS, BLUR_RADIUS_RANGE, BLUR_DEFAULTS, MAX_PINNED } from './src/helpers/config.js';
+import { ConfigStore, TAB_DEFS, FEATURE_DEFS, PILL_ZONES, COMPANION_SPECIES, WALLPAPER_DEFAULTS, ENHANCE_AUTO, ENHANCE_RANGE, normalizeHex, BLUR_PRESETS, BLUR_RADIUS_RANGE, BLUR_DEFAULTS, MAX_PINNED } from './src/helpers/config.js';
 import { discoverHwmon, pickSensors, pickFan, fanUsable, SENSOR_KINDS, FAN_GUARD_C } from './src/helpers/sensors.js';
 import { TERMINALS } from './src/helpers/dev.js';
 import { EdsClient } from './src/helpers/eds.js';
@@ -92,6 +92,7 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         this._addBlurGroup(page, config);
         this._addWallpaperGroup(page, config, window);
         this._addTabsGroup(page, config);
+        this._addPillGroup(page, config);
         this._addFeaturesGroup(page, config);
         this._addCompanionGroup(page, config);
         this._addGoogleGroup(page, config);
@@ -872,6 +873,52 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
                 config.setFeatureEnabled(f.id, row.get_active());
             });
             group.add(row);
+        }
+    }
+
+    // ---- Pill: which zones the collapsed pill shows, in which order ----
+    _addPillGroup(page, config) {
+        const group = new Adw.PreferencesGroup({
+            title: 'Pill',
+            description: 'What the collapsed pill shows, left to right. Drag to reorder; zones before the date and time sit on its left. A zone still only appears when it has something to show (a running timer, playing music, Claude sessions, unread alerts).',
+        });
+        page.add(group);
+        for (const f of FEATURE_DEFS.filter(f => f.group === 'pill')) {
+            const row = new Adw.SwitchRow({ title: f.label, use_markup: false, active: config.isFeatureEnabled(f.id) });
+            row.subtitle = f.description;
+            row.connect('notify::active', () => config.setFeatureEnabled(f.id, row.get_active()));
+            group.add(row);
+        }
+        const listBox = new Gtk.ListBox({ selection_mode: Gtk.SelectionMode.NONE });
+        listBox.add_css_class('boxed-list');
+        group.add(listBox);
+        const rowsById = new Map();
+        const commitOrder = () => {
+            const order = [];
+            let child = listBox.get_first_child();
+            while (child) {
+                if (child._tabId)
+                    order.push(child._tabId);
+                child = child.get_next_sibling();
+            }
+            config.setPillOrder(order);
+        };
+        for (const id of config.pillOrder) {
+            const def = PILL_ZONES.find(z => z.id === id);
+            if (!def)
+                continue;
+            const row = new Adw.ActionRow({ title: def.label });
+            row._tabId = id;
+            const handle = new Gtk.Image({ icon_name: 'list-drag-handle-symbolic', valign: Gtk.Align.CENTER });
+            handle.add_css_class('dim-label');
+            row.add_prefix(handle);
+            const toggle = new Gtk.Switch({ active: config.isPillZoneShown(id), valign: Gtk.Align.CENTER });
+            toggle.connect('notify::active', () => config.setPillZoneShown(id, toggle.get_active()));
+            row.add_suffix(toggle);
+            row.activatable_widget = toggle;
+            this._makeRowDraggable(row, listBox, rowsById, commitOrder);
+            rowsById.set(id, row);
+            listBox.append(row);
         }
     }
 

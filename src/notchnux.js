@@ -24,7 +24,7 @@ import { WallpaperHelper } from './helpers/wallpaper.js';
 import { ScreenShareWatch } from './helpers/screenshare.js';
 import { SlitDeck } from './helpers/slitdeck.js';
 import { Vinyl, AlbumArtDisc, Knob, AnalogClock, EqBars, CameraView, ACCENT, setAccent, accentHex, accentRgbStr } from './helpers/widgets.js';
-import { TAB_DEFS, FEATURE_DEFS, blurPreset, resolveAccent, hexToRgb01 } from './helpers/config.js';
+import { TAB_DEFS, FEATURE_DEFS, blurPreset, resolveAccent, hexToRgb01, PILL_ZONES } from './helpers/config.js';
 import { fmt } from './helpers/format.js';
 import { GlassBackdrop, createShoulder, SHOULDER_SIZE, PILL_HEIGHT } from './helpers/island.js';
 import { springTo, stopSpring, addPressFeedback } from './helpers/motion.js';
@@ -220,6 +220,7 @@ export const NotchNux = GObject.registerClass({
         this._initCompanionTab();
         this._pillRabbit.visible = this._config.isFeatureEnabled('rabbitCompanion');
         this._pill.insert_child_at_index(this._pillRabbit, 0);
+        this._applyPillOrder();
         // Recolour the active-state chrome to match the persisted accent.
         this._applyAccentStyles();
         // Shoulders + the (hidden unless enabled) glass backdrop.
@@ -383,6 +384,40 @@ export const NotchNux = GObject.registerClass({
         }
     }
 
+    // The pill's zones by id (PILL_ZONES). Some live in tab mixins, so this is
+    // read when needed rather than kept.
+    _pillZoneActors() {
+        return {
+            companion: this._pillRabbit, focus: this._pillFocusBox, stopwatch: this._pillSwBox, stats: this._pillStatsBox,
+            music: this._pillMusicBox, clock: this._pillClock, claude: this._pillClaudeBox, battery: this._pillBatteryBox,
+            alerts: this._pillNotifBox, privacy: this._pillPrivBox,
+        };
+    }
+
+    // Lay the pill's zones out in the configured order: the ones before the
+    // clock on its left (before the left spacer), the rest on its right.
+    _applyPillOrder() {
+        let actors = this._pillZoneActors();
+        let order = this._config.pillOrder;
+        let at = order.indexOf('clock');
+        let seq = [...order.slice(0, at).map(id => actors[id]), this._pillClockLeftSpacer, this._pillClock, this._pillClockRightSpacer,
+            ...order.slice(at + 1).map(id => actors[id])].filter(a => a && a.get_parent() === this._pill);
+        seq.forEach((a, i) => this._pill.set_child_at_index(a, i));
+        this._enforcePillZones();
+    }
+
+    // Zones the user switched off stay hidden whatever their own sync says.
+    // Runs before every width measurement, so the pill never reserves room for them.
+    _enforcePillZones() {
+        let actors = this._pillZoneActors();
+        for (let z of PILL_ZONES) {
+            if (z.feature)
+                continue;   // their own feature switch already governs them
+            if (!this._config.isPillZoneShown(z.id) && actors[z.id])
+                actors[z.id].visible = false;
+        }
+    }
+
     // What the pill rabbit reacts to besides Claude (see helpers/companion-brain.js).
     _companionState() {
         let bat = this._system.getBatteryInfo();
@@ -459,6 +494,7 @@ export const NotchNux = GObject.registerClass({
             devRootsKey: JSON.stringify(this._config.devProjectRoots),
             tasksSource: this._config.tasksSource,
             companionSpecies: this._config.companion.species,
+            pillKey: this._config.pillKey,
         };
     }
 
@@ -560,6 +596,15 @@ export const NotchNux = GObject.registerClass({
         // _onFeatureToggled).
         if (next.companionSpecies !== prev.companionSpecies)
             this._pillRabbit?.setSpecies(next.companionSpecies);
+        if (next.pillKey !== prev.pillKey) {
+            this._applyPillOrder();
+            this._refreshLive();   // zones re-sync and show again if allowed
+            this._syncPillClaude?.();
+            this._syncPillFocus?.();
+            this._updateClock();
+            if (!this.isExpanded && !this._alertShowing)
+                this._applyPillWidth();
+        }
         if (next.tasksSource !== prev.tasksSource)
             this._syncTaskSource();
         if ((next.trayTemps !== prev.trayTemps || next.fanControl !== prev.fanControl) && this._invalidateTab('system'))
@@ -2597,6 +2642,7 @@ export const NotchNux = GObject.registerClass({
         let showMusic = info.hasMedia && !this._prod?.focusActive && !this._prod?.stopwatch.running &&
             (info.status === 'Playing' || info.status === 'Paused');
         this._musicPlaying = showMusic && info.status === 'Playing';
+        this._pillTitleClip.visible = this._config.isFeatureEnabled('pillTrackTitle');   // off: just the bars
         this._pillRabbit?.update();
         let wasVisible = this._pillMusicBox.visible;
         this._pillMusicBox.visible = showMusic;
@@ -2770,7 +2816,8 @@ export const NotchNux = GObject.registerClass({
     // the pill to exactly that: sum of visible zone widths + one _ZONE_GAP per
     // interior gap + the content box's padding.
     _pillWidth() {
-        let floor = this._pillMusicBox.visible || this._pillFocusBox?.visible || this._pillSwBox?.visible
+        this._enforcePillZones();
+        let floor = (this._pillMusicBox.visible && this._pillTitleClip.visible) || this._pillFocusBox?.visible || this._pillSwBox?.visible
             ? PILL_WIDTH_MUSIC : PILL_WIDTH;
         // Measuring preferred widths queries the theme node, which is only valid
         // once the actor is on the stage. Before then (early setup / reposition)
@@ -2790,7 +2837,8 @@ export const NotchNux = GObject.registerClass({
             zones.push(this._pillStatsBox.get_preferred_width(-1)[1]);
         if (this._pillMusicBox.visible)
             zones.push(this._pillMusicBox.get_preferred_width(-1)[1]);
-        zones.push(this._pillClock.get_preferred_width(-1)[1]);
+        if (this._pillClock.visible)
+            zones.push(this._pillClock.get_preferred_width(-1)[1]);
         if (this._pillClaudeBox?.visible)
             zones.push(this._pillClaudeBox.get_preferred_width(-1)[1]);
         if (this._pillBatteryBox && this._pillBatteryBox.visible)
@@ -2850,7 +2898,7 @@ export const NotchNux = GObject.registerClass({
     _startPillMarquee() {
         this._stopPillMarquee();
         // Feature off, or paused: leave the (clipped) title static.
-        if (!this._config.isFeatureEnabled('pillMarquee') || !this._musicPlaying)
+        if (!this._config.isFeatureEnabled('pillMarquee') || !this._musicPlaying || !this._pillTitleClip.visible)
             return;
         // Which title runs, so a refresh doesn't restart it (_syncPillMotion).
         this._marqueeFor = this._pillTitle.text;
@@ -4618,6 +4666,7 @@ export const NotchNux = GObject.registerClass({
             case 'showScreenShare':
                 this._updatePrivacyIndicators();
                 break;
+            case 'pillTrackTitle':
             case 'pillMarquee':
                 // Re-run the live refresh so the marquee starts/stops.
                 this._stopPillMarquee();

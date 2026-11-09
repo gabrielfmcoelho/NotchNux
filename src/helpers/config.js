@@ -164,6 +164,47 @@ export function blurPreset(id) {
 // is used when the config file has no opinion yet.
 export const COMPANION_SPECIES = [['rabbit', 'Rabbit'], ['cat', 'Cat'], ['fox', 'Fox']];
 
+// The collapsed pill's zones, in their default order (left to right). Zones
+// with a `feature` are shown/hidden by that feature switch; the rest by
+// pillZones. `clock` splits the row: zones before it sit left of the centred
+// clock, zones after it to the right.
+export const PILL_ZONES = [
+    { id: 'companion', label: 'Companion',        feature: 'rabbitCompanion' },
+    { id: 'focus',     label: 'Focus timer' },
+    { id: 'stopwatch', label: 'Stopwatch' },
+    { id: 'stats',     label: 'Temperatures' },
+    { id: 'music',     label: 'Music' },
+    { id: 'clock',     label: 'Date and time' },
+    { id: 'claude',    label: 'Claude sessions' },
+    { id: 'battery',   label: 'Battery',          feature: 'showBattery' },
+    { id: 'alerts',    label: 'Unread alerts' },
+    { id: 'privacy',   label: 'Mic, camera, VPN', feature: 'showPrivacy' },
+];
+
+// Keep a stored order to known ids, adding any missing ones where they sit
+// by default (after the closest default neighbour already in the list).
+export function reconcileOrder(stored, defaults) {
+    let known = new Set(defaults);
+    let seen = new Set();
+    let order = [];
+    for (let id of Array.isArray(stored) ? stored : []) {
+        if (known.has(id) && !seen.has(id)) {
+            order.push(id);
+            seen.add(id);
+        }
+    }
+    defaults.forEach((id, i) => {
+        if (seen.has(id))
+            return;
+        let prev = defaults.slice(0, i).reverse().find(n => order.includes(n));
+        let next = defaults.slice(i + 1).find(n => order.includes(n));
+        let at = prev ? order.indexOf(prev) + 1 : next ? order.indexOf(next) : order.length;
+        order.splice(at, 0, id);
+        seen.add(id);
+    });
+    return order;
+}
+
 function cleanCompanion(c) {
     c = c && typeof c === 'object' ? c : {};
     let day = v => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
@@ -184,6 +225,8 @@ export const FEATURE_DEFS = [
     { id: 'rabbitLively',      label: 'Lively companion',     description: 'Its whole life every few seconds: naps with fireflies, snacks and meals, chases and roaming, not only at their times of day.', default: true, group: 'companion' },
     { id: 'showScreenShare',   label: 'Screen sharing indicator', description: 'Show a red icon on the pill while the screen is shared or recorded.', default: true },
     { id: 'pillMarquee',       label: 'Scrolling track title', description: 'Scroll long track titles across the pill while playing.',  default: true },
+    // `group: 'pill'`: shown in Preferences' Pill group, with the zone list.
+    { id: 'pillTrackTitle',    label: 'Track title on the pill', description: 'Show the playing track’s name next to the equaliser bars. Off, only the bars show.', default: true, group: 'pill' },
     { id: 'weatherAutoRefresh', label: 'Auto-refresh weather', description: 'Periodically refresh weather in the background.',           default: true },
     { id: 'calendarSync',      label: 'Calendar sync',        description: 'Pull events from GNOME Online Accounts into the Calendar tab.', default: true },
     { id: 'notifPeek',         label: 'Notification peek',    description: 'Expand the pill into a banner when a notification arrives.',   default: true },
@@ -388,7 +431,10 @@ export class ConfigStore {
             tasksSource: 'local',
             // The pill companion: which animal, and what it remembers (day keys
             // for its once-a-day habits, how often it was petted).
-            companion: { species: 'rabbit', lastFed: null, lastMushroom: null, pets: 0 }
+            companion: { species: 'rabbit', lastFed: null, lastMushroom: null, pets: 0 },
+            // The collapsed pill's zones: order (see PILL_ZONES) and which are hidden.
+            pillOrder: PILL_ZONES.map(z => z.id),
+            pillZones: {}
         };
     }
 
@@ -456,6 +502,9 @@ export class ConfigStore {
                     ? [...new Set(parsed.devProjectRoots.filter(p => typeof p === 'string' && p.startsWith('/')))] : [];
                 data.tabOrder = this._reconcileOrder(parsed.tabOrder);
                 data.companion = cleanCompanion(parsed.companion);
+                data.pillOrder = reconcileOrder(parsed.pillOrder, PILL_ZONES.map(z => z.id));
+                data.pillZones = parsed.pillZones && typeof parsed.pillZones === 'object'
+                    ? Object.fromEntries(Object.entries(parsed.pillZones).filter(([k, v]) => PILL_ZONES.some(z => z.id === k) && typeof v === 'boolean')) : {};
             }
         } catch (e) {
             // Corrupt JSON: log it but fall back to defaults so the extension
@@ -473,27 +522,7 @@ export class ConfigStore {
     // tab the user has (or before the next one) — so new tabs like Home land
     // up front and Notes beside Shelf, not all at the end.
     _reconcileOrder(stored) {
-        let known = new Set(TAB_DEFS.map(t => t.id));
-        let seen = new Set();
-        let order = [];
-        for (let id of Array.isArray(stored) ? stored : []) {
-            if (known.has(id) && !seen.has(id)) {
-                order.push(id);
-                seen.add(id);
-            }
-        }
-        let defaults = TAB_DEFS.map(t => t.id);
-        defaults.forEach((id, i) => {
-            if (seen.has(id))
-                return;
-            let prev = defaults.slice(0, i).reverse().find(n => order.includes(n));
-            let next = defaults.slice(i + 1).find(n => order.includes(n));
-            let at = prev ? order.indexOf(prev) + 1
-                : next ? order.indexOf(next) : order.length;
-            order.splice(at, 0, id);
-            seen.add(id);
-        });
-        return order;
+        return reconcileOrder(stored, TAB_DEFS.map(t => t.id));
     }
 
     // The shell and the prefs window each hold a ConfigStore over the same
@@ -695,6 +724,38 @@ export class ConfigStore {
         this._refresh();
         this._data.devTerminal = DEV_TERMINALS.includes(id) ? id : '';
         this._save();
+    }
+
+    // ---- The collapsed pill's zones ----
+    get pillOrder() {
+        return reconcileOrder(this._data.pillOrder, PILL_ZONES.map(z => z.id));
+    }
+    setPillOrder(order) {
+        this._refresh();
+        this._data.pillOrder = reconcileOrder(order, PILL_ZONES.map(z => z.id));
+        this._save();
+    }
+    isPillZoneShown(id) {
+        let z = PILL_ZONES.find(z => z.id === id);
+        if (!z)
+            return false;
+        return z.feature ? this.isFeatureEnabled(z.feature) : this._data.pillZones?.[id] !== false;
+    }
+    setPillZoneShown(id, shown) {
+        let z = PILL_ZONES.find(z => z.id === id);
+        if (!z)
+            return;
+        if (z.feature) {
+            this.setFeatureEnabled(z.feature, shown);
+            return;
+        }
+        this._refresh();
+        this._data.pillZones = { ...(this._data.pillZones ?? {}), [id]: !!shown };
+        this._save();
+    }
+    // Everything the notch needs to lay the pill out: one string to diff.
+    get pillKey() {
+        return JSON.stringify([this.pillOrder, PILL_ZONES.map(z => this.isPillZoneShown(z.id))]);
     }
 
     get companion() {
