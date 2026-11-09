@@ -27,7 +27,7 @@ vp_press_move() { # press on the card, then move 100 px left in steps
     X0=$(nnx_eval "$NNX._deskNotes._cards.get('$ID').actor.x")
     vp "d.notify_absolute_motion(t(), $CX, $CY)"
     vp "d.notify_button(t(), C.BUTTON_PRIMARY, C.ButtonState.PRESSED)"
-    for i in 1 2 3 4 5; do vp "d.notify_absolute_motion(t(), $CX - 20 * $i, $CY)"; done
+    for i in $(seq 1 ${STEPS:-5}); do vp "d.notify_absolute_motion(t(), $CX - 20 * $i * ${DIR:-1}, $CY)"; done
 }
 vp_press_move
 nnx_check pointer-dragging "[$NNX._deskNotes._drag !== null, !($NOGRAB)]" '[true,true]'
@@ -44,9 +44,31 @@ vp_press_move
 nnx_eval "($NNX._deskNotes._onMotion('$ID', { get_state: () => 0, get_coords: () => [0, 0] }), true)" >/dev/null
 nnx_check lost-release "[$NNX._deskNotes._drag === null, $NOGRAB]" '[true,true]'
 vp "d.notify_button(t(), C.BUTTON_PRIMARY, C.ButtonState.RELEASED)"
-# Overview.
+pickcheck() { nnx_check "$1" "(() => { const a = $NNX._deskNotes._cards.get('$ID').actor; return global.stage.get_actor_at_pos(imports.gi.Clutter.PickMode.REACTIVE, a.x + 90, a.y + 90) === a; })()" "${2:-true}"; }
+pickcheck pick-before
+# Overview opening mid-drag (button still held): drag ends, no grab, clamped position saved.
+nnx_check grab-api "typeof global.stage.get_grab_actor === 'function'" true
+STEPS=3 vp_press_move
+nnx_check overview-mid-drag-start "[$NNX._deskNotes._drag !== null, !($NOGRAB)]" '[true,true]'
 nnx_eval "(Main.overview.show(), true)" >/dev/null; sleep 1.5
+nnx_check overview-mid-drag-ended "(() => { const n = $NNX; const a = Main.layoutManager.getWorkAreaForMonitor(Main.layoutManager.primaryIndex); const p = n._prod.getNote('$ID').pos; const x = n._deskNotes._cards.get('$ID').actor.x; return [n._deskNotes._drag === null, global.stage.get_grab_actor() !== n._deskNotes._cards.get('$ID').actor, p.x >= a.x && p.y >= a.y && p.x + 180 <= a.x + a.width && p.y + 180 <= a.y + a.height, p.x === x]; })()" '[true,true,true,true]'
 nnx_shot desknotes-overview
-nnx_eval "(Main.overview.hide(), true)" >/dev/null; sleep 1
+vp "d.notify_button(t(), C.BUTTON_PRIMARY, C.ButtonState.RELEASED)"
+nnx_eval "(Main.overview.hide(), true)" >/dev/null; sleep 3
+pickcheck pick-after-overview
+nnx_check overview-after-release "[$NNX._deskNotes._drag === null, $NOGRAB]" '[true,true]'
+P0=$(nnx_eval "$NNX._prod.getNote('$ID').pos.x")
+DIR=-1 STEPS=3 vp_press_move
+vp "d.notify_button(t(), C.BUTTON_PRIMARY, C.ButtonState.RELEASED)"
+nnx_check drag-after-overview "(() => { const n = $NNX; const x = n._deskNotes._cards.get('$ID').actor.x; return [n._prod.getNote('$ID').pos.x !== $P0, n._prod.getNote('$ID').pos.x === x, n._deskNotes._drag === null, $NOGRAB]; })()" '[true,true,true,true]'
+# Lock mid-drag: fake isLocked on the session mode and re-run the visibility sync.
+STEPS=3 vp_press_move
+nnx_eval "(Object.defineProperty(Main.sessionMode, 'isLocked', { value: true, configurable: true }), $NNX._deskNotes._syncVisible(), true)" >/dev/null
+nnx_check lock-mid-drag "[$NNX._deskNotes._drag === null, $NOGRAB, $NNX._deskNotes._cards.get('$ID').actor.visible]" '[true,true,false]'
+nnx_eval "(delete Main.sessionMode.isLocked, $NNX._deskNotes._syncVisible(), true)" >/dev/null
+vp "d.notify_button(t(), C.BUTTON_PRIMARY, C.ButtonState.RELEASED)"
+nnx_check lock-restored "[$NNX._deskNotes._cards.get('$ID').actor.visible, $NOGRAB]" '[true,true]'
+# A press that never passes the threshold saves nothing when interrupted.
+nnx_check interrupt-unmoved-saves-nothing "(() => { const n = $NNX; const d = n._deskNotes; const a = d._cards.get('$ID').actor; const before = JSON.stringify(n._prod.getNote('$ID').pos); const ev = { get_button: () => 1, get_coords: () => [a.x + 5, a.y + 5], get_time: () => 1 }; d._onPress('$ID', a, ev); d._interruptDrag(); d._interruptDrag(); return [d._drag === null, JSON.stringify(n._prod.getNote('$ID').pos) === before]; })()" '[true,true]'
 nnx_eval "($NNX._prod.pinNote('$ID', false), true)" >/dev/null; sleep 0.3
 nnx_check desk-unpinned-gone "(() => [$NNX._deskNotes._cards.size, $NNX._deskNotes._cards.has('$ID')])()" '[0,false]'

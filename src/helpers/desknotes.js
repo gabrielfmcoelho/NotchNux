@@ -45,7 +45,10 @@ export class DeskNotes {
                 this.sync();
         });
         this._monitorsId = Main.layoutManager.connect('monitors-changed', () => this.sync());
-        this._overviewId = Main.overview.connect('showing', () => this._endDrag());
+        this._overviewIds = [
+            Main.overview.connect('showing', () => { this._interruptDrag(); this._syncVisible(); }),
+            Main.overview.connect('hidden', () => this._syncVisible()),
+        ];
         this._sessionId = Main.sessionMode.connect('updated', () => this._syncVisible());
         this.sync();
     }
@@ -80,7 +83,7 @@ export class DeskNotes {
         label.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
         label.clutter_text.set_single_line_mode(false);
         let actor = new St.BoxLayout({
-            reactive: true, track_hover: true, width: SIZE, height: SIZE,
+            reactive: true, width: SIZE, height: SIZE,
             style: cardStyle(note.color),
         });
         actor.add_child(label);
@@ -160,9 +163,9 @@ export class DeskNotes {
     // The background group is covered by the lock screen, but hide the cards
     // too so nothing can show through on the lock/unlock transitions.
     _syncVisible() {
-        let show = !Main.sessionMode.isLocked;
+        let show = !Main.sessionMode.isLocked && !Main.overview.visible;
         if (!show)
-            this._endDrag();
+            this._interruptDrag();
         for (let { actor } of this._cards.values())
             actor.visible = show;
     }
@@ -191,7 +194,7 @@ export class DeskNotes {
             return Clutter.EVENT_PROPAGATE;
         // The release never reached us (another grab was on top): stop following.
         if (!(ev.get_state() & Clutter.ModifierType.BUTTON1_MASK)) {
-            this._endDrag();
+            this._interruptDrag();
             return Clutter.EVENT_PROPAGATE;
         }
         let [px, py] = ev.get_coords();
@@ -234,6 +237,28 @@ export class DeskNotes {
         return Clutter.EVENT_STOP;
     }
 
+    // A drag that ends without a release (overview, lock, lost button): a card
+    // that moved is clamped to its monitor's work area and saved; one that
+    // never passed the threshold saves nothing.
+    _interruptDrag() {
+        let d = this._drag;
+        if (!d)
+            return;
+        let moved = d.moved;
+        let [x, y] = d.actor.get_position();
+        this._endDrag();
+        if (!moved)
+            return;
+        let cx0 = x + SIZE / 2, cy0 = y + SIZE / 2;
+        let idx = Main.layoutManager.monitors.findIndex(m =>
+            cx0 >= m.x && cy0 >= m.y && cx0 < m.x + m.width && cy0 < m.y + m.height);
+        if (idx < 0)
+            idx = Main.layoutManager.primaryIndex;
+        let [cx, cy] = this._clampTo(Main.layoutManager.getWorkAreaForMonitor(idx), x, y);
+        d.actor.set_position(cx, cy);
+        this._store.moveNote(d.id, cx, cy);
+    }
+
     _endDrag() {
         let d = this._drag;
         this._drag = null;
@@ -253,9 +278,10 @@ export class DeskNotes {
             Main.layoutManager.disconnect(this._monitorsId);
         if (this._sessionId)
             Main.sessionMode.disconnect(this._sessionId);
-        if (this._overviewId)
-            Main.overview.disconnect(this._overviewId);
-        this._monitorsId = this._sessionId = this._overviewId = 0;
+        for (let id of this._overviewIds ?? [])
+            Main.overview.disconnect(id);
+        this._overviewIds = null;
+        this._monitorsId = this._sessionId = 0;
         for (let { actor } of this._cards.values())
             actor.destroy();
         this._cards.clear();
