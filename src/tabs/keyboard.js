@@ -36,9 +36,11 @@ const KeyboardFeatures = {
         if (!this._settings)
             return;
         try {
+            // POPUP too: the notch's own grab runs in that mode, and the
+            // shortcut must still close a notch the command bar is typing in.
             Main.wm.addKeybinding('toggle-notch', this._settings, Meta.KeyBindingFlags.NONE,
-                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
-                () => this._toggleFromKeyboard());
+                Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW | Shell.ActionMode.POPUP,
+                () => this._onShortcut());
             this._keybindingAdded = true;
         } catch (e) {
             logError('could not register the notch shortcut', e);
@@ -55,6 +57,14 @@ const KeyboardFeatures = {
             }
         }
         this._settings = null;
+    },
+
+    // The shortcut fired. Another popup (a panel menu, a modal) holds the
+    // keyboard: don't open over it.
+    _onShortcut() {
+        if (!this.isExpanded && Main.modalCount > (this._kbGrab ? 1 : 0))
+            return;
+        this._toggleFromKeyboard();
     },
 
     // Open when closed, close when open. Never reopens or stacks a second
