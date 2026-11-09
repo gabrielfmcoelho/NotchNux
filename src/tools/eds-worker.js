@@ -71,7 +71,7 @@ function getClient(uid, kind = 'tasks') {
 function getWritableClient(uid, kind = 'tasks') {
     let client = getClient(uid, kind);
     if (client.is_readonly() || READONLY_BACKENDS.has(backendOf(client.get_source(), kind)))
-        throw new Error('this list is read-only');
+        throw new Error(kind === 'tasks' ? 'this list is read-only' : 'this calendar is read-only');
     return client;
 }
 

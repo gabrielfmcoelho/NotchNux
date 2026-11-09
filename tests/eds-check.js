@@ -370,6 +370,13 @@ async function events(client, registry, cal) {
     occ = occurrences(daily);
     ok(occ.map(o => o[1]).join() === 'standup,standup (late)', `delete THIS removes one occurrence: ${JSON.stringify(occ)}`);
 
+    // Delete THIS on the occurrence the update detached: only it goes.
+    ok(stored(daily).some(c => c.get_recurid()), 'the edited occurrence is stored detached');
+    await client.call('events.delete', { source: cal, uid: daily, rid: rids[1], all: false });
+    occ = occurrences(daily);
+    ok(occ.map(o => o[1]).join() === 'standup' && !stored(daily).some(c => c.get_recurid()),
+        `delete THIS removes the detached occurrence: ${JSON.stringify(occ)}`);
+
     // Delete all (from an occurrence): none remain.
     await client.call('events.delete', { source: cal, uid: daily, rid: rids[0], all: true });
     ok(stored(daily).length === 0, 'delete ALL removes the series');

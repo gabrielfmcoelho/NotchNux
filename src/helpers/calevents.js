@@ -65,8 +65,13 @@ export function eventForm(ev, calendar = null) {
     let start = ev.start, end = ev.end instanceof Date && ev.end > ev.start ? ev.end : ev.start;
     let allDay = !!ev.allDay || (isMidnight(start) && isMidnight(end) && end > start);
     let days = allDay ? Math.max(1, Math.round((end - start) / 86400000)) : 1;
+    // An all-day event's hidden times are where "All day" off starts: 09:00
+    // for DEFAULT_MINUTES, as for a new event on another day.
+    let times = allDay
+        ? { start: '09:00', end: hm(new Date(2000, 0, 1, 9, DEFAULT_MINUTES)) }
+        : { start: hm(start), end: hm(end) };
     return {
-        title: ev.title ?? '', date: dayIso(start), start: hm(start), end: hm(end),
+        title: ev.title ?? '', date: dayIso(start), ...times,
         allDay, days, location: ev.location ?? '', calendar,
     };
 }
@@ -90,6 +95,10 @@ export function eventTimes(form, tzid) {
     let end = at(day, e);
     if (e < s) // ends after midnight
         end = at(new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1), e);
+    // Compared as instants: a time skipped by a DST change moves forward
+    // (02:30 → 03:30), which can put the end at or before the start.
+    if (end <= start)
+        return { error: 'The end must be after the start' };
     return { start: localIso(start), end: localIso(end), allDay: false, tzid };
 }
 

@@ -50,6 +50,15 @@ eq(eventTimes({ ...form, allDay: true }, TZ), { start: '2026-11-09', end: '2026-
 eq(eventTimes({ ...form, allDay: true, date: '2026-12-31' }, TZ).end, '2027-01-01', 'all-day across the year');
 eq(eventTimes({ ...form, start: '23:30', end: '00:30' }, TZ).end, localIso(new Date(2026, 10, 10, 0, 30)), 'ends after midnight');
 ok(eventTimes({ ...form, end: '15:00' }, TZ).error, 'zero length refused');
+// A DST gap (run with TZ=Europe/Berlin: 2026-03-29 02:00–03:00 doesn't exist):
+// 02:30 moves to 03:30, so 02:30–03:00 ends before it starts — refused here,
+// not by the worker. Elsewhere this day has no gap and both pass.
+if (new Date(2026, 2, 29, 2, 30).getHours() !== 2) {
+    eq(eventTimes({ ...form, date: '2026-03-29', start: '02:30', end: '03:00' }, 'Europe/Berlin').error,
+        'The end must be after the start', 'DST gap: end before start refused as instants');
+    ok(!eventTimes({ ...form, date: '2026-03-29', start: '01:30', end: '03:30' }, 'Europe/Berlin').error,
+        'DST gap: an event across it is fine');
+}
 ok(eventTimes({ ...form, start: 'soon' }, TZ).error && eventTimes({ ...form, date: 'tomorrow' }, TZ).error, 'bad input refused');
 ok(createArgs({ ...form, title: ' ' }, TZ).error === 'Add a title', 'title required');
 ok(createArgs({ ...form, calendar: null }, TZ).error === 'Pick a calendar', 'calendar required');
@@ -60,6 +69,11 @@ let initial = eventForm(ev, 'cal-1');
 eq([initial.date, initial.start, initial.end, initial.allDay], ['2026-11-09', '10:00', '10:15', false], 'eventForm timed');
 let holiday = eventForm({ title: 'Trip', start: new Date(2026, 10, 9), end: new Date(2026, 10, 12), allDay: false });
 eq([holiday.allDay, holiday.days, eventTimes(holiday, TZ).end], [true, 3, '2026-11-12'], 'midnight-to-midnight is all day, length kept');
+// "All day" off on an all-day event: 09:00 for 30 minutes, not 00:00–00:00.
+let timed = eventPatch(holiday, { ...holiday, allDay: false }, TZ);
+eq([holiday.start, holiday.end, timed.error ?? null, timed.patch?.start, timed.patch?.end],
+    ['09:00', '09:30', null, localIso(new Date(2026, 10, 9, 9)), localIso(new Date(2026, 10, 9, 9, 30))],
+    'all day off seeds 09:00–09:30');
 
 // Patch: only what changed.
 eq(eventPatch(initial, { ...initial }, TZ), { patch: {} }, 'nothing changed');

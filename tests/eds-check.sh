@@ -111,7 +111,8 @@ start_daemon() { # <binary> <bus name>
 start_daemon "$REGISTRY" org.gnome.evolution.dataserver.Sources5
 start_daemon "$FACTORY" org.gnome.evolution.dataserver.Calendar8
 # The shell's own calendar server (what the notch's Calendar tab listens to),
-# so eds-check.js can read real CalendarServer event ids. Optional.
+# so eds-check.js can read real CalendarServer event ids. Started when the
+# binary is installed, and then it must come up: the id checks need it.
 if [ -x "$CALSERVER" ]; then
     start_daemon "$CALSERVER" org.gnome.Shell.CalendarServer
     export NNX_EDS_CALSERVER=1

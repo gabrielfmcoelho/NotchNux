@@ -64,6 +64,8 @@ export const CalendarEdit = {
             this._calClient?.destroy();
             this._calClient = null;
             this._calWritable = null;
+            // That client's request is dead: a quick off/on asks again.
+            this._calWritableLoading = null;
         }
         if (this._invalidateTab('calendar'))
             this._renderActiveTab();
@@ -74,6 +76,7 @@ export const CalendarEdit = {
         this._calClient?.destroy();
         this._calClient = null;
         this._calWritable = null;
+        this._calWritableLoading = null;
     },
 
     // Calendar tab on screen: retry a stopped worker; re-ask writability when
@@ -89,8 +92,10 @@ export const CalendarEdit = {
     // Ask the worker which calendars take writes (connecting each once).
     // Kept for the session; concurrent calls share one request.
     _loadCalendarWritability() {
+        if (this._calWritableLoading)
+            return this._calWritableLoading;
         let client = this._calendarEditClient();
-        this._calWritableLoading ??= client.call('sources', { connect: true }).then(res => {
+        let loading = client.call('sources', { connect: true }).then(res => {
             // Not from a client dropped meanwhile (feature switched off).
             if (this._calClient !== client)
                 return;
@@ -99,7 +104,9 @@ export const CalendarEdit = {
         }, e => {
             logError('listing calendars failed', e);
         }).finally(() => {
-            this._calWritableLoading = null;
+            // Only our own: an off/on may have started a newer request.
+            if (this._calWritableLoading === loading)
+                this._calWritableLoading = null;
             if (this._destroyed || this._calClient !== client)
                 return;
             let sheet = this._calSheet;
@@ -107,7 +114,8 @@ export const CalendarEdit = {
                 sheet.form.calendar = this._defaultCalendar();
             this._redrawCalendarSheet();
         });
-        return this._calWritableLoading;
+        this._calWritableLoading = loading;
+        return loading;
     },
 
     // true / false once known, null while not asked yet.
