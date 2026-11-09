@@ -20,6 +20,15 @@ const NOTES_PATH = GLib.build_filenamev([DATA_DIR, 'notes.md']);
 const FOCUS_PATH = GLib.build_filenamev([DATA_DIR, 'focus.json']);
 
 export const FOCUS_PRESETS = [15, 25, 50];   // minutes
+
+// Focus length in whole minutes, kept within 1–180; 25 for anything not a number.
+export function clampFocusMinutes(min) {
+    const v = Number(min);
+    if (typeof min !== 'number' && typeof min !== 'string' || !Number.isFinite(v) || (typeof min === 'string' && min.trim() === ''))
+        return 25;
+    return Math.min(180, Math.max(1, Math.round(v)));
+}
+
 const SHORT_BREAK_MIN = 5;
 const LONG_BREAK_MIN = 15;
 const LONG_BREAK_EVERY = 4;                    // sessions
