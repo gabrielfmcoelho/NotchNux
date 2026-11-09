@@ -171,7 +171,7 @@ const KeyboardFeatures = {
         case 'focus': return `Start ${cmd.minutes} min focus`;
         case 'calc': return cmd.error ? cmd.error : `= ${formatCalc(cmd.value)} \u2014 Enter copies`;
         case 'tab': return `Open ${this._tabs[cmd.id]?.label ?? cmd.id}`;
-        case 'note': return `Add to notes '${cmd.text}'`;
+        case 'note': return `Add note '${cmd.text}'`;
         default: return '';
         }
     },
@@ -201,8 +201,13 @@ const KeyboardFeatures = {
             this._prod.startFocus();
             return true;
         case 'note': {
-            let notes = this._prod.notes;
-            this._prod.setNotes(notes ? `${notes}\n${cmd.text}` : cmd.text);
+            try {
+                this._prod.addNote(cmd.text);
+            } catch (e) {
+                if (e.message !== 'TooManyNotes')
+                    throw e;
+                Main.notify('NotchNux', 'Too many notes (50). Delete one first.');
+            }
             return true;
         }
         case 'tab':

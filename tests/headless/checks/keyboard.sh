@@ -14,6 +14,8 @@ sleep 1.5
 nnx_shot tab-home-bar
 # A task command runs and the notch closes, releasing every grab.
 nnx_check command-task "(() => { const n = $NNX; n._commandEntry.text = 't smoke task'; n._submitCommand(); return n._prod.openTasks.some(t => t.text === 'smoke task'); })()" true
+# The n command adds a post-it note.
+nnx_check command-note "(() => { const n = $NNX; n._toggleFromKeyboard(); n._commandEntry.text = 'n smoke note'; n._submitCommand(); return n._prod.notes.some(x => x.text === 'smoke note'); })()" true
 nnx_check command-closes "(() => { const n = $NNX; return [n.isExpanded, n._kbGrab === null, n._commandBar.visible]; })()" '[false,true,false]'
 # A tab command opens that tab and stays open.
 nnx_check command-tab "(() => { const n = $NNX; n._toggleFromKeyboard(); n._commandEntry.text = 'home'; n._submitCommand(); const r = n.isExpanded; n.collapse(); return [r, n._kbGrab === null]; })()" '[true,true]'

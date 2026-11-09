@@ -3,7 +3,8 @@
 // Everything lives under ~/.local/share/notchnux (0700) as small files written
 // atomically with 0600 permissions:
 //   tasks.json  — [{ id, text, done, starred, created, doneAt }]
-//   notes.md    — free text
+//   notes.json  — [{ id, text, color, created, updated, pinned, pos }] (post-its;
+//                 an old notes.md is migrated once and kept as notes.md.bak)
 //   focus.json  — timer state + today's stats
 //
 // GNOME disables the extension on every screen lock and re-enables it on
@@ -15,9 +16,9 @@ import GLib from 'gi://GLib';
 import { logError } from './log.js';
 
 export const DATA_DIR = GLib.build_filenamev([GLib.get_user_data_dir(), 'notchnux']);
-const TASKS_PATH = GLib.build_filenamev([DATA_DIR, 'tasks.json']);
-const NOTES_PATH = GLib.build_filenamev([DATA_DIR, 'notes.md']);
-const FOCUS_PATH = GLib.build_filenamev([DATA_DIR, 'focus.json']);
+
+export const NOTE_COLORS = { yellow: '#ffd60a', green: '#30d158', blue: '#64d2ff', pink: '#ff6482', purple: '#bf5af2' };
+const MAX_NOTE_COUNT = 50;
 
 export const FOCUS_PRESETS = [15, 25, 50];   // minutes
 
@@ -34,7 +35,7 @@ const LONG_BREAK_MIN = 15;
 const LONG_BREAK_EVERY = 4;                    // sessions
 const MAX_TASK_LEN = 200;
 const MAX_TASKS = 500;
-const MAX_NOTES = 64 * 1024;
+const MAX_NOTES = 64 * 1024;                   // bytes of text per note
 
 // Read a small data file without blocking the shell. Calls back with its
 // text, or null if it doesn't exist / can't be read; not at all if
@@ -53,14 +54,17 @@ export function readTextAsync(path, cancellable, cb) {
     });
 }
 
+// true if the file was written.
 export function writeText(path, text) {
     try {
-        GLib.mkdir_with_parents(DATA_DIR, 0o700);
+        GLib.mkdir_with_parents(GLib.path_get_dirname(path), 0o700);
         GLib.file_set_contents_full(path, new TextEncoder().encode(text),
             GLib.FileSetContentsFlags.CONSISTENT, 0o600);
         GLib.chmod(path, 0o600);
+        return true;
     } catch (e) {
         logError(`failed to save ${path}`, e);
+        return false;
     }
 }
 
@@ -69,7 +73,12 @@ function todayKey(d = new Date()) {
 }
 
 export class ProductivityStore {
-    constructor() {
+    constructor({ dataDir = DATA_DIR } = {}) {
+        this._dir = dataDir;
+        this._tasksPath = GLib.build_filenamev([dataDir, 'tasks.json']);
+        this._notesPath = GLib.build_filenamev([dataDir, 'notes.json']);
+        this._oldNotesPath = GLib.build_filenamev([dataDir, 'notes.md']);
+        this._focusPath = GLib.build_filenamev([dataDir, 'focus.json']);
         this._saveIds = {};
         this._listeners = new Set();
         this._cancellable = new Gio.Cancellable();
@@ -78,7 +87,7 @@ export class ProductivityStore {
         // can't overwrite saved data.
         this._loaded = { tasks: false, notes: false, focus: false };
         this._tasks = [];
-        this._notes = '';
+        this._notes = [];
         this._focus = this._parseFocus(null);
         this._tickId = 0;
         this._swTickId = 0;
@@ -97,17 +106,28 @@ export class ProductivityStore {
             this._syncSwTicker();
             this._emit('loaded');
         };
-        readTextAsync(TASKS_PATH, this._cancellable, text => {
+        readTextAsync(this._tasksPath, this._cancellable, text => {
             this._tasks = this._parseTasks(text);
             this._loaded.tasks = true;
             finish();
         });
-        readTextAsync(NOTES_PATH, this._cancellable, text => {
-            this._notes = text ?? '';
-            this._loaded.notes = true;
-            finish();
+        readTextAsync(this._notesPath, this._cancellable, text => {
+            if (text !== null) {
+                this._notes = this._parseNotes(text);
+                this._loaded.notes = true;
+                finish();
+                return;
+            }
+            // No notes.json yet: migrate the old free-text notes.md once.
+            readTextAsync(this._oldNotesPath, this._cancellable, old => {
+                this._notes = [];
+                if (old !== null)
+                    this._migrateOldNotes(old);
+                this._loaded.notes = true;
+                finish();
+            });
         });
-        readTextAsync(FOCUS_PATH, this._cancellable, text => {
+        readTextAsync(this._focusPath, this._cancellable, text => {
             this._focus = this._parseFocus(text);
             this._loaded.focus = true;
             finish();
@@ -166,11 +186,11 @@ export class ProductivityStore {
         if (!this._loaded[what])
             return;
         if (what === 'tasks')
-            writeText(TASKS_PATH, JSON.stringify(this._tasks, null, 1));
+            writeText(this._tasksPath, JSON.stringify(this._tasks, null, 1));
         else if (what === 'notes')
-            writeText(NOTES_PATH, this._notes);
+            writeText(this._notesPath, JSON.stringify(this._notes, null, 1));
         else if (what === 'focus')
-            writeText(FOCUS_PATH, JSON.stringify(this._focus, null, 1));
+            writeText(this._focusPath, JSON.stringify(this._focus, null, 1));
     }
 
     // ------------------------------------------------------------ stopwatch
@@ -261,7 +281,7 @@ export class ProductivityStore {
             // Keep the unreadable file for recovery instead of letting the
             // next save overwrite it.
             logError('tasks.json is unreadable; moved to tasks.json.bak', e);
-            GLib.rename(TASKS_PATH, `${TASKS_PATH}.bak`);
+            GLib.rename(this._tasksPath, `${this._tasksPath}.bak`);
             return [];
         }
     }
@@ -344,17 +364,146 @@ export class ProductivityStore {
 
     // ---------------------------------------------------------------- notes
 
+    // Most recently updated first.
     get notes() {
-        return this._notes;
+        return [...this._notes].sort((a, b) => b.updated - a.updated);
     }
 
-    setNotes(text) {
-        text = String(text ?? '').slice(0, MAX_NOTES);
-        if (text === this._notes)
-            return;
-        this._notes = text;
+    getNote(id) {
+        return this._notes.find(x => x.id === id) ?? null;
+    }
+
+    _parseNotes(text) {
+        try {
+            let list = JSON.parse(text);
+            if (!Array.isArray(list))
+                throw new Error('notes.json is not a list');
+            let seen = new Set();
+            let out = [];
+            for (let x of list) {
+                if (!x || typeof x.text !== 'string')
+                    continue;
+                let id = String(x.id ?? GLib.uuid_string_random());
+                if (seen.has(id))
+                    continue;
+                seen.add(id);
+                let pos = x.pos && Number.isFinite(Number(x.pos.x)) && Number.isFinite(Number(x.pos.y))
+                    ? { x: Math.round(Number(x.pos.x)), y: Math.round(Number(x.pos.y)) } : null;
+                out.push({
+                    id,
+                    text: this._clipNote(x.text),
+                    color: x.color in NOTE_COLORS ? x.color : 'yellow',
+                    created: Number(x.created) || Date.now(),
+                    updated: Number(x.updated) || Number(x.created) || Date.now(),
+                    pinned: !!x.pinned,
+                    pos,
+                });
+                if (out.length >= MAX_NOTE_COUNT)
+                    break;
+            }
+            return out;
+        } catch (e) {
+            logError('notes.json is unreadable; moved to notes.json.bak', e);
+            GLib.rename(this._notesPath, `${this._notesPath}.bak`);
+            return [];
+        }
+    }
+
+    // notes.md -> one yellow note. notes.md is renamed to notes.md.bak only
+    // once notes.json is on disk.
+    _migrateOldNotes(old) {
+        let now = Date.now();
+        let body = this._clipNote(old);
+        if (body.trim()) {
+            this._notes = [{ id: GLib.uuid_string_random(), text: body, color: 'yellow', created: now, updated: now, pinned: false, pos: null }];
+            if (!writeText(this._notesPath, JSON.stringify(this._notes, null, 1)))
+                return;
+        }
+        GLib.rename(this._oldNotesPath, `${this._oldNotesPath}.bak`);
+    }
+
+    // Cut to MAX_NOTES bytes of UTF-8 (without splitting a character).
+    _clipNote(text) {
+        text = String(text ?? '');
+        if (text.length * 3 <= MAX_NOTES)
+            return text;
+        let bytes = new TextEncoder().encode(text);
+        if (bytes.length <= MAX_NOTES)
+            return text;
+        return new TextDecoder().decode(bytes.slice(0, MAX_NOTES)).replace(/\uFFFD+$/, '');
+    }
+
+    _changedNotes() {
         this._scheduleSave('notes', 600);
         this._emit('notes');
+    }
+
+    addNote(text = '', color = 'yellow') {
+        if (this._notes.length >= MAX_NOTE_COUNT)
+            throw new Error('TooManyNotes');
+        let now = Date.now();
+        let note = {
+            id: GLib.uuid_string_random(),
+            text: this._clipNote(text),
+            color: color in NOTE_COLORS ? color : 'yellow',
+            created: now, updated: now, pinned: false, pos: null,
+        };
+        this._notes.push(note);
+        this._changedNotes();
+        return note.id;
+    }
+
+    updateNote(id, text) {
+        let note = this.getNote(id);
+        text = this._clipNote(text);
+        if (!note || text === note.text)
+            return;
+        note.text = text;
+        note.updated = Date.now();
+        this._changedNotes();
+    }
+
+    setNoteColor(id, color) {
+        let note = this.getNote(id);
+        if (!note || !(color in NOTE_COLORS) || note.color === color)
+            return;
+        note.color = color;
+        this._changedNotes();
+    }
+
+    // Returns the removed note so an Undo can hand it to restoreNote().
+    removeNote(id) {
+        let i = this._notes.findIndex(x => x.id === id);
+        if (i < 0)
+            return null;
+        let [note] = this._notes.splice(i, 1);
+        this._changedNotes();
+        return note;
+    }
+
+    restoreNote(note) {
+        if (!note || this.getNote(note.id))
+            return;
+        this._notes.push(note);
+        this._changedNotes();
+    }
+
+    pinNote(id, on) {
+        let note = this.getNote(id);
+        if (!note || note.pinned === !!on)
+            return;
+        note.pinned = !!on;
+        this._changedNotes();
+    }
+
+    moveNote(id, x, y) {
+        let note = this.getNote(id);
+        x = Math.round(Number(x));
+        y = Math.round(Number(y));
+        if (!note || !Number.isFinite(x) || !Number.isFinite(y))
+            return;
+        note.pos = { x, y };
+        this._changedNotes();
     }
 
     // ---------------------------------------------------------------- focus

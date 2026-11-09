@@ -757,6 +757,9 @@ export const ProductivityTabs = {
     // ------------------------------------------------------------ Notes
 
     _renderNotesTab() {
+        // Until the post-it board lands this tab edits the most recently
+        // updated note (one is created on the first edit).
+        let current = () => this._prod.notes[0] ?? null;
         let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-notes', ...VERTICAL, x_expand: true });
 
         let head = new St.BoxLayout({ style_class: 'nook-section-head', x_expand: true });
@@ -766,7 +769,7 @@ export const ProductivityTabs = {
         head.add_child(new St.Widget({ x_expand: true }));
         let copy = new St.Button({ style_class: 'nook-clear-btn', label: 'Copy', can_focus: true });
         copy.connect('clicked', () => {
-            St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, this._prod.notes);
+            St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, current()?.text ?? '');
             status.set_text('Copied');
         });
         head.add_child(copy);
@@ -800,7 +803,7 @@ export const ProductivityTabs = {
         scroll.set_overlay_scrollbars(true);
         let wrap = new St.BoxLayout({ ...VERTICAL, x_expand: true });
         let entry = new St.Entry({ style_class: 'nook-notes-entry', hint_text: 'Jot something down… it saves as you type.',
-            can_focus: true, x_expand: true, text: this._prod.notes });
+            can_focus: true, x_expand: true, text: current()?.text ?? '' });
         let text = entry.clutter_text;
         text.single_line_mode = false;
         text.activatable = false;
@@ -822,7 +825,12 @@ export const ProductivityTabs = {
 
         let typingId = 0;
         text.connect('text-changed', () => {
-            this._prod.setNotes(entry.get_text());
+            let t = entry.get_text();
+            let cur = current();
+            if (cur)
+                this._prod.updateNote(cur.id, t);
+            else if (t)
+                this._prod.addNote(t);
             status.set_text('Editing…');
             words();
             if (typingId) GLib.Source.remove(typingId);
