@@ -6341,9 +6341,13 @@ export const NotchNux = GObject.registerClass({
             Main.popModal(grab);
         } catch (e) {
             logError('failed to release keyboard', e);
+        } finally {
+            try {
+                global.stage.set_key_focus(null);
+            } finally {
+                this._releasingKeyboard = false;
+            }
         }
-        global.stage.set_key_focus(null);
-        this._releasingKeyboard = false;
     }
 
     // ============================================================
