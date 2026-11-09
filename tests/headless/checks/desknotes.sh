@@ -5,7 +5,7 @@ ID=$(nnx_eval "$NNX._prod.notes[0].id" | tr -d '"')
 nnx_check desk-none-before "$NNX._deskNotes._cards.size" 0
 nnx_eval "($NNX._prod.pinNote('$ID', true), true)" >/dev/null; sleep 1
 nnx_check desk-actor-exists "(() => { const d = $NNX._deskNotes; const c = d._cards.get('$ID'); return [d._cards.size, !!c, c.actor.width, c.actor.height]; })()" '[1,true,180,180]'
-nnx_check desk-layer "(() => { const c = $NNX._deskNotes._cards.get('$ID').actor; const g = Main.layoutManager._backgroundGroup; return [c.get_parent() === g.get_parent(), c.get_previous_sibling() === g]; })()" '[true,true]'
+nnx_check desk-layer "(() => { const c = $NNX._deskNotes._cards.get('$ID').actor; const g = Main.layoutManager._backgroundGroup; return [c.get_parent() === g, g.get_last_child() === c, c.get_previous_sibling() !== null]; })()" '[true,true,true]'
 nnx_check desk-text "(() => { const c = $NNX._deskNotes._cards.get('$ID'); return c.label.get_text() === $NNX._prod.getNote('$ID').text; })()" true
 nnx_check desk-default-pos-saved "(() => { const n = $NNX._prod.getNote('$ID'); const a = Main.layoutManager.getWorkAreaForMonitor(Main.layoutManager.primaryIndex); return [!!n.pos, n.pos.x + 180 <= a.x + a.width, n.pos.y >= a.y]; })()" '[true,true,true]'
 sleep 0.5

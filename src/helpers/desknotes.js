@@ -1,8 +1,8 @@
 // Post-it notes pinned to the desktop.
 //
-// One 180x180 card per pinned note, inserted directly above the wallpaper
-// (Main.layoutManager._backgroundGroup) in its parent, the same layer
-// wptransition.js uses: on the wallpaper, under every window. Dragging uses
+// One 180x180 card per pinned note, a child of the wallpaper's group
+// (Main.layoutManager._backgroundGroup) kept above its wallpaper actors:
+// on the wallpaper, under every window, across restacks. Dragging uses
 // plain press/motion/release handlers (no Clutter.DragAction) so it behaves
 // the same on GNOME 46-51; the position is saved only on release. A note that
 // ends up outside every monitor's work area (dragged off, monitor unplugged)
@@ -39,6 +39,8 @@ export class DeskNotes {
         this._drag = null;
         this._lastPress = { id: null, time: 0 };
         this._destroyed = false;
+        this._layerGroup = null;
+        this._childAddedId = 0;
 
         // Built while the store is still empty (its files are read async):
         // the saved notes arrive with 'loaded' (notes.md migration ends in
@@ -98,13 +100,44 @@ export class DeskNotes {
                 this._endDrag();
         });
 
-        let group = Main.layoutManager._backgroundGroup;
-        let parent = group?.get_parent() ?? Main.layoutManager.uiGroup;
-        if (group && group.get_parent())
-            parent.insert_child_above(actor, group);
-        else
-            parent.add_child(actor);
+        this._layer().add_child(actor);
         return { actor, label, color: note.color, placed: false };
+    }
+
+    // Cards live inside the background group itself, above its wallpaper
+    // actors. Mutter's restack lowers every window actor and then the
+    // background group to the bottom of window_group, so a sibling of the
+    // group would end up above all windows; a child moves with the group.
+    _layer() {
+        let group = Main.layoutManager._backgroundGroup;
+        if (!group)
+            return Main.layoutManager.uiGroup;
+        if (this._layerGroup !== group) {
+            this._disconnectLayer();
+            this._layerGroup = group;
+            // BackgroundManager adds a new wallpaper actor on every wallpaper
+            // or monitor change; keep the cards above it.
+            this._childAddedId = group.connect('child-added', (g, child) => {
+                if (![...this._cards.values()].some(c => c.actor === child))
+                    this._raiseCards();
+            });
+        }
+        return group;
+    }
+
+    _raiseCards() {
+        let group = this._layerGroup;
+        for (let { actor } of this._cards.values()) {
+            if (actor.get_parent() === group)
+                group.set_child_above_sibling(actor, null);
+        }
+    }
+
+    _disconnectLayer() {
+        if (this._layerGroup && this._childAddedId)
+            this._layerGroup.disconnect(this._childAddedId);
+        this._layerGroup = null;
+        this._childAddedId = 0;
     }
 
     sync() {
@@ -277,6 +310,7 @@ export class DeskNotes {
         this._endDrag();
         this._unsub?.();
         this._unsub = null;
+        this._disconnectLayer();
         if (this._monitorsId)
             Main.layoutManager.disconnect(this._monitorsId);
         if (this._sessionId)
