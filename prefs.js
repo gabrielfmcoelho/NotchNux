@@ -22,6 +22,8 @@ import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/
 import { ConfigStore, TAB_DEFS, FEATURE_DEFS, WALLPAPER_DEFAULTS, ENHANCE_AUTO, ENHANCE_RANGE, normalizeHex, BLUR_PRESETS, BLUR_RADIUS_RANGE, BLUR_DEFAULTS, MAX_PINNED } from './src/helpers/config.js';
 import { discoverHwmon, pickSensors, pickFan, fanUsable, SENSOR_KINDS, FAN_GUARD_C } from './src/helpers/sensors.js';
 import { TERMINALS } from './src/helpers/dev.js';
+import { EdsClient } from './src/helpers/eds.js';
+import { taskListChoices } from './src/helpers/tasksources.js';
 import {
     SETTINGS_PATH, isConnected, connectStatusLine, disconnectStatusLine, statusLineOutdated, updateStatusLine,
     isApproveConnected, connectApproveHook, disconnectApproveHook,
@@ -88,6 +90,7 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         this._addWallpaperGroup(page, config, window);
         this._addTabsGroup(page, config);
         this._addFeaturesGroup(page, config);
+        this._addGoogleGroup(page, config);
         this._addSensorsGroup(page, config);
         this._addClaudeGroup(page, config);
         this._addDevGroup(page, config, window);
@@ -850,6 +853,8 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         page.add(group);
 
         for (const f of FEATURE_DEFS) {
+            if (f.group)
+                continue; // in its own group (Google)
             // Plain text: labels like "Charging & low battery alerts" aren't
             // markup. Subtitle after construction, or it's parsed before
             // use_markup applies.
@@ -864,6 +869,95 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
             });
             group.add(row);
         }
+    }
+
+    // ---- Google: Tasks through GNOME Online Accounts (helpers/eds.js) ----
+    // Off by default. Nothing is started until the switch is on; then one
+    // check (the EDS worker's hello + its task lists) runs once per dialog.
+    _addGoogleGroup(page, config) {
+        const group = new Adw.PreferencesGroup({
+            title: 'Google',
+            description: 'Uses the Google account added in Settings → Online Accounts, through Evolution Data Server. NotchNux never signs in to Google itself.',
+        });
+        page.add(group);
+
+        const status = new Adw.ActionRow({ title: 'Status', use_markup: false });
+        group.add(status);
+
+        const def = FEATURE_DEFS.find(f => f.id === 'googleTasks');
+        const enable = new Adw.SwitchRow({ title: def.label, use_markup: false, active: config.isFeatureEnabled(def.id) });
+        enable.subtitle = def.description;
+        group.add(enable);
+
+        const model = Gtk.StringList.new(['Local']);
+        const listRow = new Adw.ComboRow({ title: 'Tasks list', use_markup: false, model, sensitive: false });
+        listRow.subtitle = 'What the Tasks tab and Home show. Local is the list stored on this computer.';
+        group.add(listRow);
+
+        let choices = taskListChoices(null);
+        let filling = false;
+        let checked = null; // the check's promise, kept for the dialog's lifetime
+
+        listRow.connect('notify::selected', () => {
+            if (!filling && choices[listRow.selected])
+                config.setTasksSource(choices[listRow.selected].id);
+        });
+
+        const showChoices = list => {
+            filling = true;
+            const saved = config.tasksSource;
+            choices = taskListChoices(list);
+            if (!choices.some(c => c.id === saved))
+                choices.push({ id: saved, label: 'Saved list (not found)' });
+            model.splice(0, model.get_n_items(), choices.map(c => c.label));
+            listRow.selected = Math.max(0, choices.findIndex(c => c.id === saved));
+            filling = false;
+        };
+
+        const check = async () => {
+            const probe = await EdsClient.probe();
+            if (!probe.available)
+                return { error: `Not available — ${probe.reason}. Needs Evolution Data Server’s GObject bindings (gir1.2-ecal-2.0, gir1.2-edataserver-1.2).` };
+            const client = new EdsClient();
+            try {
+                return { lists: (await client.call('sources'))?.tasks ?? [] };
+            } catch (e) {
+                return { error: `Couldn’t list your task lists — ${e.message}` };
+            } finally {
+                client.destroy();
+            }
+        };
+
+        const refresh = () => {
+            if (!enable.active) {
+                status.subtitle = 'Off. The Tasks tab uses the tasks stored on this computer.';
+                listRow.sensitive = false;
+                return;
+            }
+            status.subtitle = 'Checking…';
+            checked ??= check();
+            checked.then(r => {
+                if (!enable.active)
+                    return;
+                if (r.error) {
+                    status.subtitle = r.error;
+                    listRow.sensitive = false;
+                    return;
+                }
+                const google = r.lists.filter(l => l.backend === 'gtasks').length;
+                status.subtitle = google
+                    ? `${google} Google Tasks ${google === 1 ? 'list' : 'lists'} found.`
+                    : 'No Google Tasks lists found. Add a Google account in Settings → Online Accounts.';
+                showChoices(r.lists);
+                listRow.sensitive = true;
+            });
+        };
+
+        enable.connect('notify::active', () => {
+            config.setFeatureEnabled(def.id, enable.active);
+            refresh();
+        });
+        refresh();
     }
 
     // ---- Temperatures & fan (helpers/sensors.js) ----

@@ -1944,6 +1944,41 @@
 .nook-task-footer {
     padding: 0 4px;
 }
+/* Google Tasks: list picker, sync button, inline error. */
+.nook-task-source {
+    max-width: 220px;
+}
+.nook-task-source-label {
+    margin-right: 4px;
+}
+.nook-task-picker {
+    padding: 4px;
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.06);
+    spacing: 2px;
+}
+.nook-task-picker-item {
+    padding: 5px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.75);
+}
+.nook-task-picker-item:hover {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+.nook-task-picker-item-active {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.14);
+}
+.nook-task-picker-note {
+    padding: 4px 10px;
+}
+.nook-task-error {
+    padding: 0 4px;
+    font-size: 11px;
+    color: #ff453a;
+}
 
 /* ---------- Focus ---------- */
 .nook-focus {

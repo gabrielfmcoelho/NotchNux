@@ -216,7 +216,8 @@ const KeyboardFeatures = {
     _runCommand(cmd) {
         switch (cmd.kind) {
         case 'task':
-            this._prod.addTask((cmd.starred ? '!' : '') + cmd.text);
+            this._taskAddOrigin = 'command';
+            this._taskSource.add((cmd.starred ? '!' : '') + cmd.text);
             return true;
         case 'focus':
             this._prod.setFocusMinutes(cmd.minutes);

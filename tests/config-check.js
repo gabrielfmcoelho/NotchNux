@@ -47,4 +47,16 @@ eq(cfg({ accentMode: 'system' }).accentMode, 'system', 'stored system accentMode
     eq(again.accentMode, 'system', 'accentMode round-trips through the file');
 }
 
+// Google Tasks: off by default; the Tasks list is Local unless picked.
+eq([cfg({}).isFeatureEnabled('googleTasks'), cfg({}).tasksSource], [false, 'local'], 'googleTasks off, Local list by default');
+eq([cfg({ tasksSource: 'abc-uid' }).tasksSource, cfg({ tasksSource: '' }).tasksSource, cfg({ tasksSource: 7 }).tasksSource],
+    ['abc-uid', 'local', 'local'], 'tasksSource: a uid, else Local');
+{
+    const store = new ConfigStore({ readFile: p => { try { return GLib.file_get_contents(p)[1]; } catch (e) { return null; } } });
+    store.setTasksSource('list-uid');
+    store.setFeatureEnabled('googleTasks', true);
+    const again = new ConfigStore({ readFile: p => { try { return GLib.file_get_contents(p)[1]; } catch (e) { return null; } } });
+    eq([again.tasksSource, again.isFeatureEnabled('googleTasks')], ['list-uid', true], 'tasksSource + flag round-trip');
+}
+
 print(`config-check: ${n} checks passed`);

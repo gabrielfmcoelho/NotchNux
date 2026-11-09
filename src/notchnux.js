@@ -414,6 +414,7 @@ export const NotchNux = GObject.registerClass({
             trayTemps: this._config.trayTemps,
             fanControl: this._config.fanControl,
             devRootsKey: JSON.stringify(this._config.devProjectRoots),
+            tasksSource: this._config.tasksSource,
         };
     }
 
@@ -511,6 +512,10 @@ export const NotchNux = GObject.registerClass({
             this._releaseFan();
         if (next.devRootsKey !== prev.devRootsKey)
             this._onDevRootsChanged();
+        // Tasks list picked in prefs (the googleTasks switch goes through
+        // _onFeatureToggled).
+        if (next.tasksSource !== prev.tasksSource)
+            this._syncTaskSource();
         if ((next.trayTemps !== prev.trayTemps || next.fanControl !== prev.fanControl) && this._invalidateTab('system'))
             this._renderActiveTab();
 
@@ -2108,6 +2113,8 @@ export const NotchNux = GObject.registerClass({
             this._leaveClaudeTab();
         if (tab === 'dev')
             this._leaveDevTab();
+        if (tab === 'tasks')
+            this._leaveTasksTab();
         // A keyboard-opened dashboard keeps its grab across tab switches.
         if (!(this._openedByKeyboard && this.isExpanded))
             this._releaseKeyboard?.();
@@ -2190,6 +2197,8 @@ export const NotchNux = GObject.registerClass({
         } finally {
             this._presenting = false;
         }
+        if (tab === 'tasks')
+            this._tasksTabShown();
         this._presentHost(host, animate, dir);
     }
 
@@ -4552,6 +4561,9 @@ export const NotchNux = GObject.registerClass({
                 break;
             case 'claudeMonitor':
                 this._onClaudeFeatureToggled();
+                break;
+            case 'googleTasks':
+                this._syncTaskSource();
                 break;
             default:
                 this._onLedgeFeatureToggled(id, on);

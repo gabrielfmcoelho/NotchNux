@@ -14,12 +14,15 @@ import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 
-import { ProductivityStore, FOCUS_PRESETS, NOTE_COLORS, fmtCountdown } from '../helpers/productivity.js';
+import { ProductivityStore, FOCUS_PRESETS, NOTE_COLORS, DATA_DIR, fmtCountdown } from '../helpers/productivity.js';
+import { LocalTaskSource, EdsTaskSource, taskListChoices } from '../helpers/tasksources.js';
+import { EdsClient } from '../helpers/eds.js';
 import { FocusRing, AlbumArtDisc, BREAK_GREEN, accentHex, accentRgbStr } from '../helpers/widgets.js';
 import { addPressFeedback } from '../helpers/motion.js';
 import { fmt } from '../helpers/format.js';
 import { VERTICAL, HORIZONTAL } from '../helpers/compat.js';
 import { logError } from '../helpers/log.js';
+import { SYS } from './ledge.js';
 
 const NOTE_CARD_H = 120;
 const NOTE_TEXT_H = 64;
@@ -39,6 +42,8 @@ function noteAgo(ms) {
 }
 
 const HOME_TASKS = 4;
+// A Google list re-syncs this often while the Tasks tab is on screen.
+const TASKS_REFRESH_S = 300;
 
 function label(text, styleClass, props = {}) {
     let l = new St.Label({ text, style_class: styleClass, y_align: Clutter.ActorAlign.CENTER, ...props });
@@ -76,12 +81,21 @@ export const ProductivityTabs = {
     _initProductivity() {
         this._prod = new ProductivityStore();
         this._prodUnsub = this._prod.subscribe(kind => this._onProductivityChanged(kind));
+        this._syncTaskSource();
         this._buildPillFocus();
         this._syncPillFocus();
         this._syncFocusDnd();
     },
 
     _destroyProductivity() {
+        this._stopTasksRefresh();
+        this._taskSourceUnsub?.();
+        this._taskSourceUnsub = null;
+        this._taskSource?.destroy();
+        this._taskSource = null;
+        this._taskSourceKey = null;
+        this._edsClient?.destroy();
+        this._edsClient = null;
         this._prodUnsub?.();
         // Hand Do Not Disturb back if we set it. If a session is still running
         // when we're re-enabled (e.g. after unlocking) it is re-applied then.
@@ -154,13 +168,129 @@ export const ProductivityTabs = {
             if (this.isExpanded && this._activeTab === 'notes')
                 this._showActiveTab();
             break;
-        case 'tasks':
-            if (this._invalidateTab('tasks', 'home')) {
-                if (this._activeTab === 'tasks') this._tasksUi?.fill();
-                else this._homeUi?.fillTasks();
-            }
-            break;
+        // 'tasks' arrives through the task source (_onTaskSourceChanged).
         }
+    },
+
+    // ------------------------------------------------------------ task source
+
+    // The Tasks tab and Home's card read this._taskSource: the local store,
+    // or the picked Google list while the googleTasks feature is on. Run on
+    // init and whenever the feature or the picked list changes. The EDS
+    // worker is never started with the feature off.
+    _syncTaskSource() {
+        if (this._destroyed || !this._prod)
+            return;
+        let google = this._config.isFeatureEnabled('googleTasks');
+        let uid = google ? this._config.tasksSource : 'local';
+        let key = uid === 'local' ? 'local' : `eds:${uid}`;
+        if (!this._taskSource || key !== this._taskSourceKey) {
+            this._taskSourceUnsub?.();
+            this._taskSource?.destroy();
+            if (key === 'local') {
+                this._taskSource = new LocalTaskSource(this._prod);
+            } else {
+                this._edsClient ??= new EdsClient();
+                this._taskSource = new EdsTaskSource(this._edsClient, uid,
+                    GLib.build_filenamev([DATA_DIR, 'gtask-stars.json']));
+            }
+            this._taskSourceKey = key;
+            this._taskSourceUnsub = this._taskSource.subscribe(ev => this._onTaskSourceChanged(ev));
+            if (key !== 'local')
+                this._taskSource.refresh();
+        }
+        if (!google) {
+            this._stopTasksRefresh();
+            this._edsClient?.destroy();
+            this._edsClient = null;
+            this._taskLists = null;
+        }
+        this._tasksPickerOpen = false;
+        if (this._invalidateTab('tasks', 'home'))
+            this._renderActiveTab();
+        if (google && this.isExpanded && this._activeTab === 'tasks')
+            this._tasksTabShown();
+    },
+
+    _onTaskSourceChanged(ev) {
+        if (this._destroyed)
+            return;
+        if (ev?.failed)
+            this._onTaskWriteFailed(ev.failed);
+        if (this._invalidateTab('tasks', 'home')) {
+            if (this._activeTab === 'tasks') this._tasksUi?.fill();
+            else this._homeUi?.fillTasks();
+        }
+    },
+
+    // A Google write was refused (already undone) or timed out (re-listed).
+    // The island alert waits while the dashboard is open, so the Tasks
+    // header shows the error inline too.
+    _onTaskWriteFailed(f) {
+        this._pushAlert({ kind: 'gtasks', icon: 'dialog-warning-symbolic', color: SYS.red,
+            title: "Couldn't save to Google", value: f.reason });
+        // A refused add puts the typed text back to retry. Not after a
+        // timeout: the task may exist after all.
+        if (f.op !== 'add' || !f.text || f.timedOut)
+            return;
+        let entries = this._taskAddOrigin === 'home'
+            ? [this._homeUi?.taskEntry, this._tasksUi?.entry]
+            : [this._tasksUi?.entry, this._homeUi?.taskEntry];
+        let entry = entries.find(e => e && !e.get_text());
+        entry?.set_text(f.text);
+    },
+
+    // Tasks tab on screen: retry a stopped or wedged worker, re-sync, and
+    // keep re-syncing every few minutes while it stays open.
+    _tasksTabShown() {
+        if (!this._config.isFeatureEnabled('googleTasks'))
+            return;
+        this._edsClient?.reset();
+        this._taskSource?.refresh();
+        this._loadTaskLists();
+        if (!this._tasksRefreshId && this._taskSource?.kind === 'eds') {
+            this._tasksRefreshId = GLib.timeout_add_seconds(GLib.PRIORITY_LOW, TASKS_REFRESH_S, () => {
+                this._taskSource?.refresh();
+                return GLib.SOURCE_CONTINUE;
+            });
+        }
+    },
+
+    _leaveTasksTab() {
+        this._tasksPickerOpen = false;
+        this._stopTasksRefresh();
+    },
+
+    _stopTasksRefresh() {
+        if (this._tasksRefreshId) {
+            GLib.Source.remove(this._tasksRefreshId);
+            this._tasksRefreshId = 0;
+        }
+    },
+
+    // The picker's choices (Local + the Google/writable task lists).
+    _loadTaskLists() {
+        if (this._taskListsLoading || !this._config.isFeatureEnabled('googleTasks'))
+            return;
+        this._edsClient ??= new EdsClient();
+        this._taskListsLoading = true;
+        this._edsClient.call('sources').then(res => {
+            this._taskLists = taskListChoices(res?.tasks);
+        }, e => {
+            logError('listing task lists failed', e);
+        }).finally(() => {
+            this._taskListsLoading = false;
+            if (!this._destroyed)
+                this._tasksUi?.fill();
+        });
+    },
+
+    _pickTaskList(id) {
+        this._tasksPickerOpen = false;
+        if (id !== this._config.tasksSource)
+            this._writeConfig(c => c.setTasksSource(id));
+        this._syncTaskSource();
+        this._tasksUi?.fill();
     },
 
     // Open a tab, expanding the notch if needed.
@@ -311,6 +441,7 @@ export const ProductivityTabs = {
         this._mount(panel);
         this._homeUi = {
             fillTasks: tasks.fill,
+            taskEntry: tasks.entry,
             updateFocus: focus.update,
             updateMedia: media.update,
         };
@@ -386,15 +517,16 @@ export const ProductivityTabs = {
             can_focus: true, x_expand: true });
         this._makeTypable(entry);
         entry.clutter_text.connect('activate', () => {
-            if (this._prod.addTask(entry.get_text()))
+            this._taskAddOrigin = 'home';
+            if (this._taskSource.add(entry.get_text()))
                 entry.set_text('');
         });
         c.add_child(entry);
 
         let fill = () => {
             list.destroy_all_children();
-            let open = this._prod.openTasks;
-            count.set_text(open.length ? `${open.length} open` : `${this._prod.doneToday} done today`);
+            let open = this._taskSource.open;
+            count.set_text(open.length ? `${open.length} open` : `${this._taskSource.doneToday} done today`);
             if (open.length === 0) {
                 list.add_child(label('Nothing on your list. Nice.', 'nook-home-empty'));
                 return;
@@ -408,7 +540,7 @@ export const ProductivityTabs = {
                 list.add_child(more);
             }
         };
-        return { card: c, fill };
+        return { card: c, fill, entry };
     },
 
     _buildHomeFocus() {
@@ -498,6 +630,9 @@ export const ProductivityTabs = {
         let row = new St.BoxLayout({
             style_class: `nook-task-row${compact ? ' nook-task-row-compact' : ''}${task.done ? ' nook-task-done' : ''}`,
             x_expand: true, reactive: true, track_hover: true });
+        // Still being saved to Google: shown, but nothing to act on yet.
+        if (task.pending)
+            row.opacity = 150;
 
         let check = new St.Button({ style_class: 'nook-task-check', can_focus: true,
             y_align: Clutter.ActorAlign.CENTER, accessible_name: task.done ? 'Mark as not done' : 'Mark as done' });
@@ -512,7 +647,7 @@ export const ProductivityTabs = {
             row.ease({
                 opacity: 0, translation_x: 14, duration: 220, delay: 120,
                 mode: Clutter.AnimationMode.EASE_IN_QUAD,
-                onStopped: () => this._prod.toggleTask(task.id),
+                onStopped: () => this._taskSource.toggle(task.id),
             });
         });
         addPressFeedback(check, 0.88);
@@ -538,7 +673,7 @@ export const ProductivityTabs = {
             text.connect('button-release-event', () => {
                 let edit = new St.Entry({ style_class: 'nook-input nook-task-edit', text: task.text, x_expand: true, can_focus: true });
                 let done = save => {
-                    if (save) this._prod.renameTask(task.id, edit.get_text());
+                    if (save) this._taskSource.rename(task.id, edit.get_text());
                     else this._tasksUi?.fill();
                 };
                 edit.clutter_text.connect('activate', () => done(true));
@@ -556,12 +691,12 @@ export const ProductivityTabs = {
         }
 
         let star = iconButton(task.starred ? 'starred-symbolic' : 'non-starred-symbolic',
-            `nook-task-action${task.starred ? ' nook-task-star-on' : ''}`, () => this._prod.toggleStar(task.id), 'Star');
+            `nook-task-action${task.starred ? ' nook-task-star-on' : ''}`, () => this._taskSource.star(task.id), 'Star');
         if (task.starred)
             star.set_style(`color: ${accentHex()};`);
         let del = iconButton('window-close-symbolic', 'nook-task-action nook-task-delete', () => {
             row.ease({ opacity: 0, duration: 160, mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-                onStopped: () => this._prod.removeTask(task.id) });
+                onStopped: () => this._taskSource.remove(task.id) });
         }, 'Delete');
         // Secondary actions surface on hover so the list reads clean.
         let actions = new St.BoxLayout({ style_class: 'nook-task-actions', y_align: Clutter.ActorAlign.CENTER });
@@ -589,6 +724,27 @@ export const ProductivityTabs = {
         let badgeLabel = new St.Label();
         badge.set_child(badgeLabel);
         head.add_child(badge);
+
+        // Google Tasks on: which list (a drop-down below the header) and a
+        // re-sync button.
+        let google = this._config.isFeatureEnabled('googleTasks');
+        let pickerLabel = null, pickerList = null, refresh = null, errorLabel = null;
+        if (google) {
+            let picker = new St.Button({ style_class: 'nook-clear-btn nook-task-source', can_focus: true,
+                y_align: Clutter.ActorAlign.CENTER, accessible_name: 'Task list' });
+            let pickerRow = new St.BoxLayout({ y_align: Clutter.ActorAlign.CENTER });
+            pickerLabel = label('', 'nook-task-source-label');
+            pickerRow.add_child(pickerLabel);
+            pickerRow.add_child(new St.Icon({ icon_name: 'pan-down-symbolic', icon_size: 12, y_align: Clutter.ActorAlign.CENTER }));
+            picker.set_child(pickerRow);
+            picker.connect('clicked', () => {
+                this._tasksPickerOpen = !this._tasksPickerOpen;
+                if (this._tasksPickerOpen)
+                    this._loadTaskLists();
+                this._tasksUi?.fill();
+            });
+            head.add_child(picker);
+        }
         head.add_child(new St.Widget({ x_expand: true }));
 
         // Open / Done segmented switch.
@@ -605,9 +761,47 @@ export const ProductivityTabs = {
         }
         head.add_child(seg);
         let clear = new St.Button({ style_class: 'nook-clear-btn', label: 'Clear', can_focus: true, y_align: Clutter.ActorAlign.CENTER });
-        clear.connect('clicked', () => this._prod.clearDone());
+        clear.connect('clicked', () => this._taskSource.clearDone());
         head.add_child(clear);
+        if (google) {
+            refresh = iconButton('view-refresh-symbolic', 'nook-task-action nook-task-refresh', () => {
+                this._edsClient?.reset();
+                this._taskSource.refresh();
+                this._loadTaskLists();
+            }, 'Sync with Google');
+            head.add_child(refresh);
+        }
         panel.add_child(head);
+
+        if (google) {
+            pickerList = new St.BoxLayout({ style_class: 'nook-task-picker', ...VERTICAL, x_expand: true, visible: false });
+            panel.add_child(pickerList);
+            errorLabel = label('', 'nook-task-error', { visible: false });
+            panel.add_child(errorLabel);
+        }
+
+        // Rebuild the list choices: Local + the lists the worker reported,
+        // plus the saved one if it isn't among them (yet).
+        let fillPicker = () => {
+            let current = this._taskSource.kind === 'eds' ? this._taskSource.sourceUid : 'local';
+            let choices = [...(this._taskLists ?? taskListChoices(null))];
+            if (!choices.some(c => c.id === current))
+                choices.push({ id: current, label: this._taskLists ? 'Saved list (not found)' : 'Google list' });
+            pickerLabel.set_text(choices.find(c => c.id === current).label);
+            pickerList.visible = !!this._tasksPickerOpen;
+            pickerList.destroy_all_children();
+            if (!pickerList.visible)
+                return;
+            for (let c of choices) {
+                let b = new St.Button({ style_class: `nook-task-picker-item${c.id === current ? ' nook-task-picker-item-active' : ''}`,
+                    can_focus: true, x_expand: true, x_align: Clutter.ActorAlign.FILL });
+                b.set_child(label(c.label, 'nook-task-picker-label', { x_expand: true }));
+                b.connect('clicked', () => this._pickTaskList(c.id));
+                pickerList.add_child(b);
+            }
+            if (this._taskListsLoading && !this._taskLists)
+                pickerList.add_child(label('Looking for your lists…', 'nook-card-meta nook-task-picker-note'));
+        };
 
         // Quick add. A leading "!" stars the task.
         let addRow = new St.BoxLayout({ style_class: 'nook-task-add', x_expand: true });
@@ -615,7 +809,8 @@ export const ProductivityTabs = {
             can_focus: true, x_expand: true });
         this._makeTypable(entry);
         let add = () => {
-            if (this._prod.addTask(entry.get_text())) {
+            this._taskAddOrigin = 'tasks';
+            if (this._taskSource.add(entry.get_text())) {
                 entry.set_text('');
                 this._tasksView = 'open';
             }
@@ -638,9 +833,17 @@ export const ProductivityTabs = {
         panel.add_child(footer);
 
         let fill = () => {
-            let open = this._prod.openTasks;
-            let done = this._prod.doneTasks;
+            let open = this._taskSource.open;
+            let done = this._taskSource.done;
             let view = this._tasksView;
+            if (google) {
+                fillPicker();
+                refresh.visible = this._taskSource.kind === 'eds';
+                let err = this._taskSource.error;
+                errorLabel.visible = !!err;
+                if (err)
+                    errorLabel.set_text(`${this._taskSource.errorOp === 'refresh' ? "Couldn't reach Google" : "Couldn't save to Google"} — ${err}`);
+            }
             badgeLabel.set_text(String(open.length));
             badge.visible = open.length > 0;
             for (let [id, b] of Object.entries(segBtns)) {
@@ -666,13 +869,13 @@ export const ProductivityTabs = {
                     list.add_child(this._buildTaskRow(t));
             }
             footer.set_text(view === 'open'
-                ? `${this._prod.doneToday} done today · click a task to edit`
+                ? `${this._taskSource.doneToday} done today · click a task to edit`
                 : `${done.length} completed`);
             if (this.isExpanded && this._activeTab === 'tasks')
                 this._resizeToContent();
         };
         this._mount(panel);
-        this._tasksUi = { fill };
+        this._tasksUi = { fill, entry };
         fill();
     },
 

@@ -184,7 +184,9 @@ export const FEATURE_DEFS = [
     { id: 'pillVpn',           label: 'VPN in the pill',      description: 'Show a VPN icon in the pill while Tailscale or the Forti VPN is connected. Checked every 30 seconds, only while on.', default: true },
     { id: 'claudeMonitor',     label: 'Claude Code in the pill', description: 'Show your Claude Code sessions and 5-hour usage in the pill, with an alert when one finishes or needs you. Reads ~/.claude/sessions on this computer.', default: false },
     { id: 'activityApi',       label: 'Live activities API',  description: 'Let scripts and apps show a progress bar or message in the pill over D-Bus (io.github.notchnux). Text only, at most 8 at once.', default: true },
-    { id: 'topScroll',         label: 'Scroll top edge to switch workspaces', description: 'Restore top-edge scroll-to-switch-workspace when the panel is hidden — scroll anywhere along the top of the screen to move between workspaces.', default: false }
+    { id: 'topScroll',         label: 'Scroll top edge to switch workspaces', description: 'Restore top-edge scroll-to-switch-workspace when the panel is hidden — scroll anywhere along the top of the screen to move between workspaces.', default: false },
+    // `group: 'google'`: shown in Preferences' Google group, not under Features.
+    { id: 'googleTasks',       label: 'Google Tasks in the Tasks tab', description: 'Use a Google Tasks list (through GNOME Online Accounts) in the Tasks tab instead of the tasks stored on this computer.', default: false, group: 'google' }
 ];
 
 const DEFAULT_ACCENT = '#7aa2ff';
@@ -243,6 +245,11 @@ export function hexToRgb01(hex) {
     let h = normalizeHex(hex) ?? DEFAULT_ACCENT;
     let n = parseInt(h.slice(1), 16);
     return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
+}
+
+// 'local' or an EDS source uid (any short non-empty string).
+function cleanTasksSource(v) {
+    return typeof v === 'string' && v.trim() && v.length <= 256 ? v : 'local';
 }
 
 function configDir() {
@@ -356,7 +363,10 @@ export class ConfigStore {
             devProjectRoots: [],
             // The terminal the Dev tab opens: '' (the system default) or an
             // id from helpers/dev.js TERMINALS ('warp').
-            devTerminal: ''
+            devTerminal: '',
+            // The Tasks tab's list while the googleTasks feature is on:
+            // 'local' (tasks.json) or an EDS task-list source uid.
+            tasksSource: 'local'
         };
     }
 
@@ -419,6 +429,7 @@ export class ConfigStore {
                 data.claudeActivity = !!parsed.claudeActivity;
                 data.claudeEditor = typeof parsed.claudeEditor === 'string' ? parsed.claudeEditor : '';
                 data.devTerminal = DEV_TERMINALS.includes(parsed.devTerminal) ? parsed.devTerminal : '';
+                data.tasksSource = cleanTasksSource(parsed.tasksSource);
                 data.devProjectRoots = Array.isArray(parsed.devProjectRoots)
                     ? [...new Set(parsed.devProjectRoots.filter(p => typeof p === 'string' && p.startsWith('/')))] : [];
                 data.tabOrder = this._reconcileOrder(parsed.tabOrder);
@@ -660,6 +671,15 @@ export class ConfigStore {
     setDevTerminal(id) {
         this._refresh();
         this._data.devTerminal = DEV_TERMINALS.includes(id) ? id : '';
+        this._save();
+    }
+
+    get tasksSource() {
+        return cleanTasksSource(this._data.tasksSource);
+    }
+    setTasksSource(id) {
+        this._refresh();
+        this._data.tasksSource = cleanTasksSource(id);
         this._save();
     }
 
