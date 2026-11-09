@@ -11,6 +11,7 @@ set -u
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REGISTRY=/usr/libexec/evolution-source-registry
 FACTORY=/usr/libexec/evolution-calendar-factory
+CALSERVER=/usr/libexec/gnome-shell-calendar-server
 
 if ! gjs -c "imports.gi.versions.ECal = '2.0'; imports.gi.ECal" 2>/dev/null; then
     echo 'SKIP: ECal not installed'
@@ -109,6 +110,12 @@ start_daemon() { # <binary> <bus name>
 }
 start_daemon "$REGISTRY" org.gnome.evolution.dataserver.Sources5
 start_daemon "$FACTORY" org.gnome.evolution.dataserver.Calendar8
+# The shell's own calendar server (what the notch's Calendar tab listens to),
+# so eds-check.js can read real CalendarServer event ids. Optional.
+if [ -x "$CALSERVER" ]; then
+    start_daemon "$CALSERVER" org.gnome.Shell.CalendarServer
+    export NNX_EDS_CALSERVER=1
+fi
 
 [ $# -gt 0 ] || set -- gjs -m "$HERE/eds-check.js"
 NNX_EDS_PRIVATE=1 "$@"

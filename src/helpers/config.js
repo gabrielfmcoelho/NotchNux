@@ -186,7 +186,8 @@ export const FEATURE_DEFS = [
     { id: 'activityApi',       label: 'Live activities API',  description: 'Let scripts and apps show a progress bar or message in the pill over D-Bus (io.github.notchnux). Text only, at most 8 at once.', default: true },
     { id: 'topScroll',         label: 'Scroll top edge to switch workspaces', description: 'Restore top-edge scroll-to-switch-workspace when the panel is hidden — scroll anywhere along the top of the screen to move between workspaces.', default: false },
     // `group: 'google'`: shown in Preferences' Google group, not under Features.
-    { id: 'googleTasks',       label: 'Google Tasks in the Tasks tab', description: 'Use a Google Tasks list (through GNOME Online Accounts) in the Tasks tab instead of the tasks stored on this computer.', default: false, group: 'google' }
+    { id: 'googleTasks',       label: 'Google Tasks in the Tasks tab', description: 'Use a Google Tasks list (through GNOME Online Accounts) in the Tasks tab instead of the tasks stored on this computer.', default: false, group: 'google' },
+    { id: 'calendarEdit',      label: 'Create and edit calendar events', description: 'Add, change and delete events from the Calendar tab, in your Google calendars (through GNOME Online Accounts) and the ones on this computer. Read-only calendars stay read-only.', default: false, group: 'google' }
 ];
 
 const DEFAULT_ACCENT = '#7aa2ff';

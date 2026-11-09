@@ -958,6 +958,14 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
             refresh();
         });
         refresh();
+
+        // Calendar events: nothing to check here; the Calendar tab starts the
+        // worker only once the switch is on.
+        const calDef = FEATURE_DEFS.find(f => f.id === 'calendarEdit');
+        const calRow = new Adw.SwitchRow({ title: calDef.label, use_markup: false, active: config.isFeatureEnabled(calDef.id) });
+        calRow.subtitle = calDef.description;
+        calRow.connect('notify::active', () => config.setFeatureEnabled(calDef.id, calRow.active));
+        group.add(calRow);
     }
 
     // ---- Temperatures & fan (helpers/sensors.js) ----

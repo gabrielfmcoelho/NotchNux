@@ -48,7 +48,7 @@ function countDoneToday(done) {
 // out"; the worker may still carry it out) or the worker went away while it
 // was in flight ("Google sync worker restarted" / "… exited"; it may have
 // been done just before). Such writes re-list instead of rolling back.
-const outcomeUnknown = e => /timed out$|^Google sync worker (restarted|exited)$/.test(e?.message ?? '');
+export const outcomeUnknown = e => /timed out$|^Google sync worker (restarted|exited)$/.test(e?.message ?? '');
 
 // "<list> — <account>": two Google accounts often share list names.
 export function taskListLabel(source) {

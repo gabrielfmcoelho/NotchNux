@@ -1,7 +1,7 @@
 // Run: gjs -m tests/config-check.js  (exit 1 on the first failure)
 // Header shortcut limit in helpers/config.js. Read-only: never saves.
 import GLib from 'gi://GLib';
-import { ConfigStore, TAB_DEFS, clampPinnedMax, resolveAccent, SYSTEM_ACCENTS } from '../src/helpers/config.js';
+import { ConfigStore, TAB_DEFS, FEATURE_DEFS, clampPinnedMax, resolveAccent, SYSTEM_ACCENTS } from '../src/helpers/config.js';
 
 let n = 0;
 function ok(cond, what) {
@@ -58,5 +58,10 @@ eq([cfg({ tasksSource: 'abc-uid' }).tasksSource, cfg({ tasksSource: '' }).tasksS
     const again = new ConfigStore({ readFile: p => { try { return GLib.file_get_contents(p)[1]; } catch (e) { return null; } } });
     eq([again.tasksSource, again.isFeatureEnabled('googleTasks')], ['list-uid', true], 'tasksSource + flag round-trip');
 }
+
+// Calendar editing: off by default, in Preferences' Google group.
+eq([cfg({}).isFeatureEnabled('calendarEdit'), FEATURE_DEFS.find(f => f.id === 'calendarEdit')?.label,
+    FEATURE_DEFS.find(f => f.id === 'calendarEdit')?.group], [false, 'Create and edit calendar events', 'google'],
+'calendarEdit off by default');
 
 print(`config-check: ${n} checks passed`);

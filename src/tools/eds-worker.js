@@ -8,7 +8,8 @@
 //   request  {"id":n,"op":"…","args":{…}}
 //   response {"id":n,"ok":true,"result":…} | {"id":n,"ok":false,"error":"…"}
 //
-// One JSON object per line; requests are handled one at a time, in order.
+// One JSON object per line; requests are handled one at a time, in order (an
+// async op finishes before the next request is read).
 // Ops live in the OPS table below — add new ones there.
 
 import Gio from 'gi://Gio';
@@ -95,21 +96,59 @@ function accountOf(source) {
 // Birthdays, so a source we already connected answers with !is_readonly();
 // otherwise get_writable() minus READONLY_BACKENDS (mutating ops re-check on
 // connect via getWritableClient). Not connecting here keeps `sources` fast.
-function describeSources(kind) {
+// `tried`: the sources sources({connect}) tried to connect; one that failed
+// is reported read-only (nothing can be written to it right now).
+function describeSources(kind, tried = null) {
     let extName = extFor(kind);
     return getRegistry().list_enabled(extName).map(source => {
         let ext = source.get_extension(extName);
         let backend = ext.get_backend_name() ?? null;
         let client = clients.get(`${kind}:${source.get_uid()}`);
+        let writable = client ? !client.is_readonly() : !tried?.has(source.get_uid()) && source.get_writable();
         return {
             uid: source.get_uid(),
             name: source.get_display_name(),
             account: accountOf(source),
             backend,
-            writable: !READONLY_BACKENDS.has(backend) && (client ? !client.is_readonly() : source.get_writable()),
+            writable: !READONLY_BACKENDS.has(backend) && writable,
             color: ext.get_color() || null,
         };
     });
+}
+
+function connectAsync(source, kind) {
+    let type = kind === 'tasks' ? ECal.ClientSourceType.TASKS : ECal.ClientSourceType.EVENTS;
+    return new Promise((resolve, reject) => {
+        ECal.Client.connect(source, type, CONNECT_WAIT_S, null, (o, res) => {
+            try {
+                resolve(ECal.Client.connect_finish(res));
+            } catch (e) {
+                reject(e);
+            }
+        });
+    });
+}
+
+// {connect: true}: connect every calendar first (all at once, so about
+// CONNECT_WAIT_S in total; clients stay cached) so that `writable` comes from
+// is_readonly(), the only accurate answer for Google's read-only calendars.
+async function sources({ connect = false } = {}) {
+    let tried = null;
+    if (connect) {
+        tried = new Set();
+        let pending = getRegistry().list_enabled(extFor('events')).filter(source =>
+            !READONLY_BACKENDS.has(backendOf(source, 'events')) && !clients.has(`events:${source.get_uid()}`));
+        await Promise.all(pending.map(async source => {
+            let uid = source.get_uid();
+            tried.add(uid);
+            try {
+                clients.set(`events:${uid}`, await connectAsync(source, 'events'));
+            } catch (e) {
+                printerr(`eds-worker: connecting ${uid}: ${e.message}`);
+            }
+        }));
+    }
+    return { tasks: describeSources('tasks'), calendars: describeSources('events', tried) };
 }
 
 const pad = v => String(v).padStart(2, '0');
@@ -213,6 +252,127 @@ function deleteTask({ source, uid }) {
     return {};
 }
 
+// ---- Events ----
+// Times arrive as the notch sends them: 'YYYY-MM-DD' for all-day events (the
+// end exclusive: the next day), else local ISO 'YYYY-MM-DDTHH:MM[:SS]±HH:MM'
+// plus `tzid`, the shell's zone (GLib.TimeZone.new_local().get_identifier()).
+// Timed values keep their wall-clock time in that zone, so the event stays at
+// 15:00 local across DST; a zone libical doesn't know falls back to the
+// instant (from the offset) in UTC.
+
+const ISO_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:?\d{2})?$/;
+
+function zoneFor(tzid) {
+    if (typeof tzid !== 'string' || !tzid || tzid === 'UTC')
+        return null;
+    return ICalGLib.Timezone.get_builtin_timezone(tzid) ?? null;
+}
+
+function whenOf(str, allDay, zone) {
+    if (allDay)
+        return dateTime(str);
+    let m = ISO_TIME.exec(str ?? '');
+    if (!m)
+        throw new Error(`bad time ${str}`);
+    let [y, mo, d, h, mi, s] = m.slice(1, 7).map(v => Number(v ?? 0));
+    if (zone) {
+        let t = ICalGLib.Time.new_null_time();
+        t.set_date(y, mo, d);
+        t.set_time(h, mi, s);
+        t.set_timezone(zone);
+        return ECal.ComponentDateTime.new(t, zone.get_tzid());
+    }
+    if (!m[7])
+        throw new Error(`no time zone in ${str}`);
+    let offMin = 0;
+    if (m[7] !== 'Z') {
+        let digits = m[7].slice(1).replace(':', '');
+        offMin = (m[7][0] === '-' ? -1 : 1) * (Number(digits.slice(0, 2)) * 60 + Number(digits.slice(2)));
+    }
+    let secs = Date.UTC(y, mo - 1, d, h, mi, s) / 1000 - offMin * 60;
+    return ECal.ComponentDateTime.new(ICalGLib.Time.new_from_timet_with_zone(secs, false, utc()), null);
+}
+
+// Parsed and checked before any client is touched: a failed op evicts the
+// source's cached client, and bad input shouldn't cost a reconnect.
+function parseTimes({ start, end, allDay = false, tzid = null }) {
+    let zone = allDay ? null : zoneFor(tzid);
+    let dtstart = whenOf(start, !!allDay, zone);
+    let dtend = whenOf(end, !!allDay, zone);
+    if (dtstart.get_value().compare(dtend.get_value()) >= 0)
+        throw new Error('the end must be after the start');
+    return { dtstart, dtend, zone };
+}
+
+function setTimes(comp, client, { dtstart, dtend, zone }) {
+    // The backend needs the VTIMEZONE behind a TZID.
+    if (zone)
+        client.add_timezone_sync(zone, null);
+    comp.set_dtstart(dtstart);
+    comp.set_dtend(dtend);
+}
+
+function cleanSummary(summary) {
+    if (typeof summary !== 'string' || !summary.trim())
+        throw new Error('missing title');
+    return summary.trim();
+}
+
+function createEvent({ source, summary, start, end, allDay = false, location = null, tzid = null }) {
+    summary = cleanSummary(summary);
+    let times = parseTimes({ start, end, allDay, tzid });
+    let client = getWritableClient(source, 'events');
+    let comp = ECal.Component.new();
+    comp.set_new_vtype(ECal.ComponentVType.EVENT); // also sets a fresh UID
+    comp.set_summary(ECal.ComponentText.new(summary, null));
+    setTimes(comp, client, times);
+    if (location)
+        comp.set_location(String(location));
+    touch(comp);
+    let [, uid] = client.create_object_sync(comp.get_icalcomponent(), ECal.OperationFlags.NONE, null);
+    return { uid: uid ?? comp.get_uid() };
+}
+
+// The event, or with `rid` that one occurrence (built from the series when
+// it was never changed on its own).
+function eventComponent(client, uid, rid) {
+    let [, ical] = client.get_object_sync(uid, rid || null, null);
+    if (rid && !ical.get_first_property(ICalGLib.PropertyKind.RECURRENCEID_PROPERTY))
+        ical = ECal.util_construct_instance(ical, ICalGLib.Time.new_from_string(rid));
+    let comp = ical ? ECal.Component.new_from_icalcomponent(ical) : null;
+    if (!comp || comp.get_vtype() !== ECal.ComponentVType.EVENT)
+        throw new Error(`not an event: ${uid}`);
+    return comp;
+}
+
+// patch: { summary?, location?, start?, end?, allDay?, tzid? }, start and end
+// together. A recurring event changes this occurrence only (THIS).
+function updateEvent({ source, uid, rid = null, patch = {} }) {
+    let summary = 'summary' in patch ? cleanSummary(patch.summary) : null;
+    let times = 'start' in patch || 'end' in patch ? parseTimes(patch) : null;
+    let client = getWritableClient(source, 'events');
+    let comp = eventComponent(client, uid, rid);
+    if (summary !== null)
+        comp.set_summary(ECal.ComponentText.new(summary, null));
+    if ('location' in patch)
+        comp.set_location(patch.location ? String(patch.location) : null);
+    if (times)
+        setTimes(comp, client, times);
+    touch(comp);
+    client.modify_object_sync(comp.get_icalcomponent(), ECal.ObjModType.THIS, ECal.OperationFlags.NONE, null);
+    return {};
+}
+
+// `all`: the whole series; else only the occurrence `rid` (no rid: the event).
+function deleteEvent({ source, uid, rid = null, all = false }) {
+    let client = getWritableClient(source, 'events');
+    if (all || !rid)
+        client.remove_object_sync(uid, null, ECal.ObjModType.ALL, ECal.OperationFlags.NONE, null);
+    else
+        client.remove_object_sync(uid, rid, ECal.ObjModType.THIS, ECal.OperationFlags.NONE, null);
+    return {};
+}
+
 function refresh({ source, kind = 'tasks' }) {
     let client = getClient(source, kind);
     if (client.check_refresh_supported())
@@ -222,14 +382,14 @@ function refresh({ source, kind = 'tasks' }) {
 
 const OPS = {
     hello: () => ({ ecal: !!ECal }),
-    sources: () => ({
-        tasks: describeSources('tasks'),
-        calendars: describeSources('events'),
-    }),
+    sources,
     'tasks.list': listTasks,
     'tasks.create': createTask,
     'tasks.update': updateTask,
     'tasks.delete': deleteTask,
+    'events.create': createEvent,
+    'events.update': updateEvent,
+    'events.delete': deleteEvent,
     refresh,
 };
 
@@ -242,7 +402,8 @@ function evict(uid) {
     clients.delete(`events:${uid}`);
 }
 
-function handle(line) {
+// Ops may be async (sources {connect}); the next request waits for them.
+async function handle(line) {
     let id = null;
     let req = null;
     try {
@@ -253,7 +414,7 @@ function handle(line) {
             throw new Error(`unknown op ${req.op}`);
         if (req.op !== 'hello')
             needEcal();
-        return { id, ok: true, result: fn(req.args ?? {}) ?? null };
+        return { id, ok: true, result: (await fn(req.args ?? {})) ?? null };
     } catch (e) {
         if (typeof req?.args?.source === 'string')
             evict(req.args.source);
@@ -280,16 +441,20 @@ function readNext(done) {
             done();
             return;
         }
-        if (line.trim()) {
+        if (!line.trim()) {
+            readNext(done);
+            return;
+        }
+        handle(line).then(response => {
             try {
-                stdout.write_all(encoder.encode(`${JSON.stringify(handle(line))}\n`), null);
+                stdout.write_all(encoder.encode(`${JSON.stringify(response)}\n`), null);
                 stdout.flush(null);
             } catch (e) { // EPIPE: the shell is gone
                 done();
                 return;
             }
-        }
-        readNext(done);
+            readNext(done);
+        });
     });
 }
 // gjs keeps its main loop running while this module awaits (a nested

@@ -36,6 +36,7 @@ import { installClaude } from './tabs/claude.js';
 import { installDev } from './tabs/dev.js';
 import { installKeyboard } from './tabs/keyboard.js';
 import { installActivities } from './tabs/activities.js';
+import { installCalendarEdit } from './tabs/calendaredit.js';
 import { logError } from './helpers/log.js';
 import { VERTICAL, HORIZONTAL, disableUnredirect, enableUnredirect } from './helpers/compat.js';
 
@@ -569,6 +570,7 @@ export const NotchNux = GObject.registerClass({
         this._stopPillMarquee();
         if (this._pillEq) this._pillEq.stop();
         this._destroyCalendarServer();
+        this._destroyCalendarEdit();
         this._teardownStudio();
         if (this._media) { this._media.destroy(); this._media = null; }
         // Stop the wallpaper rotator and its pause monitor before tearing down
@@ -2199,6 +2201,8 @@ export const NotchNux = GObject.registerClass({
         }
         if (tab === 'tasks')
             this._tasksTabShown();
+        if (tab === 'calendar')
+            this._calendarTabShown();
         this._presentHost(host, animate, dir);
     }
 
@@ -2327,7 +2331,7 @@ export const NotchNux = GObject.registerClass({
             system: ['_trayMeters', '_trayUi'],
             wallpaper: ['_wpDeck', '_wpItems', '_wpSubtitle', '_wpCounter'],
             calendar: ['_calPanel', '_calAgenda', '_calDateStrip', '_calDateStripRow',
-                '_calSummaryDay', '_calSummaryDate'],
+                '_calSummaryDay', '_calSummaryDate', '_calSheetActor', '_calSheetUi'],
             shelf: ['_shareStatus'],
             media: ['_knobValue', '_mediaUi', '_lyricsUi'],
             home: ['_homeUi'],
@@ -4470,17 +4474,33 @@ export const NotchNux = GObject.registerClass({
 
         panel.add_child(summary);
         this._calDateStrip = this._buildDateStrip(selected);
-        panel.add_child(this._calDateStrip);
+        // calendarEdit: a "+" for a new event beside the strip.
+        let edit = this._calEditOn();
+        if (edit) {
+            let stripRow = new St.BoxLayout({ style_class: 'nook-calendar-strip-row', ...HORIZONTAL, x_expand: true });
+            stripRow.add_child(this._calDateStrip);
+            stripRow.add_child(this._buildCalendarAddButton());
+            panel.add_child(stripRow);
+        } else {
+            panel.add_child(this._calDateStrip);
+        }
         // Keep the panel + agenda so a date scroll can rebuild ONLY the agenda
         // (see _refreshCalendarAgenda) instead of tearing down the whole tab.
         this._calPanel = panel;
-        this._calAgenda = this._buildCalendarAgenda({
-            title: this._dayKey(selected) === this._dayKey(new Date()) ? 'Today' : 'Events',
-            days: 45,
-            selectedDate: selected,
-            fullHeight: true
-        });
-        panel.add_child(this._calAgenda);
+        if (edit && this._calSheet) {
+            // An event's detail or the editor takes the agenda's place.
+            this._calSheetActor = this._buildCalendarSheet();
+            panel.add_child(this._calSheetActor);
+        } else {
+            this._calAgenda = this._buildCalendarAgenda({
+                title: this._dayKey(selected) === this._dayKey(new Date()) ? 'Today' : 'Events',
+                days: 45,
+                selectedDate: selected,
+                fullHeight: true,
+                onEvent: edit ? ev => this._openCalendarEvent(ev) : null
+            });
+            panel.add_child(this._calAgenda);
+        }
 
         this._mount(panel);
     }
@@ -4492,6 +4512,9 @@ export const NotchNux = GObject.registerClass({
     // caller can fall back to a full render.
     _refreshCalendarAgenda() {
         let panel = this._calPanel;
+        // A sheet (event detail / editor) is up: the agenda waits for it.
+        if (this._calSheet && this._calSheetActor?.get_parent() === panel && panel)
+            return this._calendarSheetEventsChanged();
         let old = this._calAgenda;
         if (!panel || panel.is_finalized?.() || !old || old.get_parent() !== panel)
             return false;
@@ -4500,7 +4523,8 @@ export const NotchNux = GObject.registerClass({
             title: this._dayKey(selected) === this._dayKey(new Date()) ? 'Today' : 'Events',
             days: 45,
             selectedDate: selected,
-            fullHeight: true
+            fullHeight: true,
+            onEvent: this._calEditOn() ? ev => this._openCalendarEvent(ev) : null
         });
         panel.replace_child(old, fresh);
         this._calAgenda = fresh;
@@ -4564,6 +4588,9 @@ export const NotchNux = GObject.registerClass({
                 break;
             case 'googleTasks':
                 this._syncTaskSource();
+                break;
+            case 'calendarEdit':
+                this._onCalendarEditToggled(on);
                 break;
             default:
                 this._onLedgeFeatureToggled(id, on);
@@ -4937,7 +4964,16 @@ export const NotchNux = GObject.registerClass({
                     if (ev.location)
                         text.add_child(new St.Label({ text: this._ellipsize(ev.location, 56), style_class: 'nook-calendar-event-location' }));
                     row.add_child(text);
-                    list.add_child(row);
+                    if (options.onEvent) {
+                        // calendarEdit: tap an event for its detail.
+                        let btn = new St.Button({ style_class: 'nook-calendar-event-btn', x_expand: true,
+                            can_focus: true, reactive: true, x_align: Clutter.ActorAlign.FILL });
+                        btn.set_child(row);
+                        btn.connect('clicked', () => options.onEvent(ev));
+                        list.add_child(btn);
+                    } else {
+                        list.add_child(row);
+                    }
                 }
             }
         }
@@ -6823,3 +6859,4 @@ installClaude(NotchNux.prototype);
 installDev(NotchNux.prototype);
 installKeyboard(NotchNux.prototype);
 installActivities(NotchNux.prototype);
+installCalendarEdit(NotchNux.prototype);

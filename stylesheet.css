@@ -1121,6 +1121,56 @@
     color: rgba(255, 255, 255, 0.48);
 }
 
+/* calendarEdit: "+" beside the date strip, tappable events, and the sheet
+ * (event detail / editor) that takes the agenda's place. */
+.nook-calendar-strip-row {
+    spacing: 6px;
+}
+.nook-calendar-add {
+    padding: 7px;
+    border-radius: 999px;
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.08);
+    transition: background-color 150ms ease-out;
+}
+.nook-calendar-add:hover,
+.nook-calendar-add:focus {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+.nook-calendar-event-btn {
+    border-radius: 10px;
+}
+.nook-calendar-event-btn:hover .nook-calendar-event,
+.nook-calendar-event-btn:focus .nook-calendar-event {
+    background-color: rgba(255, 255, 255, 0.10);
+}
+.nook-calendar-sheet {
+    spacing: 8px;
+}
+.nook-calendar-sheet-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #f4f4f6;
+}
+.nook-calendar-sheet-when {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+}
+.nook-calendar-sheet-meta {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.52);
+}
+.nook-calendar-sheet-row,
+.nook-calendar-sheet-actions {
+    spacing: 6px;
+}
+.nook-calendar-sheet-actions {
+    padding-top: 4px;
+}
+.nook-calendar-allday-on {
+    background-color: rgba(255, 255, 255, 0.14);
+}
+
 /* ============================================================
  * ALERTS — grouped notification tray
  * ============================================================ */

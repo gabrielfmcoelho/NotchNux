@@ -126,11 +126,14 @@ const KeyboardFeatures = {
     },
 
     // Bubble phase: an Esc no field or overlay handled. In an open note it
-    // goes back to the board; anywhere else it closes the notch.
+    // goes back to the board, in a Calendar event sheet it closes the sheet;
+    // anywhere else it closes the notch.
     _onDashboardEscape(event) {
         if (!this.isExpanded || event.get_key_symbol() !== Clutter.KEY_Escape)
             return Clutter.EVENT_PROPAGATE;
         if (this._notesEscape())
+            return Clutter.EVENT_STOP;
+        if (this._calendarEscape())
             return Clutter.EVENT_STOP;
         this.collapse();
         return Clutter.EVENT_STOP;

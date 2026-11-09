@@ -20,6 +20,21 @@ const RESTART_WINDOW_MS = 60000;
 const WORKER = Gio.File.new_for_uri(import.meta.url)
     .get_parent().get_parent().get_child('tools').get_child('eds-worker.js').get_path();
 
+// An org.gnome.Shell.CalendarServer event id → { source, uid, rid }, or null.
+// gnome-shell-calendar-server emits "<source uid>\n<event uid>\n<rid>": rid is
+// empty unless the event recurs, then the occurrence's UTC date-time
+// (e.g. "20261109T130000Z") — what events.update/delete take as `rid`.
+export function splitEventId(id) {
+    if (typeof id !== 'string')
+        return null;
+    let first = id.indexOf('\n');
+    let last = id.lastIndexOf('\n');
+    if (first <= 0 || last === first)
+        return null;
+    let uid = id.slice(first + 1, last);
+    return uid ? { source: id.slice(0, first), uid, rid: id.slice(last + 1) } : null;
+}
+
 export class EdsClient {
     // { available: true } when the worker runs and has ECal, else
     // { available: false, reason }. Options as for the constructor.
