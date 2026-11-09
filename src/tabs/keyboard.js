@@ -89,6 +89,9 @@ const KeyboardFeatures = {
         let sym = event.get_key_symbol();
         let state = event.get_state();
         if (sym === Clutter.KEY_Escape) {
+            // Esc in the notes editor goes back to the board, not out.
+            if (this._notesEscape())
+                return Clutter.EVENT_STOP;
             this.collapse();
             return Clutter.EVENT_STOP;
         }

@@ -140,7 +140,10 @@ export const ProductivityTabs = {
             if (this._notesUi.openId) {
                 // Deleted elsewhere: back to the board. Never re-created.
                 if (!this._prod.getNote(this._notesUi.openId)) {
-                    this._notesUi.showBoard();
+                    if (this.isExpanded && this._activeTab === 'notes')
+                        this._notesUi.render();
+                    else
+                        this._notesUi.openId = this._notesOpenId = null;
                     break;
                 }
                 // Not under the user's caret: it stays dirty and re-renders
@@ -811,24 +814,33 @@ export const ProductivityTabs = {
         let body = new St.BoxLayout({ ...VERTICAL, x_expand: true, y_expand: true });
         panel.add_child(body);
 
-        ui.showBoard = () => {
-            this._releaseKeyboard();
-            // Leaving a note with no text drops it, without an Undo.
-            if (ui.openId) {
-                let n = this._prod.getNote(ui.openId);
-                if (n && !n.text.trim())
-                    own(() => this._prod.removeNote(n.id));
-            }
+        // Pure render of the board; never touches the keyboard grab, so the
+        // timer and event paths can use it from a hidden tab.
+        ui.render = () => {
             ui.openId = this._notesOpenId = null;
             ui.entry = null;
             body.destroy_all_children();
             this._fillNotesBoard(body, ui, own);
         };
+        // The user left the editor (Back, Esc, Delete): drop an empty note and
+        // hand the keyboard back unless a keyboard-opened dashboard keeps it.
+        ui.showBoard = () => {
+            if (ui.openId) {
+                let n = this._prod.getNote(ui.openId);
+                if (n && !n.text.trim())
+                    own(() => this._prod.removeNote(n.id));
+            }
+            let focus = global.stage.get_key_focus();
+            if (focus && focus === ui.entry?.clutter_text)
+                global.stage.set_key_focus(null);
+            ui.render();
+            this._queueKeyboardRelease();
+        };
         // The editor binds to this note id once; it survives a re-render of
         // the tab through _notesOpenId.
         ui.showEditor = id => {
             if (!this._prod.getNote(id)) {
-                ui.showBoard();
+                ui.render();
                 return;
             }
             ui.openId = this._notesOpenId = id;
@@ -839,8 +851,17 @@ export const ProductivityTabs = {
         if (this._notesOpenId && this._prod.getNote(this._notesOpenId))
             ui.showEditor(this._notesOpenId);
         else
-            ui.showBoard();
+            ui.render();
         this._mount(panel);
+    },
+
+    // Esc with the editor open leaves it for the board. True when handled.
+    _notesEscape() {
+        let ui = this._notesUi;
+        if (this._activeTab !== 'notes' || !ui?.openId)
+            return false;
+        ui.showBoard();
+        return true;
     },
 
     // Only the latest deletion is undoable. It lives here, not in an actor,
@@ -853,11 +874,32 @@ export const ProductivityTabs = {
             if (this._destroyed || this._notesUndo !== u)
                 return GLib.SOURCE_REMOVE;
             this._notesUndo = null;
-            if (this._notesUi && !this._notesUi.openId)
-                this._notesUi.showBoard();
+            this._markTabDirty('notes');
+            if (this._notesUi && !this._notesUi.openId && this.isExpanded && this._activeTab === 'notes')
+                this._notesUi.render();
             return GLib.SOURCE_REMOVE;
         });
         this._notesUndo = u;
+    },
+
+    // Put a button/label's text back after 1.5 s; dies with the actor.
+    _notesRevert(actor, original) {
+        if (actor._revertId)
+            GLib.Source.remove(actor._revertId);
+        actor._revertId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+            actor._revertId = 0;
+            if (!this._destroyed) {
+                if (actor.set_text) actor.set_text(original);
+                else actor.label = original;
+            }
+            return GLib.SOURCE_REMOVE;
+        });
+        actor.connect('destroy', () => {
+            if (actor._revertId) {
+                GLib.Source.remove(actor._revertId);
+                actor._revertId = 0;
+            }
+        });
     },
 
     _notesClearUndo() {
@@ -902,7 +944,7 @@ export const ProductivityTabs = {
                 this._notesClearUndo();
                 if (note)
                     this._prod.restoreNote(note);
-                this._notesUi?.showBoard();
+                this._notesUi?.render();
             });
             bar.add_child(undo);
             body.add_child(bar);
@@ -951,6 +993,7 @@ export const ProductivityTabs = {
                     return;
                 }
                 addLabel.set_text('50 max');
+                this._notesRevert(addLabel, '+');
                 return;
             }
             this._notesUi?.showEditor(id);
@@ -999,6 +1042,7 @@ export const ProductivityTabs = {
         copy.connect('clicked', () => {
             St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, note()?.text ?? '');
             copy.label = 'Copied';
+            this._notesRevert(copy, 'Copy');
         });
         head.add_child(copy);
         let del = new St.Button({ style_class: 'nook-clear-btn nook-danger', label: 'Delete', can_focus: true });

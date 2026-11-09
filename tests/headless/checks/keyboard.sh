@@ -21,9 +21,11 @@ nnx_check command-closes "(() => { const n = $NNX; return [n.isExpanded, n._kbGr
 nnx_check notes-editor-bound "(() => { const n = $NNX; n.collapse(); n._prod.addNote('first note'); n.expand(); n._switchTab('notes'); const a = n._prod.notes[0].id; n._notesUi.showEditor(a); const b = n._prod.addNote('other note'); const shown = n._notesUi.entry.get_text(); n._notesUi.entry.set_text('edited'); const r = [shown, n._prod.getNote(a).text, n._prod.getNote(b).text, n._notesUi.openId === a]; n.collapse(); return r; })()" '["first note","edited","other note",true]'
 # An outside change while the editor has focus marks the tab dirty; it shows once focus leaves.
 nnx_check notes-dirty-while-focused "(() => { const n = $NNX; n.collapse(); n.expand(); n._switchTab('notes'); n._notesUi.entry.clutter_text.grab_key_focus(); n._prod.addNote('ext note'); return n._tabHosts.get('notes')._dirty === true; })()" true
-nnx_check notes-focus-leaves "(() => { const n = $NNX; n._tabButtons[n._activeTab].grab_key_focus(); return true; })()" true
+nnx_check notes-focus-leaves "(() => { const n = $NNX; n._tabButtons[n._activeTab].grab_key_focus(); return [global.stage.get_key_focus() === n._notesUi.entry.clutter_text, n._tabHosts.get('notes')._dirty === true]; })()" '[false,true]'
 sleep 0.5
-nnx_check notes-keeps-bound-note "(() => { const n = $NNX; const r = n._notesUi.entry?.get_text(); n.collapse(); return r; })()" '"edited"'
+nnx_check notes-keeps-bound-note "(() => { const n = $NNX; const r = n._notesUi.entry?.get_text(); const open = n._notesUi.openId; return [r, n._prod.getNote(open).text]; })()" '["edited","edited"]'
+# Showing the dirty tab again refreshes it from the store (the outside note is on the board).
+nnx_check notes-dirty-refreshes-on-show "(() => { const n = $NNX; n.collapse(); n._notesOpenId = null; n.expand(); n._switchTab('notes'); const find = (x, f) => { if (f(x)) return x; for (const c of x.get_children()) { const r = find(c, f); if (r) return r; } return null; }; const r = [n._tabHosts.get('notes')._dirty === false, n._notesUi.openId, n._prod.notes.some(x => x.text === 'ext note')]; n.collapse(); return r; })()" '[true,null,true]'
 # A tab command opens that tab and stays open.
 nnx_check command-tab "(() => { const n = $NNX; n._toggleFromKeyboard(); n._commandEntry.text = 'home'; n._submitCommand(); const r = n.isExpanded; n.collapse(); return [r, n._kbGrab === null]; })()" '[true,true]'
 # A plain (hover-style) open does not show the bar.
