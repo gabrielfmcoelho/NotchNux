@@ -13,6 +13,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pin to desktop**: a pinned note appears as a 180×180 card on the wallpaper,
   under your windows. Drag it anywhere (it stays inside the screen, and comes
   back if its monitor is unplugged); double-click it to edit in the notch.
+  A desktop-icons extension (such as Desktop Icons NG) draws its own layer
+  over the wallpaper and can cover pinned post-its.
+- Notes are stored in `~/.local/share/notchnux/notes.json`; an old `notes.md`
+  becomes one post-it and is kept as `notes.md.bak`.
+
+### Added — live activities API
+- Scripts and apps can show a title, a line of text, a progress bar and an
+  icon in the pill over D-Bus: `io.github.notchnux.Activities` on the session
+  bus name `io.github.notchnux`, with `Show`, `Update` and `End`. An activity
+  stays until `End`, its timeout (1–600 s, default 8 s) or a click on it. At
+  most 8 at once and 20 calls a second per caller; titles are cut at 60
+  characters and bodies at 120, and text is never read as markup.
+- `notchnux-activity show|update|end` wraps the calls
+  (`id=$(notchnux-activity show Build --progress 0.2)`); `install.sh` offers to
+  link it into `~/.local/bin`.
+- On by default; turn it off in Preferences → Features → *Live activities API*.
+
+### Added — screen sharing and recording indicator
+- A red icon in the pill while the screen is shared (screen cast, remote
+  desktop) or recorded (including GNOME's own screencast). Click it for a
+  **Stop** button that ends them.
 
 ### Added — follow the system accent
 - On GNOME 47+, Preferences → Appearance has an **Accent** choice: *Custom* or
@@ -24,9 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Super+/** toggles the notch from anywhere and opens it with a command bar
   (change or disable the shortcut in Preferences → Keyboard). The bar takes
   `t <task>` (`!` stars it), `25` / `25m` / `1h` for focus, `=` for math, a tab
-  name to open it, and `n <note>` to append to Notes.
+  name to open it, and `n <note>` to create a new post-it. Press the
+  shortcut again to close.
 - In the dashboard, Left/Right switch tabs, Ctrl+1…9 open a tab by position,
-  Tab / Shift+Tab move focus (with a focus ring) and Esc closes.
+  Tab / Shift+Tab move focus (with a focus ring) and Esc closes. Esc in a
+  field, an open note, a task being edited or the Wi-Fi/Bluetooth sheet
+  leaves that first.
 
 ### Added — runs on GNOME Shell 46 to 51
 - NotchNux now loads on GNOME 46, 47, 48, 49, 50 and 51 (it was 50 only,
