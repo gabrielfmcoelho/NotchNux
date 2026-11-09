@@ -224,6 +224,16 @@
     background-color: rgba(255, 255, 255, 0.06);
 }
 
+/* Keyboard focus ring: fixed neutral (St CSS can't read the runtime accent). */
+.notchnux-tab-btn:focus,
+.nook-transport-btn:focus,
+.nook-round-btn:focus,
+.nook-pill-btn:focus,
+.nook-add-btn:focus,
+.nook-knob-btn:focus {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
 .notchnux-tab-btn-active,
 .notchnux-tab-btn-active:hover {
     color: #ffffff;

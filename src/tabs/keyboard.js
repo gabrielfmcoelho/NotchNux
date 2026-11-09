@@ -78,6 +78,42 @@ const KeyboardFeatures = {
         this._openedByKeyboard = true;
     },
 
+    // ---- Dashboard keys -------------------------------------------------
+
+    _focusIsTextField() {
+        let f = global.stage.get_key_focus();
+        return !!f && (f instanceof St.Entry || f instanceof Clutter.Text || !!this._typables?.has(f));
+    },
+
+    _onDashboardKey(event) {
+        let sym = event.get_key_symbol();
+        let state = event.get_state();
+        if (sym === Clutter.KEY_Escape) {
+            this.collapse();
+            return Clutter.EVENT_STOP;
+        }
+        if ((state & Clutter.ModifierType.CONTROL_MASK) && sym >= Clutter.KEY_1 && sym <= Clutter.KEY_9) {
+            let id = this._tabOrder[sym - Clutter.KEY_1];
+            if (id)
+                this._switchTab(id);
+            return id ? Clutter.EVENT_STOP : Clutter.EVENT_PROPAGATE;
+        }
+        if ((sym === Clutter.KEY_Left || sym === Clutter.KEY_Right) && !this._focusIsTextField()) {
+            this._switchTabRelative(sym === Clutter.KEY_Left ? -1 : 1);
+            return Clutter.EVENT_STOP;
+        }
+        if (sym === Clutter.KEY_Tab || sym === Clutter.KEY_ISO_Left_Tab) {
+            let back = sym === Clutter.KEY_ISO_Left_Tab || (state & Clutter.ModifierType.SHIFT_MASK);
+            let from = global.stage.get_key_focus();
+            if (!from || !this._isDescendant(from))
+                from = null;
+            this.navigate_focus(from,
+                back ? St.DirectionType.TAB_BACKWARD : St.DirectionType.TAB_FORWARD, true);
+            return Clutter.EVENT_STOP;
+        }
+        return Clutter.EVENT_PROPAGATE;
+    },
+
     // ---- Command bar ----------------------------------------------------
 
     _buildCommandBar() {

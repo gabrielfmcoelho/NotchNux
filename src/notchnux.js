@@ -218,6 +218,10 @@ export const NotchNux = GObject.registerClass({
         // Click anywhere else on the stage collapses the dashboard.
         this._stageClickId = global.stage.connect('button-press-event', (s, e) => this._onStageClicked(e));
         this._keyFocusId = global.stage.connect('notify::key-focus', () => this._onStageKeyFocus());
+        // Keys reach the notch through the modal grab (keyboard-opened only).
+        // Captured, so St widgets can't swallow the arrows first.
+        this.connect('captured-event', (a, e) =>
+            e.type() === Clutter.EventType.KEY_PRESS ? this._onDashboardKey(e) : Clutter.EVENT_PROPAGATE);
 
         // Helper callbacks refresh the live tab
         // MPRIS fires metadata + playback callbacks back to back; coalesce them
@@ -2043,7 +2047,9 @@ export const NotchNux = GObject.registerClass({
             this._leaveClaudeTab();
         if (tab === 'dev')
             this._leaveDevTab();
-        this._releaseKeyboard?.();
+        // A keyboard-opened dashboard keeps its grab across tab switches.
+        if (!(this._openedByKeyboard && this.isExpanded))
+            this._releaseKeyboard?.();
     }
 
     // Stop timers/animations owned by `tab`'s content and forget its actor
@@ -6188,6 +6194,8 @@ export const NotchNux = GObject.registerClass({
     // Key focus moved somewhere on the stage: grab when it lands in one of our
     // text fields, release once it has left them all.
     _onStageKeyFocus() {
+        if (this._releasingKeyboard)
+            return;
         let focus = global.stage.get_key_focus();
         if (focus && this._typables?.has(focus))
             this._grabKeyboard(focus);
@@ -6219,6 +6227,10 @@ export const NotchNux = GObject.registerClass({
         this._kbReleaseId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
             this._kbReleaseId = 0;
             let focus = global.stage.get_key_focus();
+            // Keyboard-opened dashboards keep the grab while focus stays in
+            // the notch, so Tab out of the command bar still delivers keys.
+            if (this._openedByKeyboard && this.isExpanded && (!focus || this._isDescendant(focus)))
+                return GLib.SOURCE_REMOVE;
             if (!focus || !this._typables?.has(focus))
                 this._releaseKeyboard();
             return GLib.SOURCE_REMOVE;
@@ -6234,12 +6246,16 @@ export const NotchNux = GObject.registerClass({
             return;
         let grab = this._kbGrab;
         this._kbGrab = null;
+        // popModal restores the old key focus (possibly a text field), which
+        // would re-grab through _onStageKeyFocus; ignore focus while releasing.
+        this._releasingKeyboard = true;
         try {
             Main.popModal(grab);
         } catch (e) {
             logError('failed to release keyboard', e);
         }
         global.stage.set_key_focus(null);
+        this._releasingKeyboard = false;
     }
 
     // ============================================================
