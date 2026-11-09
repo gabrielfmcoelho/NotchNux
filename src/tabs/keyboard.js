@@ -2,12 +2,23 @@
 //
 // Methods mixed into the NotchNux actor, like tabs/dev.js.
 
+import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
+import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 import { logError } from '../helpers/log.js';
+import { TAB_DEFS } from '../helpers/config.js';
+import { parseCommand } from '../helpers/commands.js';
+import { VERTICAL } from '../helpers/compat.js';
+
+// 0.1+0.2 -> 0.3, and never "-0".
+function formatCalc(value) {
+    let n = Number(Number(value).toPrecision(12));
+    return String(Object.is(n, -0) ? 0 : n);
+}
 
 const KeyboardFeatures = {
     _initKeyboard() {
@@ -52,11 +63,121 @@ const KeyboardFeatures = {
         if (this._destroyed)
             return;
         if (this.isExpanded) {
-            this._openedByKeyboard = false;
             this.collapse();
-        } else {
-            this._openedByKeyboard = true;
+            return;
+        }
+        // expand() shows and focuses the command bar when this is set.
+        this._commandBarWanted = true;
+        try {
             this.expand();
+        } catch (e) {
+            this._commandBarWanted = false;
+            if (this._commandBar) this._commandBar.visible = false;
+            throw e;
+        }
+        this._openedByKeyboard = true;
+    },
+
+    // ---- Command bar ----------------------------------------------------
+
+    _buildCommandBar() {
+        this._commandBar = new St.BoxLayout({
+            style_class: 'nook-command-bar', ...VERTICAL, x_expand: true, visible: false });
+        this._commandEntry = new St.Entry({
+            style_class: 'nook-command-entry', hint_text: 'Task, 25 (focus), =math, n note, or a tab',
+            can_focus: true, x_expand: true });
+        this._commandHint = new St.Label({ style_class: 'nook-command-hint', text: '' });
+        this._commandBar.add_child(this._commandEntry);
+        this._commandBar.add_child(this._commandHint);
+
+        this._makeTypable(this._commandEntry);
+        let text = this._commandEntry.clutter_text;
+        text.connect('text-changed', () => this._updateCommandHint());
+        text.connect('activate', () => this._submitCommand());
+        text.connect('key-press-event', (a, ev) => {
+            if (ev.get_key_symbol() !== Clutter.KEY_Escape)
+                return Clutter.EVENT_PROPAGATE;
+            // collapse() releases the keyboard grab with the tab teardown.
+            this.collapse();
+            return Clutter.EVENT_STOP;
+        });
+        return this._commandBar;
+    },
+
+    // Called from expand(): show the bar only for keyboard opens.
+    _syncCommandBar() {
+        if (!this._commandBar)
+            return;
+        let on = !!this._commandBarWanted;
+        this._commandBar.visible = on;
+        if (!on)
+            return;
+        this._commandEntry.set_text('');
+        this._updateCommandHint();
+        this._commandEntry.clutter_text.grab_key_focus();
+    },
+
+    _commandTabs() {
+        return TAB_DEFS.filter(t => this._tabOrder.includes(t.id));
+    },
+
+    _updateCommandHint() {
+        if (!this._commandHint)
+            return;
+        this._commandHint.text = this._previewCommand(
+            parseCommand(this._commandEntry.get_text(), this._commandTabs()));
+    },
+
+    _previewCommand(cmd) {
+        switch (cmd.kind) {
+        case 'task': return `Add task '${cmd.text}'${cmd.starred ? ' \u2605' : ''}`;
+        case 'focus': return `Start ${cmd.minutes} min focus`;
+        case 'calc': return cmd.error ? cmd.error : `= ${formatCalc(cmd.value)} \u2014 Enter copies`;
+        case 'tab': return `Open ${this._tabs[cmd.id]?.label ?? cmd.id}`;
+        case 'note': return `Add to notes '${cmd.text}'`;
+        default: return '';
+        }
+    },
+
+    // Enter in the command entry.
+    _submitCommand() {
+        let cmd = parseCommand(this._commandEntry.get_text(), this._commandTabs());
+        let handled = false;
+        try {
+            handled = this._runCommand(cmd);
+        } catch (e) {
+            logError('command failed', e);
+        }
+        if (handled && cmd.kind !== 'calc' && cmd.kind !== 'tab')
+            this.collapse();
+    },
+
+    // true = handled. Calc stays open (result copied); a tab command opens
+    // that tab and stays open; everything else lets _submitCommand close.
+    _runCommand(cmd) {
+        switch (cmd.kind) {
+        case 'task':
+            this._prod.addTask((cmd.starred ? '!' : '') + cmd.text);
+            return true;
+        case 'focus':
+            this._prod.setFocusMinutes(cmd.minutes);
+            this._prod.startFocus();
+            return true;
+        case 'note': {
+            let notes = this._prod.notes;
+            this._prod.setNotes(notes ? `${notes}\n${cmd.text}` : cmd.text);
+            return true;
+        }
+        case 'tab':
+            this._switchTab(cmd.id);
+            return true;
+        case 'calc':
+            if (cmd.error)
+                return false;
+            St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, formatCalc(cmd.value));
+            return true;
+        default:
+            return false;
         }
     },
 };

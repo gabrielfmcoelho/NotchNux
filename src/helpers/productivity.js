@@ -411,6 +411,13 @@ export class ProductivityStore {
         this._changedFocus();
     }
 
+    // Any whole length from the command bar (1-180); the Focus tab's preset
+    // buttons then simply show none selected.
+    setFocusMinutes(min) {
+        this._focus.presetMin = clampFocusMinutes(min);
+        this._changedFocus();
+    }
+
     setSilence(on) {
         this._focus.silence = !!on;
         this._changedFocus();

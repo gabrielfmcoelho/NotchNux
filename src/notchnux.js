@@ -1166,6 +1166,7 @@ export const NotchNux = GObject.registerClass({
         headerWrap.add_child(this._gridButton);
         headerWrap.add_child(this._moreButton);
         this._dashboard.add_child(headerWrap);
+        this._dashboard.add_child(this._buildCommandBar());
         this._dashboard.add_child(this._contentContainer);
 
         // Keep the current tab across rebuilds; otherwise start on the first.
@@ -6471,6 +6472,7 @@ export const NotchNux = GObject.registerClass({
             throw e;
         }
         this._isExpanding = false;
+        this._syncCommandBar();
 
         // Keep the Tray tab's meters/devices/battery live while open.
         this._startSystemRefresh();
@@ -6521,9 +6523,14 @@ export const NotchNux = GObject.registerClass({
         if (!this.isExpanded) return;
         this.isExpanded = false;
         this._openedByKeyboard = false;
+        this._commandBarWanted = false;
         this._closeScanOverlay();
         this._pauseMediaAnimations();
         this._leaveTab(this._activeTab);
+        // Release the keyboard grab before hiding the command bar: hiding the
+        // focused entry first left the modal grab stranded (smoke-test verified).
+        this._releaseKeyboard();
+        if (this._commandBar) this._commandBar.visible = false;
         this._stopSystemRefresh();
         this._surface.remove_style_class_name('notchnux-island-expanded');
 
