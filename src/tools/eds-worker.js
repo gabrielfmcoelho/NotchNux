@@ -233,10 +233,20 @@ const OPS = {
     refresh,
 };
 
+// Forget the cached clients for a source. Any failed op on a source evicts
+// them: a client whose backend died (EDS restarted, the factory crashed, a
+// bad first connect) otherwise fails every call for the worker's lifetime.
+// Reconnecting costs CONNECT_WAIT_S on the next call.
+function evict(uid) {
+    clients.delete(`tasks:${uid}`);
+    clients.delete(`events:${uid}`);
+}
+
 function handle(line) {
     let id = null;
+    let req = null;
     try {
-        let req = JSON.parse(line);
+        req = JSON.parse(line);
         id = req.id ?? null;
         let fn = Object.hasOwn(OPS, req.op) ? OPS[req.op] : null;
         if (!fn)
@@ -245,6 +255,8 @@ function handle(line) {
             needEcal();
         return { id, ok: true, result: fn(req.args ?? {}) ?? null };
     } catch (e) {
+        if (typeof req?.args?.source === 'string')
+            evict(req.args.source);
         return { id, ok: false, error: e.message ?? String(e) };
     }
 }
@@ -269,8 +281,13 @@ function readNext(done) {
             return;
         }
         if (line.trim()) {
-            stdout.write_all(encoder.encode(`${JSON.stringify(handle(line))}\n`), null);
-            stdout.flush(null);
+            try {
+                stdout.write_all(encoder.encode(`${JSON.stringify(handle(line))}\n`), null);
+                stdout.flush(null);
+            } catch (e) { // EPIPE: the shell is gone
+                done();
+                return;
+            }
         }
         readNext(done);
     });

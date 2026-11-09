@@ -25,6 +25,7 @@ while IFS= read -r line; do
     case $op in
         crash) exit 1 ;;
         hang) ;;
+        slow) (sleep 1; printf '{"id":%s,"ok":true,"result":{"op":"slow"}}\\n' "$id") & ;;
         fail) printf '{"id":%s,"ok":false,"error":"nope"}\\n' "$id" ;;
         *) printf 'not json\\n{"id":%s,"ok":true,"result":{"op":"%s","pid":%s}}\\n' "$id" "$op" "$$" ;;
     esac
@@ -59,6 +60,13 @@ async function main() {
     e = await rejects(c.call('hang'));
     ok(e && /timed out/.test(e.message), `timeout rejects: ${e}`);
     ok((await c.call('after')).pid === pid, 'a timeout alone does not restart the worker');
+
+    // An answer that arrives after the timeout is dropped.
+    e = await rejects(c.call('slow'));
+    ok(e && /timed out/.test(e.message), `slow call times out: ${e}`);
+    await new Promise(resolve => GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => resolve() ?? GLib.SOURCE_REMOVE));
+    r = await c.call('after-slow');
+    ok(r.op === 'after-slow' && r.pid === pid, `late answer ignored, next call fine: ${JSON.stringify(r)}`);
 
     // Crash → the pending call rejects; the next call restarts.
     e = await rejects(c.call('crash'));
@@ -95,6 +103,14 @@ async function main() {
     }
     ok((await c2.call('x')).op === 'x', 'restarts spread over minutes keep working');
     c2.destroy();
+
+    // destroy() with a call in flight rejects it and leaves no timer behind.
+    let c3 = new EdsClient({ argv, now: () => clock, timeoutMs: 60000 });
+    let inflight = rejects(c3.call('hang'));
+    c3.destroy();
+    e = await inflight;
+    ok(e && /destroyed/.test(e.message), `in-flight call rejects on destroy: ${e}`);
+    ok(c3._pending.size === 0, 'no pending call (or timer) left after destroy');
 
     c.destroy();
     e = await rejects(c.call('x'));

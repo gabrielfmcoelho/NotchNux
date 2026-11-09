@@ -28,7 +28,6 @@ done
 NAME="nnx-eds-$$"
 UNITDIR="$XDG_RUNTIME_DIR/systemd/user"
 PROFILE=$(mktemp -d "$XDG_RUNTIME_DIR/nnx-eds.XXXX") || exit 2
-PIDS=()
 REAL_BUS=${DBUS_SESSION_BUS_ADDRESS:-}
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/$NAME"
 [ "$DBUS_SESSION_BUS_ADDRESS" != "$REAL_BUS" ] || { echo "private bus equals the real one" >&2; exit 2; }
@@ -39,7 +38,8 @@ descendants() { local p; for p in $(pgrep -P "$1"); do descendants "$p"; echo "$
 cleanup() {
     trap - EXIT INT TERM
     local all=() p
-    for p in "${PIDS[@]+"${PIDS[@]}"}"; do
+    # Every daemon we (or eds-check.js, restarting the factory) started.
+    for p in $(cut -d' ' -f2 "$PIDFILE" 2>/dev/null); do
         # shellcheck disable=SC2207
         all+=($(descendants "$p") "$p")
     done
@@ -63,6 +63,11 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 mkdir -p "$PROFILE/config" "$PROFILE/data" "$PROFILE/cache" "$PROFILE/state" "$UNITDIR"
+# "<name> <pid>" per daemon. eds-check.js kills and restarts the factory and
+# appends the new one here, so cleanup still stops exactly what we started.
+PIDFILE="$PROFILE/pids"
+: > "$PIDFILE"
+export NNX_EDS_PIDFILE="$PIDFILE" NNX_EDS_FACTORY="$FACTORY"
 
 # session.conf has no <servicedir>/<standard_session_servicedirs>, so nothing
 # is bus-activated: only the daemons started below exist on this bus.
@@ -91,10 +96,11 @@ has_owner() {
 }
 start_daemon() { # <binary> <bus name>
     "$1" > "$PROFILE/$(basename "$1").log" 2>&1 &
-    PIDS+=($!)
+    local pid=$!
+    echo "$(basename "$1") $pid" >> "$PIDFILE"
     for _ in $(seq 100); do
         has_owner "$2" && return 0
-        kill -0 "${PIDS[-1]}" 2>/dev/null || break
+        kill -0 "$pid" 2>/dev/null || break
         sleep 0.1
     done
     echo "$1 did not claim $2:" >&2

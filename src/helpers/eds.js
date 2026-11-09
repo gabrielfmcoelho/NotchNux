@@ -52,6 +52,8 @@ export class EdsClient {
 
     // Resolves with the op's result, rejects with an Error (the worker's
     // message, a timeout, an exited worker, or STOPPED_MESSAGE).
+    // A timeout means the outcome is unknown: the worker may still carry the
+    // write out later (it isn't cancelled), so callers should refresh.
     call(op, args = {}) {
         return new Promise((resolve, reject) => {
             if (this._destroyed) {
@@ -198,6 +200,13 @@ export class EdsClient {
         if (worker) {
             worker.cancellable.cancel();
             worker.proc.force_exit();
+            for (let pipe of [worker.stdin, worker.stdout]) {
+                try {
+                    pipe.close(null);
+                } catch (e) {
+                    // already closed
+                }
+            }
         }
         this._rejectAll(worker, why);
     }
