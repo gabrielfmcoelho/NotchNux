@@ -21,7 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `gir1.2-ecal-2.0 gir1.2-edataserver-1.2` (Ubuntu/Debian) or
   `evolution-data-server` (Fedora).
 - A failed save is undone in the notch with a *Couldn't save to Google*
-  alert, and the typed text is kept; a timed-out save re-reads instead.
+  alert (*Couldn't save the event* for calendar events), and the typed text
+  is kept; a timed-out save re-reads instead.
 - Without the libraries, Preferences' Status row (for either switch) shows
   the install command and the Calendar tab says *Calendar editing isn't
   available*. A list deleted on the web reads *This list is gone — pick

@@ -203,7 +203,7 @@ Both are off by default. NotchNux never signs in to Google itself and never sees
 
 If a change can't be saved (offline, signed out), the notch puts things back as they were, says *Couldn't save to Google* (*Couldn't save the event* for calendar events) with the reason, and keeps what you typed. If the save timed out, it re-reads the list instead, since the change may have gone through. If the picked list was deleted on the web or its Google account removed, the Tasks tab and the Home card say *This list is gone — pick another list* instead of showing stale tasks. When the list can't be reached right after login (offline, accounts not ready yet), it tries once more 30 seconds later.
 
-When something is missing, Preferences' **Status** row says so for whichever of the two switches is on: without the libraries it shows the install command above (with a copy button), or it says to add a Google account in Settings → Online Accounts. The Calendar tab says *Calendar editing isn't available* with the reason in place of the calendar picker. Google Keep can't be synced (see Notes).
+When something is missing, Preferences' **Status** row says so: without the libraries it shows the install command above (with a copy button) for either switch, and with Google Tasks on but no Google lists found it says to add a Google account in Settings → Online Accounts. The Calendar tab says *Calendar editing isn't available* with the reason in place of the calendar picker. Google Keep can't be synced (see Notes).
 
 ## 🕹️ Usage
 

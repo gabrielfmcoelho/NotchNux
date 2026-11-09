@@ -986,7 +986,7 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
                     parts.push('Google Tasks is off: the Tasks tab uses the tasks stored on this computer.');
                 }
                 parts.push(cal
-                    ? `Calendar editing is on (${r.calendars.length} ${r.calendars.length === 1 ? 'calendar' : 'calendars'}).`
+                    ? 'Calendar editing is on: calendars you can write to get + and Edit in the Calendar tab.'
                     : 'Calendar editing is off.');
                 status.subtitle = parts.join(' ');
             });
