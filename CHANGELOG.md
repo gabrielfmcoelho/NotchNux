@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `evolution-data-server` (Fedora).
 - A failed save is undone in the notch with a *Couldn't save to Google*
   alert, and the typed text is kept; a timed-out save re-reads instead.
+- Without the libraries, Preferences' Status row (for either switch) shows
+  the install command and the Calendar tab says *Calendar editing isn't
+  available*. A list deleted on the web reads *This list is gone — pick
+  another list*; a list unreachable at login is retried once after 30 s.
 
 ### Fixed
 - Super+/ now opens the notch from the Activities overview.
