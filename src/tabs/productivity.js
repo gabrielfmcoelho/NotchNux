@@ -855,6 +855,18 @@ export const ProductivityTabs = {
         this._mount(panel);
     },
 
+    // Expand the notch on the Notes tab with this note open (desktop post-it
+    // double-click). Reuses the board's own showEditor path.
+    _openNoteInEditor(id) {
+        if (!this._prod?.getNote(id))
+            return;
+        this._notesOpenId = id;
+        if (!this.isExpanded)
+            this.expand();
+        this._switchTab('notes');
+        this._notesUi?.showEditor(id);
+    },
+
     // Esc with the editor open leaves it for the board. True when handled.
     _notesEscape() {
         let ui = this._notesUi;

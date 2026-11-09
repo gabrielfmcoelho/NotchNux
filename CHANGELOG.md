@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — post-it notes
+- The Notes tab is now a board of colour-coded post-its (yellow, green, blue,
+  pink, purple), each autosaved, with undo for deletes.
+- **Pin to desktop**: a pinned note appears as a 180×180 card on the wallpaper,
+  under your windows. Drag it anywhere (it stays inside the screen, and comes
+  back if its monitor is unplugged); double-click it to edit in the notch.
+
 ### Added — follow the system accent
 - On GNOME 47+, Preferences → Appearance has an **Accent** choice: *Custom* or
   *System*. With System the notch uses GNOME's accent colour and recolours live

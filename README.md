@@ -29,7 +29,7 @@ NotchNux replaces the default GNOME top-bar clock with a **living pill**. At a g
 | 🏠 | **Home** | A glanceable start page: greeting and weather, your next calendar event, your top tasks with a quick-add field, the focus timer and now-playing controls. |
 | ✅ | **Tasks** | A fast to-do list right under the notch. Type and press Enter to add (start with `!` to star it), click to edit, check off with a satisfying tick, review what you finished in **Done**. |
 | ⏱️ | **Focus** | A Pomodoro-style timer (15 / 25 / 50 min) with automatic short and long breaks. While it runs, the countdown lives in the pill, **Do Not Disturb** turns on (optional), and you get a banner with *Start break* when time's up. Survives screen locks. |
-| 📝 | **Notes** | A scratchpad that autosaves as you type. |
+| 📝 | **Notes** | A board of colour-coded post-its that autosave as you type. Pin any note to the desktop, where it sits on the wallpaper under your windows; drag it anywhere and double-click it to edit. Google Keep sync is not possible: its API only works for Google Workspace (business) accounts, not personal ones. |
 | 🎵 | **Music / MPRIS** | Full player with album art, a spinning vinyl, scrubber, shuffle/repeat, and a volume dial — plus a lyrics view with timed lyrics from lrclib.net that follow the song. Works with any MPRIS player (Spotify, browsers, etc.). |
 | 🌤️ | **Weather** | Current conditions, an analog clock, humidity, wind, sunrise/sunset and hourly forecast. Auto-locates or set a manual location. |
 | 📷 | **Studio** | Live webcam preview (GStreamer) plus video and audio-only recording, with camera/mic device selection. |
@@ -70,7 +70,7 @@ NotchNux replaces the default GNOME top-bar clock with a **living pill**. At a g
 **Focus** — Pomodoro timer with breaks, do-not-disturb and today's stats
 ![Focus](assets/focus.png)
 
-**Notes** — an autosaving scratchpad
+**Notes** — post-its you can pin to the desktop
 ![Notes](assets/notes.png)
 
 **Music** — vinyl art, scrubber, shuffle/repeat and a volume dial

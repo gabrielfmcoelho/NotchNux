@@ -28,6 +28,7 @@ import { TAB_DEFS, FEATURE_DEFS, blurPreset, resolveAccent, hexToRgb01 } from '.
 import { fmt } from './helpers/format.js';
 import { GlassBackdrop, createShoulder, SHOULDER_SIZE, PILL_HEIGHT } from './helpers/island.js';
 import { springTo, stopSpring, addPressFeedback } from './helpers/motion.js';
+import { DeskNotes } from './helpers/desknotes.js';
 import { installProductivity } from './tabs/productivity.js';
 import { installLedge, swapContent } from './tabs/ledge.js';
 import { installTray } from './tabs/tray.js';
@@ -185,6 +186,8 @@ export const NotchNux = GObject.registerClass({
         this._notifBanner.visible = false;
         // Tasks / notes / focus timer (+ the pill's live timer zone).
         this._initProductivity();
+        // Post-its pinned to the desktop (only exist once the user pins one).
+        this._deskNotes = new DeskNotes(this._prod, { onOpen: id => this._openNoteInEditor(id) });
         // Alerts, hide-when-idle, launcher, clipboard, lyrics, keep awake…
         this._initLedge();
         // VPN state for the Tray's VPN row and the pill's VPN icon.
@@ -546,6 +549,8 @@ export const NotchNux = GObject.registerClass({
         this._screenShare?.destroy();
         this._screenShare = null;
         this._destroyKeyboard();
+        this._deskNotes?.destroy();
+        this._deskNotes = null;
         this._destroyProductivity();
         stopSpring(this);
         this._railTimeline?.stop();
