@@ -137,6 +137,11 @@ function open(dir) {
     eq(s.getNote(a).color, 'yellow', 'unknown color in addNote -> yellow');
     s.setNoteColor(a, 'nope');
     eq(s.getNote(a).color, 'yellow', 'unknown color in setNoteColor ignored');
+    s.setNoteColor(a, 'toString');
+    eq(s.getNote(a).color, 'yellow', 'prototype key in setNoteColor ignored');
+    let p = s.addNote('p', 'constructor');
+    eq(s.getNote(p).color, 'yellow', 'prototype key in addNote -> yellow');
+    s.removeNote(p);
     s.setNoteColor(a, 'purple');
     eq(s.getNote(a).color, 'purple', 'valid color applied');
     spin(15);
