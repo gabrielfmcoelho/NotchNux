@@ -17,19 +17,22 @@ import St from 'gi://St';
 
 import {
     diffEvents, strongest, restAct, ambient, breathing, rank, REACTION_ACT, meadow, wantsMushroom, sheltering, facing,
-    isIdle, cleanSpecies, napLength,
+    isIdle, cleanSpecies, napLength, NAPS,
 } from './companion-brain.js';
 import { accentHex } from './widgets.js';
 
 const ROOT = Gio.File.new_for_uri(import.meta.url).get_parent().get_parent().get_child('companions');
-const COMPACT = 60, WIDE = 120, H = 30, GROUND = 26;   // meadow widths; feet line (clear of the pill's rounded bottom)
-const SPRITE = 32;                                     // icon box; the drawn animal is ~22 px tall
-const PROP = 24;                                       // prop icon box, ground at its y=22
+// Base sizes at 1x: meadow widths, zone height, feet line (clear of the pill's
+// rounded bottom), the icon box (the drawn animal is ~22 px tall) and the prop
+// box (ground at its y=22). The Pet tab's yard runs the same player at 2x.
+const BASE = { compact: 60, wide: 120, h: 30, ground: 26, sprite: 32, prop: 24 };
 const AWAY_MS = 10 * 60 * 1000;
 const NARROW_HOLD_MS = 30 * 1000;                      // wait before giving the width back
 const WORLD_MS = 1000;                                 // rain / fireflies repaint
 const PET_AGAIN_MS = 1500;                             // a second click this soon opens the dashboard
 const PROPS = ['mushroom', 'bit', 'flower-bud', 'flower', 'leaf', 'drop', 'flake'];
+// What a finished composite means to the needs (companion-brain NEED_EFFECTS)
+const EVENT_OF = { eat: 'meal', meal: 'meal', snack: 'snack', treat: 'treat', pet: 'pet', groom: 'groom', dig: 'dig', chase: 'play', twostep: 'play' };
 const FOODS = ['whole', 'half', 'stub'];
 
 function rgb(hex) {
@@ -41,12 +44,29 @@ export const Companion = GObject.registerClass(
 class Companion extends St.Widget {
     // getState(): see companion-brain.js. onWidth(): the pill re-measures.
     // onMemory(key, value): remember a day key or a count in the config.
-    _init(getState, { species = 'rabbit', onWidth = null, onMemory = null } = {}) {
-        super._init({ style_class: 'nn-pill-rabbit-zone', width: COMPACT, height: H, y_align: Clutter.ActorAlign.CENTER,
-            reactive: true });
+    // scale 2 is the Pet tab's yard; mirror: the pill's Companion to follow (one
+    // brain, one life: the yard replays its acts and never starts its own).
+    // onEvent(name): something it did (meal, snack, pet, groom, dig, play, napEnd).
+    _init(getState, { species = 'rabbit', onWidth = null, onMemory = null, onEvent = null, scale = 1, mirror = null } = {}) {
+        super._init({ style_class: 'nn-pill-rabbit-zone', width: BASE.compact * scale, height: BASE.h * scale,
+            y_align: Clutter.ActorAlign.CENTER, reactive: true });
+        this._k = scale;
+        this._cw = BASE.compact * scale;
+        this._ww = BASE.wide * scale;
+        this._h = BASE.h * scale;
+        this._g = BASE.ground * scale;
+        this._s = BASE.sprite * scale;
+        this._p = BASE.prop * scale;
         this._getState = getState;
         this._onWidth = onWidth;
         this._onMemory = onMemory;
+        this._onEvent = onEvent;
+        this._mirror = mirror;
+        this._mirrors = [];
+        this._playing = null;      // the composite or routine being played, for onEvent
+        this._zPhase = 0;
+        this._worn = { head: null, neck: null };
+        this._minX = 0;            // the yard's house takes the left end
         this._claude = { mood: 'idle', fresh: 0, color: null };
         this._away = false;
         this._state = null;
@@ -71,28 +91,46 @@ class Companion extends St.Widget {
         this._nap = false;         // a lively short sleep
         this._napId = 0;
 
-        this._grass = new St.DrawingArea({ width: COMPACT, height: H });
+        this._grass = new St.DrawingArea({ width: this._cw, height: this._h });
         this._grass.connect('repaint', area => this._drawGrass(area));
         this.add_child(this._grass);
 
         // Props (food, mushroom, leaf…) sit on the grass in their own box.
-        this._props = new St.Widget({ width: PROP, height: PROP, visible: false });
-        this._props.set_position(0, GROUND - PROP + 2);
+        this._props = new St.Widget({ width: this._p, height: this._p, visible: false });
+        this._props.set_position(0, this._g - this._p + 2);
         this.add_child(this._props);
         this._propShown = null;
 
-        this._sprite = new St.Widget({ style_class: 'nn-pill-rabbit', width: SPRITE, height: SPRITE });
-        this._sprite.set_position(0, GROUND - SPRITE + 3);
+        this._sprite = new St.Widget({ style_class: 'nn-pill-rabbit', width: this._s, height: this._s });
+        this._sprite.set_position(0, this._g - this._s + 3);
         this._sprite.set_pivot_point(0.5, 1);                 // turns about its feet
-        this._sprite.translation_x = (COMPACT - SPRITE) / 2;  // where it sits in the meadow
+        this._sprite.translation_x = (this._cw - this._s) / 2;  // where it sits in the meadow
         this.add_child(this._sprite);
         this._frames = new Map();
         this._propIcons = new Map();
+        // what it wears rides the sprite (so it flips with it), placed per frame from the rig's anchors
+        this._wearIcons = { neck: new St.Icon({ icon_size: this._p, visible: false }) };
+        this._hatFrames = new Map();   // hat frame name -> icon, loaded when a hat is put on
+        this._hatMap = null;           // base frame -> hat frame, for the hat worn
+        for (let w of Object.values(this._wearIcons)) {
+            w.set_pivot_point(0.5, 1);
+            this._sprite.add_child(w);
+        }
+        // the yard's house: where it sleeps (drawn over the sprite then)
+        // 1.5 prop boxes: big enough to hold the animal, small enough not to crowd the yard
+        this._houseSize = Math.round(this._p * 1.5);
+        this._house = new St.Icon({ icon_size: this._houseSize, visible: scale > 1, opacity: 0 });
+        this._house.set_position(2 * scale, this._g - this._houseSize + Math.round(this._houseSize / 12));
+        this.add_child(this._house);
+        // in the yard the house takes the left end: the animal lives (and lands) to its right
+        this._minX = scale > 1 ? this._houseSize + 6 * scale : 0;
+        if (scale > 1)
+            this._sprite.translation_x = Math.round((this._minX + this._cw - this._s) / 2);
         this._loadSpecies(cleanSpecies(species));
 
-        // Away = no input for 10 minutes (sleeps); input again wakes it.
-        this._idleMon = global.backend.get_core_idle_monitor();
-        this._idleWatch = this._idleMon.add_idle_watch(AWAY_MS, () => {
+        // Away = no input for 10 minutes (sleeps); input again wakes it. (The yard follows the pill's.)
+        this._idleMon = mirror ? null : global.backend.get_core_idle_monitor();
+        this._idleWatch = mirror ? 0 : this._idleMon.add_idle_watch(AWAY_MS, () => {
             this._away = true;
             this.update();
             this._activeWatch = this._idleMon.add_user_active_watch(() => {
@@ -128,7 +166,15 @@ class Companion extends St.Widget {
             for (let id of [this._idleWatch, this._activeWatch])
                 if (id)
                     this._idleMon.remove_watch(id);
+            if (this._mirror)
+                this._mirror._mirrors = this._mirror._mirrors.filter(m => m !== this);
         });
+        if (mirror) {
+            mirror._mirrors.push(this);
+            this._away = mirror._away;
+            this._claude = mirror._claude;
+            this._worn = mirror._worn;
+        }
         this.update();
         this._settle();
     }
@@ -165,7 +211,7 @@ class Companion extends St.Widget {
         this._frames.clear();
         this._shown = null;
         for (let n of new Set(Object.values(this._spec.acts).flatMap(a => a.frames))) {
-            let icon = new St.Icon({ gicon: new Gio.FileIcon({ file: dir.get_child(n) }), icon_size: SPRITE, opacity: 0 });
+            let icon = new St.Icon({ gicon: new Gio.FileIcon({ file: dir.get_child(n) }), icon_size: this._s, opacity: 0 });
             this._frames.set(n, icon);
             this._sprite.add_child(icon);
         }
@@ -173,8 +219,16 @@ class Companion extends St.Widget {
             p.destroy();
         this._propIcons.clear();
         this._propShown = null;
+        this._anchors = this._spec.anchors ?? {};
+        for (let f of this._hatFrames.values())
+            f.destroy();
+        this._hatFrames.clear();
+        this._hatMap = null;
+        this._box = this._spec.box ?? [-20, -31, 135, 135];
+        this._house.gicon = new Gio.FileIcon({ file: dir.get_child('prop-house-symbolic.svg') });
+        this.setWear(this._worn);
         for (let n of [...PROPS.map(p => `prop-${p}`), ...FOODS.map(f => `food-${f}`)]) {
-            let icon = new St.Icon({ gicon: new Gio.FileIcon({ file: dir.get_child(`${n}-symbolic.svg`) }), icon_size: PROP, opacity: 0 });
+            let icon = new St.Icon({ gicon: new Gio.FileIcon({ file: dir.get_child(`${n}-symbolic.svg`) }), icon_size: this._p, opacity: 0 });
             this._propIcons.set(n, icon);
             this._props.add_child(icon);
         }
@@ -188,10 +242,10 @@ class Companion extends St.Widget {
             return;
         let swap = () => {
             this._loadSpecies(name);
-            this._sprite.translation_x = -SPRITE + 4;
+            this._sprite.translation_x = -this._s + 4;
             this._face(1);
             this._settle();
-            this._play([{ act: 'hop', to: (this.width - SPRITE) / 2 }], rank('wake'));
+            this._play([{ act: 'hop', to: (this.width - this._s) / 2 }], rank('wake'));
         };
         if (!this._canMove()) {
             swap();
@@ -205,13 +259,62 @@ class Companion extends St.Widget {
         return (this._state?.music && this._spec.acts[`${name}@music`]) || this._spec.acts[name];
     }
 
+    // Show a base frame; with a hat on, its hatted twin (ears and all) is shown instead.
     _show(name) {
-        if (this._shown === name)
+        let real = this._hatMap?.[name] ?? name;
+        if (this._shown === real)
             return;
         if (this._shown)
-            this._frames.get(this._shown).opacity = 0;
-        this._frames.get(name).opacity = 255;
-        this._shown = name;
+            (this._frames.get(this._shown) ?? this._hatFrames.get(this._shown)).opacity = 0;
+        (this._frames.get(real) ?? this._hatFrames.get(real)).opacity = 255;
+        this._shown = real;
+        this._base = name;
+        this._placeWear();
+    }
+
+    // What it wears: { head, neck } item ids (or null). Icons come from the species folder.
+    setWear(worn) {
+        this._worn = { head: worn?.head ?? null, neck: worn?.neck ?? null };
+        let dir = ROOT.get_child(this._species);
+        // the hat is a frame set drawn by the rig (the ears react to it); load it on first wear
+        let hat = this._worn.head && this._spec.hats?.[this._worn.head] ? this._worn.head : null;
+        this._hatMap = hat ? this._spec.hats[hat] : null;
+        if (hat) {
+            for (let n of new Set(Object.values(this._hatMap))) {
+                if (this._hatFrames.has(n))
+                    continue;
+                let icon = new St.Icon({ gicon: new Gio.FileIcon({ file: dir.get_child(n) }), icon_size: this._s, opacity: 0 });
+                this._hatFrames.set(n, icon);
+                this._sprite.add_child(icon);
+            }
+        }
+        let neck = this._wearIcons.neck;
+        neck.visible = !!this._worn.neck;
+        if (this._worn.neck)
+            neck.gicon = new Gio.FileIcon({ file: dir.get_child(`wear-${this._worn.neck}-symbolic.svg`) });
+        if (this._base) {   // re-show the current pose with or without the hat
+            let b = this._base;
+            this._shown = null;
+            for (let f of [...this._frames.values(), ...this._hatFrames.values()])
+                f.opacity = 0;
+            this._show(b);
+        }
+        this._placeWear();
+        for (let m of this._mirrors)
+            m.setWear(worn);
+    }
+
+    // Put the hat on the head and the collar on the neck of the frame on show.
+    _placeWear() {
+        let a = this._base && this._anchors[this._base];
+        let icon = this._wearIcons.neck;
+        if (!a || !icon.visible || !a.neck)
+            return;
+        let [fx, fy, fw] = this._box;
+        let px = this._s / fw;
+        let [ax, ay] = a.neck;
+        icon.set_position(Math.round((ax - fx) * px - this._p / 2), Math.round((ay - fy) * px - this._p * 0.55));
+        icon.rotation_angle_z = a.rot;
     }
 
     // Show one prop (or food state) on the grass at x, or hide them all.
@@ -224,7 +327,7 @@ class Companion extends St.Widget {
             return;
         this._propIcons.get(name).opacity = 255;
         if (x !== null)
-            this._props.set_x(Math.max(0, Math.min(this.width - PROP, Math.round(x))));
+            this._props.set_x(Math.max(0, Math.min(this.width - this._p, Math.round(x))));
     }
 
     // From the Claude sync: mood (idle/working/waiting), how many sessions
@@ -232,10 +335,18 @@ class Companion extends St.Widget {
     setClaude(mood, fresh, color) {
         this._claude = { mood, fresh, color };
         this.update();
+        for (let m of this._mirrors) {
+            m._claude = this._claude;
+            m.update();
+        }
     }
 
     // Something the notch saw: re-read the state, react to what changed.
     update() {
+        if (this._mirror)
+            this._away = this._mirror._away;
+        for (let m of this._mirrors)
+            m.update();
         let next = { ...this._getState(), mood: this._claude.mood, fresh: this._claude.fresh, away: this._away, nap: this._nap };
         if (this._nap && (!isIdle(next) || !next.lively))
             this._endNap(false);   // something came up: wake without the stretch
@@ -270,6 +381,8 @@ class Companion extends St.Widget {
         }
         if (this._act && rank(event) > this._act.rank)
             return;   // a stronger reaction is playing
+        if (!this._mirror && (event === 'focusdone' || event === 'finished'))
+            this._onEvent?.(event);   // earns a treat / a seed
         this._play(REACTION_ACT[event], rank(event));
     }
 
@@ -280,7 +393,7 @@ class Companion extends St.Widget {
     // ---- the meadow's width ----
 
     _syncMeadow() {
-        let want = meadow(this._state) === 'wide' ? WIDE : COMPACT;
+        let want = meadow(this._state) === 'wide' ? this._ww : this._cw;
         if (want > this.width) {
             this._clearNarrow();
             this._setWidth(want);
@@ -290,11 +403,11 @@ class Companion extends St.Widget {
                 this._narrowId = 0;
                 if (meadow(this._state) === 'wide')
                     return GLib.SOURCE_REMOVE;
-                let inside = COMPACT - SPRITE - 2;
+                let inside = this._cw - this._s - 2;
                 if (this._sprite.translation_x > inside && this._canMove() && !this._act)
-                    this._play([{ act: 'hop', to: inside - 4 }], Infinity, () => this._setWidth(COMPACT));
+                    this._play([{ act: 'hop', to: inside - 4 }], Infinity, () => this._setWidth(this._cw));
                 else
-                    this._setWidth(COMPACT);
+                    this._setWidth(this._cw);
                 return GLib.SOURCE_REMOVE;
             });
         } else if (want === this.width) {
@@ -313,11 +426,13 @@ class Companion extends St.Widget {
             return;
         this.width = w;
         this._grass.width = w;
-        let max = w - SPRITE;
+        let max = w - this._s;
         if (this._sprite.translation_x > max)
             this._sprite.translation_x = max;
-        if (this._propShown && this._props.x > w - PROP)
-            this._props.set_x(w - PROP);
+        if (this._sprite.translation_x < this._minX)
+            this._sprite.translation_x = this._minX;
+        if (this._propShown && this._props.x > w - this._p)
+            this._props.set_x(w - this._p);
         this._grass.queue_repaint();
         this._onWidth?.();
     }
@@ -333,7 +448,10 @@ class Companion extends St.Widget {
             this._scheduleAmbient();
             return;
         }
-        let items = Array.isArray(what) ? what.map(i => (typeof i === 'string' ? { act: i } : i)) : this._expand(what);
+        for (let m of this._mirrors)
+            m._play(what, r);
+        this._playing = typeof what === 'string' ? what.split(':')[0] : null;
+        let items = Array.isArray(what) ? what.flatMap(i => (typeof i === 'string' ? this._expand(i) : [i])) : this._expand(what);
         if (!items.length) {
             this._scheduleAmbient();
             return;
@@ -345,16 +463,17 @@ class Companion extends St.Widget {
     }
 
     // Composite acts become sequences of frame acts with travel and callbacks.
-    _expand(name) {
+    _expand(step) {
+        let [name, param] = step.split(':');
         let x = this._sprite.translation_x;
-        let max = this.width - SPRITE;
+        let max = this.width - this._s;
         let st = this._state ?? {};
         switch (name) {
         case 'turn':
             this._face(-this._facing);
             return [{ act: 'look' }];
         case 'wander':
-            return [{ act: 'hop', to: this._wanderTarget() }];
+            return this._wanderSteps(param ?? 'hop', x, max);
         case 'twostep': {
             let step = Math.min(8, x, max - x);
             return [{ act: 'hop', to: x - step }, { act: 'hop', to: x + step }];
@@ -370,25 +489,29 @@ class Companion extends St.Widget {
             ];
         }
         case 'nap':
-            // a short sleep: the rest pose turns to sleep, fireflies drift, then it stretches awake
-            this._nap = true;
-            this._napId = GLib.timeout_add(GLib.PRIORITY_LOW, napLength(Math.random()), () => {
+            // a doze (sitting, eyes shut), a nap or a deep sleep (lying down, fireflies);
+            // then it stretches awake. Anything that needs it cuts the nap short.
+            this._nap = param in NAPS ? param : 'nap';
+            this._napId = GLib.timeout_add(GLib.PRIORITY_LOW, napLength(this._nap, Math.random()), () => {
                 this._napId = 0;
                 this._endNap(true);
                 return GLib.SOURCE_REMOVE;
             });
             this.update();
             return [];
+        case 'seek':   // hungry: hops to the far side and sniffs around for food
+            return [{ act: 'hop', to: this._farSpot() }, { act: 'sniff' }, { act: 'look' }];
         case 'eat':
         case 'meal':
+        case 'treat':
         case 'snack': {
             // food lands at the far side (a snack right here), it hops over and eats it in bites;
             // 'meal' is the lively version of lunch, which leaves the once-a-day memory alone
-            let far = name !== 'snack';
+            let far = name !== 'snack' && name !== 'treat';
             let fx = far ? this._farSpot() : x + (this._facing > 0 ? 18 : -10);
-            fx = Math.max(0, Math.min(this.width - PROP, fx));
+            fx = Math.max(0, Math.min(this.width - this._p, fx));
             let stand = Math.max(0, Math.min(max, fx + (fx > x ? -14 : 14)));
-            let bites = far ? ['whole', 'half', 'stub'] : ['half', 'stub'];
+            let bites = far ? ['whole', 'half', 'stub'] : name === 'treat' ? ['stub'] : ['half', 'stub'];
             let items = [{ act: 'look', onStart: () => {
                 this._prop('food-whole', fx);
                 if (name === 'eat')
@@ -410,17 +533,24 @@ class Companion extends St.Widget {
         let item = this._queue.shift();
         if (!item) {
             this._act = null;
-            let done = this._onDone;
+            let done = this._onDone, played = this._playing;
             this._onDone = null;
+            this._playing = null;
             this._settle();
             done?.();
+            if (!this._mirror && played && EVENT_OF[played])
+                this._onEvent?.(EVENT_OF[played]);
             return;
         }
         this._act = { name: item.act, rank: this._act?.rank ?? Infinity };
+        if (this._inHouse) {
+            this._inHouse = false;
+            this._sprite.opacity = 255;
+        }
         item.onStart?.();
         let dx = 0;
         if (item.to !== undefined) {
-            this._xTarget = Math.max(0, Math.min(this.width - SPRITE, Math.round(item.to)));
+            this._xTarget = Math.max(this._minX, Math.min(this.width - this._s, Math.round(item.to)));
             dx = this._xTarget - this._sprite.translation_x;
             if (dx)
                 this._face(Math.sign(dx));
@@ -460,6 +590,31 @@ class Companion extends St.Widget {
             this._stepId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this._frameMs, step);
     }
 
+    // Wandering styles, as hop steps. Every target stays inside the meadow.
+    _wanderSteps(style, x, max) {
+        let min = this._minX;
+        let clamp = v => Math.max(min, Math.min(max, Math.round(v)));
+        let dir = x < (min + max) / 2 ? 1 : -1;   // toward the far side
+        switch (style) {
+        case 'patrol':   // edge to edge
+            return [{ act: 'hop', to: clamp(dir > 0 ? max - 1 : min + 1) }];
+        case 'explore': {   // three short hops one way, then a sniff
+            let step = Math.max(6, Math.min(12, Math.abs((dir > 0 ? max - x : x) / 3)));
+            return [1, 2, 3].map(i => ({ act: 'hop', to: clamp(x + dir * step * i) })).concat([{ act: 'sniff' }]);
+        }
+        case 'zigzag': {   // small hops side to side
+            let step = Math.min(7, x, max - x) || 4;
+            return [{ act: 'hop', to: clamp(x - step) }, { act: 'hop', to: clamp(x + step) }, { act: 'hop', to: clamp(x - step) }, { act: 'hop', to: clamp(x) }];
+        }
+        case 'cautious': {   // hop, sniff, hop
+            let t = this._wanderTarget();
+            return [{ act: 'hop', to: clamp((x + t) / 2) }, { act: 'sniff' }, { act: 'hop', to: clamp(t) }];
+        }
+        default:
+            return [{ act: 'hop', to: this._wanderTarget() }];
+        }
+    }
+
     // End a lively nap: with a stretch when it wakes by itself.
     _endNap(stretch) {
         if (this._napId)
@@ -467,10 +622,13 @@ class Companion extends St.Widget {
         this._napId = 0;
         if (!this._nap)
             return;
+        let was = this._nap;
         this._nap = false;
         if (this._state)
             this._state.nap = false;
         this._syncWorld();
+        if (was === 'deep' && !this._mirror)
+            this._onEvent?.('napEnd');
         if (stretch && this._canMove())
             this._play('stretch');
         else
@@ -479,16 +637,16 @@ class Companion extends St.Widget {
 
     // A spot on the other side of the meadow from where it stands.
     _farSpot() {
-        let max = this.width - SPRITE, x = this._sprite.translation_x;
-        return x < max / 2 ? max - 2 - Math.round(Math.random() * 6) : 2 + Math.round(Math.random() * 6);
+        let min = this._minX, max = this.width - this._s, x = this._sprite.translation_x;
+        return x < (min + max) / 2 ? max - 2 - Math.round(Math.random() * 6) : min + 2 + Math.round(Math.random() * 6);
     }
 
     // A spot at least 10 px away, inside the meadow.
     _wanderTarget() {
-        let max = this.width - SPRITE, x = this._sprite.translation_x;
-        let t = Math.random() * max;
+        let min = this._minX, max = this.width - this._s, x = this._sprite.translation_x;
+        let t = min + Math.random() * (max - min);
         if (Math.abs(t - x) < 10)
-            t = x < max / 2 ? max - Math.random() * 6 : Math.random() * 6;
+            t = x < (min + max) / 2 ? max - Math.random() * 6 : min + Math.random() * 6;
         return Math.round(t);
     }
 
@@ -524,6 +682,7 @@ class Companion extends St.Widget {
         if (f && f !== this._facing)
             this._face(f);
         this._show(this._acts(restAct(st)).frames.at(-1));
+        this._syncHouse(restAct(st));
         if (this._bend || this._dust) {
             this._bend = this._dust = false;
             this._grass.queue_repaint();
@@ -546,6 +705,8 @@ class Companion extends St.Widget {
         if (this._act || !this._state || !this.mapped)
             return;
         this._startBreath();
+        if (this._mirror)
+            return;   // the pill's companion decides; this one only breathes between its moves
         if (wantsMushroom(this._state) && this._propShown === null) {
             this._prop('prop-mushroom', this._farSpot() + 4);
             this._onMemory?.('lastMushroom', this._state.dayKey);
@@ -557,7 +718,7 @@ class Companion extends St.Widget {
             return;   // sleeping, tired, flopped or calm: no next move
         this._ambientId = GLib.timeout_add(GLib.PRIORITY_LOW, next.delay, () => {
             this._ambientId = 0;
-            this._play(next.act);
+            this._play(next.routine ? next.steps : next.act);
             return GLib.SOURCE_REMOVE;
         });
     }
@@ -574,6 +735,21 @@ class Companion extends St.Widget {
             this._show(this._inBreath ? inhale : rest);
             return GLib.SOURCE_CONTINUE;
         });
+    }
+
+    // In the yard it sleeps inside its house: it moves there and the house draws over it.
+    _syncHouse(rest) {
+        if (this._k <= 1)
+            return;
+        this._inHouse = rest === 'sleep';
+        this._house.opacity = 255;
+        if (this._inHouse) {   // it went in: out of sight until it wakes
+            this._sprite.remove_transition('translation_x');
+            this._sprite.translation_x = this._house.x + this._houseSize / 2 - this._s / 2;
+            this._sprite.opacity = 0;
+        } else {
+            this._sprite.opacity = 255;
+        }
     }
 
     // ---- the world: shelter, flower, rain, night ----
@@ -595,19 +771,21 @@ class Companion extends St.Widget {
     _syncFlower(prev, next) {
         if (next.focus === 'focus' && prev.focus !== 'focus') {
             this._flower = 'bud';
-            this._prop('prop-flower-bud', this.width - PROP);
+            this._prop('prop-flower-bud', this.width - this._p);
         } else if (prev.focus === 'focus' && next.focus !== 'focus' && this._flower === 'bud') {
             this._flower = 'open';
-            this._prop('prop-flower', this.width - PROP);
+            this._prop('prop-flower', this.width - this._p);
         } else if (this._flower && this._propShown === null && isIdle(next)) {
-            this._prop(this._flower === 'bud' ? 'prop-flower-bud' : 'prop-flower', this.width - PROP);
+            this._prop(this._flower === 'bud' ? 'prop-flower-bud' : 'prop-flower', this.width - this._p);
         }
     }
 
     // Rain, snow and fireflies move once a second, only while idle and on screen.
     _syncWorld() {
         let st = this._state;
-        let want = !!st && this.mapped && this.visible && isIdle(st) && (st.rain || st.snow || st.night || st.nap);
+        let lying = st?.nap && st.nap !== 'doze';
+        let asleep = !!st && ['sleep', 'doze'].includes(restAct(st));
+        let want = !!st && this.mapped && this.visible && (asleep || (isIdle(st) && (st.rain || st.snow || st.night || lying)));
         if (want && !this._worldId) {
             this._worldId = GLib.timeout_add(GLib.PRIORITY_LOW, WORLD_MS, () => {
                 this._tickWorld();
@@ -625,21 +803,22 @@ class Companion extends St.Widget {
 
     _tickWorld() {
         let st = this._state, w = this.width;
+        this._zPhase = (this._zPhase + 1) % 3;
         if (st.rain || st.snow) {
             if (this._drops.length < 4)
                 this._drops.push({ x: Math.random() * w, y: 0 });
             for (let d of this._drops)
                 d.y += st.snow ? 5 : 9;
-            this._drops = this._drops.filter(d => d.y < GROUND);
+            this._drops = this._drops.filter(d => d.y < this._g);
         } else {
             this._drops = [];
         }
-        if (st.night || st.nap) {
+        if (st.night || (st.nap && st.nap !== 'doze')) {
             if (this._flies.length < 2)
                 this._flies.push({ x: Math.random() * w, y: 8 + Math.random() * 12 });
             for (let f of this._flies) {
                 f.x = (f.x + (Math.random() - 0.5) * 6 + w) % w;
-                f.y = Math.max(4, Math.min(GROUND - 4, f.y + (Math.random() - 0.5) * 4));
+                f.y = Math.max(4, Math.min(this._g - 4, f.y + (Math.random() - 0.5) * 4));
             }
         } else {
             this._flies = [];
@@ -653,31 +832,51 @@ class Companion extends St.Widget {
         let cr = area.get_context();
         let st = this._state ?? {};
         let w = this.width, s = this._scroll;
-        let dim = st.night || st.nap ? 0.7 : 1;
-        let feet = this._sprite.translation_x + SPRITE / 2;
+        let dim = st.night || (st.nap && st.nap !== 'doze') ? 0.7 : 1;
+        let feet = this._sprite.translation_x + this._s / 2;
         let wind = (st.wind ?? 0) > 20 ? 1 : 0;
-        for (let x = 1; x < w; x += 3) {
+        let k = this._k;
+        for (let x = 1; x < w; x += 3 * k) {
             let xx = x - (s % 3);
-            let y = GROUND + 0.5 + 0.8 * Math.sin(xx / 5 + s / 4);
+            let y = this._g + 0.5 + 0.8 * k * Math.sin(xx / (5 * k) + s / 4);
             let edge = Math.min(1, xx / 8, (w - xx) / 8);   // fade at both ends
             let a = Math.max(0, edge) * (0.25 + 0.25 * (0.5 + 0.5 * Math.sin(xx / 9))) * dim;
             cr.setSourceRGBA(0.75, 0.74, 0.8, a);
             let lean = this._bend && Math.abs(xx - feet) < 9 ? Math.sign(xx - feet) : wind;
-            cr.rectangle(xx + lean, y - (lean ? 1 : 0), 1, 1);
+            cr.rectangle(xx + lean, y - (lean ? 1 : 0), k, k);
             cr.fill();
             // a blade every 5 px, 2-3 px tall, not under the feet
-            if (x % 5 === 1 && Math.abs(xx - feet) > 6) {
-                let h = 2 + ((x * 7) % 2);
+            if (Math.round(x / k) % 5 === 1 && Math.abs(xx - feet) > 6 * k) {
+                let h = (2 + ((x * 7) % 2)) * k;
                 cr.setSourceRGBA(0.75, 0.74, 0.8, 0.6 * Math.max(0, edge) * dim);
-                cr.rectangle(xx + lean, GROUND - h, 1, h);
+                cr.rectangle(xx + lean, this._g - h, k, h);
                 cr.fill();
+            }
+        }
+        // z's over its head while asleep (one for a doze), rising with the world tick
+        let rest = restAct(st);
+        if (rest === 'sleep' || rest === 'doze') {
+            let k = this._k, n = rest === 'doze' ? 1 : 2;
+            let hx = this._sprite.translation_x + this._s * (this._facing > 0 ? 0.62 : 0.38);
+            let hy = this._g - this._s * 0.55;
+            if (this._inHouse) {   // from the roof
+                hx = this._house.x + this._houseSize * 0.6;
+                hy = this._house.y + this._houseSize * 0.15;
+            }
+            cr.setSourceRGBA(0.75, 0.74, 0.8, 0.75);
+            cr.setLineWidth(k);
+            for (let i = 0; i < n; i++) {
+                let ph = (this._zPhase + i) % 3;
+                let zx = hx + i * 4 * k + ph * k, zy = hy - ph * 2 * k - i * 4 * k, zs = (2 + i) * k;
+                cr.moveTo(zx, zy); cr.lineTo(zx + zs, zy); cr.lineTo(zx, zy + zs); cr.lineTo(zx + zs, zy + zs);
+                cr.stroke();
             }
         }
         if (this._dust) {
             cr.setSourceRGBA(0.75, 0.74, 0.8, 0.7);
             let px = feet + this._facing * 9;
-            cr.rectangle(px, GROUND - 5, 1, 1);
-            cr.rectangle(px + 2 * this._facing, GROUND - 3, 1, 1);
+            cr.rectangle(px, this._g - 5, 1, 1);
+            cr.rectangle(px + 2 * this._facing, this._g - 3, 1, 1);
             cr.fill();
         }
         for (let d of this._drops) {

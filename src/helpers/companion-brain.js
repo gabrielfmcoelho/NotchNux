@@ -96,9 +96,11 @@ export function restAct(s) {
         return 'flop';
     if (s.mood !== 'idle' || s.focus === 'focus')
         return 'sit';
+    if (s.nap === 'doze')
+        return 'doze';
     if (s.away || s.night || s.nap)
         return 'sleep';
-    if (s.low && !s.charging)
+    if ((s.low && !s.charging) || (s.needs && s.needs.energy < 25 && !s.nap))
         return 'tired';
     return 'sit';
 }
@@ -121,12 +123,75 @@ const IDLE_ACTS = ['blink', 'blink', 'flick', 'look', 'nibble', 'sniff', 'groom'
 // mostly bobs, every so often a two-step.
 const MUSIC_ACTS = ['bob', 'bob', 'bob', 'twostep', 'flick', 'look', 'sniff'];
 // Lively: the day's habits as idle moves too. 'meal' is lunch without the
-// memory (the real lunch still happens), 'nap' a short sleep with fireflies.
-const LIVELY_ACTS = [...IDLE_ACTS, 'wander', 'chase', 'snack', 'meal', 'nap', 'twostep'];
+// memory (the real lunch still happens); naps come in kinds (see NAPS).
+const LIVELY_ACTS = [...IDLE_ACTS, 'wander:patrol', 'wander:explore', 'chase', 'snack', 'meal', 'nap:doze', 'nap:nap', 'twostep'];
 
-// A lively nap lasts this long (ms), then it stretches awake.
-export function napLength(rand) {
-    return 8000 + 7000 * rand;
+// ---- repertoire -----------------------------------------------------------
+// Wandering styles the player builds from hops: 'hop' one hop anywhere,
+// 'patrol' edge to edge, 'explore' three short hops one way then a sniff,
+// 'zigzag' small hops side to side, 'cautious' hop, sniff, hop.
+export const WANDER_STYLES = ['hop', 'patrol', 'explore', 'zigzag', 'cautious'];
+
+// Routines: little stories of several moves. A step is 'act' or 'act:param'.
+export const ROUTINES = {
+    forage:   ['wander:explore', 'sniff', 'nibble', 'wander:hop', 'nibble', 'groom'],
+    patrol:   ['wander:patrol', 'sniffup', 'turn', 'wander:patrol', 'look'],
+    zoomies:  ['twostep', 'binky', 'wander:zigzag', 'shake'],
+    wash:     ['groom', 'groom', 'shake', 'look', 'flick'],
+    digfind:  ['dig', 'dig', 'chase', 'sniff'],
+    watch:    ['look', 'sniffup', 'turn', 'look', 'flick'],
+    lazy:     ['stretch', 'nap:doze', 'yawn', 'groom'],
+    siesta:   ['wander:patrol', 'nap:deep', 'stretch', 'yawn', 'shake'],
+    mealtime: ['meal', 'groom', 'nap:doze'],
+    cautious: ['wander:cautious', 'sniffup', 'wander:cautious', 'groom'],
+    dance:    ['bob', 'twostep', 'bob', 'shake', 'bob'],
+};
+
+// Time of day shapes the energy: which routines are likely.
+export function period(minutes) {
+    if (minutes < 11 * 60)
+        return 'morning';
+    if (minutes < 14 * 60)
+        return 'midday';
+    if (minutes < 17 * 60)
+        return 'afternoon';
+    return 'evening';
+}
+
+const ENERGY = {
+    morning:   { zoomies: 3, forage: 3, patrol: 2, digfind: 2, watch: 1, wash: 1, cautious: 1, lazy: 0, siesta: 0, mealtime: 0 },
+    midday:    { forage: 3, mealtime: 2, watch: 2, patrol: 1, digfind: 1, wash: 1, cautious: 1, lazy: 1, zoomies: 1, siesta: 0 },
+    afternoon: { lazy: 3, siesta: 2, wash: 2, watch: 1, forage: 1, cautious: 1, patrol: 1, digfind: 1, zoomies: 0, mealtime: 0 },
+    evening:   { watch: 3, wash: 2, lazy: 2, cautious: 2, forage: 1, patrol: 1, siesta: 1, digfind: 0, zoomies: 0, mealtime: 0 },
+};
+
+// Pick a routine for the moment: weighted by the time of day, 'dance' only with music.
+export function pickRoutine(s, rand) {
+    if (s.music)
+        return 'dance';
+    let w = ENERGY[period(s.minutes)];
+    let total = Object.values(w).reduce((a, b) => a + b, 0);
+    let r = rand * total;
+    for (let [name, k] of Object.entries(w)) {
+        r -= k;
+        if (r < 0 && k > 0)
+            return name;
+    }
+    return 'watch';
+}
+
+// Non-lively: a routine now and then (every 4th-ish idle slot); lively: every other one.
+export function wantsRoutine(s, rand) {
+    return s.lively ? rand < 0.5 : rand < 0.25;
+}
+
+// Naps: how long each kind lasts (ms). A doze is sitting with eyes shut, a nap
+// and a deep sleep lie down (deep breathes slower). It stretches awake after.
+export const NAPS = { doze: [4000, 7000], nap: [8000, 15000], deep: [20000, 40000] };
+
+export function napLength(kind, rand) {
+    let [a, b] = NAPS[kind] ?? NAPS.nap;
+    return a + (b - a) * rand;
 }
 
 // The rest pose's breathing: the frame act to alternate with, and how often.
@@ -135,8 +200,10 @@ export function breathing(s) {
     let rest = restAct(s);
     if (rest === 'sit')
         return { act: 'breathe', ms: 1600 };
+    if (rest === 'doze')
+        return { act: 'dozebreathe', ms: 2200 };
     if (rest === 'sleep')
-        return { act: 'sleepbreathe', ms: 2600 };
+        return { act: 'sleepbreathe', ms: s.nap === 'deep' ? 3400 : 2600 };
     return null;
 }
 
@@ -148,6 +215,9 @@ export function ambient(s, rand) {
         return { act: 'thump', delay: 3000 };
     if (s.mood === 'working')
         return { act: 'run', delay: 3000 };
+    let need = needAct(s, (rand * 104729) % 1);   // hungry, scruffy or exhausted comes first
+    if (need)
+        return need;
     if (restAct(s) !== 'sit')
         return null;
     if (s.focus === 'focus')   // keeps you company, quietly
@@ -158,6 +228,14 @@ export function ambient(s, rand) {
         return { act: 'perk', delay: 15000 + 10000 * rand };
     if (s.calm)
         return null;
+    // `rand` also decides whether this slot is a single move or a routine
+    // (the player runs a routine's steps back to back). Spread the one random
+    // number: its high bits pick, its low bits time.
+    let r2 = (rand * 7919) % 1;
+    if (!s.calm && wantsRoutine(s, r2)) {
+        let name = pickRoutine(s, rand);
+        return { routine: name, steps: ROUTINES[name], delay: (s.lively ? 2000 + 3000 * rand : 20000 + 40000 * rand) };
+    }
     if (s.music)
         return { act: MUSIC_ACTS[Math.floor(rand * MUSIC_ACTS.length)], delay: 1500 + 2500 * rand };
     if (s.lively)
@@ -193,4 +271,138 @@ export const SPECIES = ['rabbit', 'cat', 'fox'];
 
 export function cleanSpecies(v) {
     return SPECIES.includes(v) ? v : 'rabbit';
+}
+
+// ---- needs: the four bars of the Pet tab ---------------------------------
+// Computed from the last saved values and their timestamp, never ticked, so
+// nothing runs while the tab is closed. 0..100. Nothing bad happens at the
+// floor: the worst state is "a bit scruffy and sleepy".
+export const NEED_KEYS = ['energy', 'hunger', 'mood', 'clean'];
+const MIN = 60 * 1000;
+// per-minute drift while awake / asleep
+const DRIFT = {
+    energy: { awake: -1 / 10, asleep: +1 },
+    hunger: { awake: +1 / 15, asleep: +1 / 30 },
+    mood:   { awake: -1 / 30, asleep: 0 },
+    clean:  { awake: -1 / 60, asleep: 0 },
+};
+const clamp = v => Math.max(0, Math.min(100, Math.round(v * 10) / 10));
+
+export function freshNeeds(nowMs) {
+    return { energy: 80, hunger: 30, mood: 70, clean: 80, at: nowMs };
+}
+
+// Bring saved needs up to `nowMs`. `asleep` is how it spent the gap.
+export function progressNeeds(saved, nowMs, asleep = false) {
+    let mins = Math.max(0, (nowMs - (saved.at || nowMs)) / MIN);
+    let out = { at: nowMs };
+    for (let k of NEED_KEYS)
+        out[k] = clamp((saved[k] ?? freshNeeds(nowMs)[k]) + mins * DRIFT[k][asleep ? 'asleep' : 'awake']);
+    return out;
+}
+
+// What an event does to the needs (deltas), by name.
+export const NEED_EFFECTS = {
+    meal:   { hunger: -40, mood: +4 },
+    snack:  { hunger: -15, mood: +2 },
+    treat:  { hunger: -8, mood: +3 },
+    pet:    { mood: +10 },
+    play:   { mood: +5, energy: -3 },        // a chase or a two-step
+    music:  { mood: +1 },                    // per minute, applied by the notch
+    focusdone: { mood: +8 },
+    groom:  { clean: +15 },
+    bath:   { clean: +60, mood: +2 },
+    dig:    { clean: -10 },
+    rain:   { clean: -5 },
+    napEnd: { energy: +8 },                  // a deep nap; shorter naps use progressNeeds
+    missed: { mood: -5 },                    // a Claude wait left over 10 min
+};
+
+export function applyNeed(needs, event) {
+    let d = NEED_EFFECTS[event];
+    if (!d)
+        return needs;
+    let out = { ...needs };
+    for (let [k, v] of Object.entries(d))
+        out[k] = clamp((out[k] ?? 50) + v);
+    return out;
+}
+
+// One line for the tab, from the lowest need first.
+export function thought(n, s = {}) {
+    if (s.away === false && s.justBack)
+        return 'happy you\'re back';
+    if (n.energy < 25)
+        return 'sleepy';
+    if (n.hunger > 70)
+        return 'hungry';
+    if (n.clean < 30)
+        return 'a bit scruffy';
+    if (n.mood < 30)
+        return 'wants some company';
+    if (n.mood > 90)
+        return 'full of beans';
+    if (n.hunger < 25 && n.energy > 60)
+        return 'content';
+    return 'doing fine';
+}
+
+// Needs that change what it does on its own. Returns an ambient override or null.
+export function needAct(s, rand) {
+    let n = s.needs;
+    if (!n || !isIdle(s) || s.calm || s.night || s.nap || sheltering(s) || s.focus !== 'idle')
+        return null;
+    if (n.energy < 15)
+        return { act: 'nap:nap', delay: 2000 };
+    if (n.hunger > 70 && rand < 0.5)
+        return { act: rand < 0.25 ? 'seek' : 'sigh', delay: 180000 + 120000 * rand };   // every 3-5 min
+    if (n.clean < 50 && rand < 0.3)
+        return { act: 'groom', delay: 20000 + 20000 * rand };
+    return null;
+}
+
+// ---- finds: what digging and living turn up --------------------------------
+export const FINDS = {
+    treat:  { kind: 'food', name: 'a treat', weight: 8 },
+    cap:    { kind: 'keepsake', name: 'a bottle cap', weight: 5 },
+    pebble: { kind: 'keepsake', name: 'a shiny pebble', weight: 5 },
+    seed:   { kind: 'seed', name: 'a seed', weight: 3 },
+    ribbon: { kind: 'wear', slot: 'neck', name: 'a ribbon', weight: 1 },
+    beanie: { kind: 'wear', slot: 'head', name: 'a beanie', weight: 1 },
+};
+export const WEARABLES = {
+    straw:  { slot: 'head', name: 'a straw hat' },
+    beanie: { slot: 'head', name: 'a beanie' },
+    crown:  { slot: 'head', name: 'a tiny crown' },
+    bell:   { slot: 'neck', name: 'a bell collar' },
+    ribbon: { slot: 'neck', name: 'a ribbon' },
+    scarf:  { slot: 'neck', name: 'a scarf' },
+};
+export const DIG_FIND_CHANCE = 0.2;
+
+// A dig's find, or null. rand in [0,1): the first fifth finds something.
+export function digFind(rand) {
+    if (rand >= DIG_FIND_CHANCE)
+        return null;
+    let r = (rand / DIG_FIND_CHANCE) * Object.values(FINDS).reduce((a, f) => a + f.weight, 0);
+    for (let [id, f] of Object.entries(FINDS)) {
+        r -= f.weight;
+        if (r < 0)
+            return id;
+    }
+    return 'treat';
+}
+
+// Earned finds from living: a treat per finished focus, a seed per closed
+// Claude session, a straw hat at a 5-day meal streak, the bell at 7.
+export function earned(event, streakDays) {
+    if (event === 'focusdone')
+        return 'treat';
+    if (event === 'finished')
+        return 'seed';
+    if (event === 'streak' && streakDays === 5)
+        return 'straw';
+    if (event === 'streak' && streakDays === 7)
+        return 'bell';
+    return null;
 }

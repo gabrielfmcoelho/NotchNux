@@ -211,6 +211,63 @@ SPECIES = {
         joints={"root": (43, 100), "hip": (31, 87), "shoulder": (57, 82), "neck": (56, 66),
                 "ear_far": (53, 45), "ear_near": (66, 43), "tail": (21, 86)}),
 }
+def fill(d, cls=None):
+    if cls:
+        return f'<path class="{cls}" fill="#73d216" d="{d}"/>'
+    return f'<path fill="#bebebe" fill-rule="evenodd" d="{d}"/>'
+
+
+# Where a hat sits (top of the skull, between the ears) and a collar (the neck), per species,
+# plus the house it sleeps in (the Pet tab's yard).
+ANCHORS = {
+    "rabbit": {"hat": (62, 44), "neck": (58, 70)},
+    "cat":    {"hat": (59, 40), "neck": (53, 65)},
+    "fox":    {"hat": (60, 44), "neck": (55, 68)},
+}
+# Houses: the mouth is a hole in the same path (even-odd), so the pill shows through it.
+HOUSES = {
+    "rabbit": [fill(ellipse(12, 15, 11.5, 7.5) + " " + ellipse(12, 16.5, 5, 4.6)),                                    # a burrow mound with a dark mouth
+               fill(ellipse(5, 9.5, 1.4, 1.4, 0, 10), "success")],                                                 # a glow at its door
+    "cat":    [fill(poly([(2, 11), (22, 11), (20.5, 22), (3.5, 22)]) + " " + poly([(5, 13), (19, 13), (18, 20), (6, 20)])),   # a basket, open
+               fill(arc_band(12, 11, 6.5, 8.5, 10, 170)), fill(ellipse(12, 19.5, 6, 2), "success")],              # handle, accent cushion
+    "fox":    [fill(poly([(0.5, 22), (12, 5), (23.5, 22)]) + " " + poly([(7, 22), (12, 13), (17, 22)])),              # a den with a dark mouth
+               fill(ellipse(12, 9, 1.4, 1.4, 0, 10), "success")],
+}
+WEAR = {
+    "straw":  [fill(ellipse(12, 15, 11, 3.2)), fill(rbar(7, 12, 17, 12, 0.1) if False else poly([(7, 15), (17, 15), (16, 8), (8, 8)])), fill(poly([(7, 11.5), (17, 11.5), (17, 13.5), (7, 13.5)]), "success")],
+    "beanie": [fill(poly([(5, 17), (19, 17), (17, 7), (7, 7)])), fill(ellipse(12, 6, 2.6, 2.6, 0, 12), "success"), fill(poly([(5, 15), (19, 15), (19, 18), (5, 18)]), "success")],
+    "crown":  [fill(poly([(5, 18), (19, 18), (19, 9), (15.5, 13), (12, 7), (8.5, 13), (5, 9)]), "success"), fill(ellipse(12, 9, 1.6, 1.6, 0, 10))],
+    "bell":   [fill(poly([(4, 10), (20, 10), (20, 13.5), (4, 13.5)]), "success"), fill(ellipse(12, 16.5, 3.2, 3.2, 0, 14))],
+    "ribbon": [fill(poly([(4, 11), (20, 11), (20, 13.5), (4, 13.5)]), "success"), fill(poly([(12, 12), (7, 8), (7, 16)]), "success"), fill(poly([(12, 12), (17, 8), (17, 16)]), "success")],
+    "scarf":  [fill(poly([(3, 10), (21, 10), (21, 14), (3, 14)]), "success"), fill(poly([(14, 13), (19, 13), (18, 22), (13, 22)]), "success")],
+}
+
+# Hats are drawn into the frames (a frame set per hat), in head coordinates around the hat
+# anchor, so they follow every nod. The ears react: they pass through the straw hat's brim
+# (drawn over its base), fold down under the beanie (rabbit) or poke out of it (cat, fox),
+# and the small crown sits between them.
+HATS = ["straw", "beanie", "crown"]
+
+
+def hat_shapes(name, hx, hy):
+    if name == "straw":
+        return {"under": [fill(ellipse(hx, hy - 6, 13, 8.5)), fill(ellipse(hx, hy - 1, 13.5, 3.2), "success")],   # dome + band
+                "over": [fill(ellipse(hx, hy + 1.5, 24, 4.6) + " " + ellipse(hx, hy + 1.2, 12.5, 2.6))]}         # brim, as a ring the ears rise through
+    if name == "beanie":
+        return {"under": [], "over": [fill(ellipse(hx, hy - 4, 16.5, 12)), fill(poly([(hx - 17, hy + 1), (hx + 17, hy + 1), (hx + 17, hy + 6.5), (hx - 17, hy + 6.5)]), "success"),
+                                      fill(ellipse(hx, hy - 16, 3.4, 3.4, 0, 14), "success")]}
+    if name == "crown":
+        return {"under": [], "over": [fill(poly([(hx - 8, hy + 3), (hx + 8, hy + 3), (hx + 8, hy - 7), (hx + 4, hy - 2), (hx, hy - 9), (hx - 4, hy - 2), (hx - 8, hy - 7)]), "success"),
+                                      fill(ellipse(hx, hy - 1, 1.8, 1.8, 0, 10))]}
+    return {"under": [], "over": []}
+
+
+# How the ears sit under each hat: extra rotation (far, near) added to the pose's own.
+EAR_UNDER_HAT = {
+    "rabbit": {"beanie": (-62, 70)},     # folded down and back
+    "cat": {}, "fox": {},                # short ears poke out
+}
+
 SPECIES_NAME = os.environ.get("COMPANION", "rabbit")
 SHAPES, NODES, PHONES, J, EYE_AT = (SPECIES[SPECIES_NAME][k] for k in ("SHAPES", "NODES", "PHONES", "J", "EYE"))
 
@@ -223,14 +280,9 @@ def pose(root=(0, 0, 0, 1, 1), eye="open", **bones):
     return {"root": root, "eye": eye, **bones}
 
 
-def fill(d, cls=None):
-    if cls:
-        return f'<path class="{cls}" fill="#73d216" d="{d}"/>'
-    return f'<path fill="#bebebe" fill-rule="evenodd" d="{d}"/>'
-
-
-def bone(p, name, joint, inner):
+def bone(p, name, joint, inner, extra_rot=0):
     dx, dy, rot, *ln = p.get(name, (0, 0, 0))
+    rot += extra_rot
     k = ln[0] if ln else 1
     jx, jy = J[joint]
     fold = f" translate({jx} {jy}) scale({k} {k}) translate({-jx} {-jy})" if k != 1 else ""
@@ -243,11 +295,16 @@ def svg_body(p):
     shapes = lambda k: "".join(fill(d) for d in SHAPES[k])
     nodes = lambda b: "".join(fill(d, "success") for d in NODES.get(b, []))
     phones = "".join(fill(d, "success") for d in PHONES) if p.get("phones") else ""
+    hat = p.get("hat")
+    hs = hat_shapes(hat, *ANCHORS[SPECIES_NAME]["hat"]) if hat else {"under": [], "over": []}
+    ear_far_rot, ear_near_rot = EAR_UNDER_HAT[SPECIES_NAME].get(hat, (0, 0))
     head = bone(p, "head", "neck",
-                bone(p, "ear_far", "ear_far", shapes("ear_far") + nodes("ear_far"))
+                bone(p, "ear_far", "ear_far", shapes("ear_far") + nodes("ear_far"), ear_far_rot)
                 + shapes("head_open" if p["eye"] == "open" else "head_closed")
                 + ("".join(fill(d, "success") for d in eye_accent(*EYE_AT, p.get("gaze", 0))) if p["eye"] == "open" else "") + phones
-                + bone(p, "ear_near", "ear_near", shapes("ear_near") + nodes("ear_near")))
+                + "".join(hs["under"])
+                + bone(p, "ear_near", "ear_near", shapes("ear_near") + nodes("ear_near"), ear_near_rot)
+                + "".join(hs["over"]))
     body = (bone(p, "tail", "tail", shapes("tail") + nodes("tail")) + bone(p, "hind", "hip", shapes("hind")) + shapes("body")
             + bone(p, "arm", "shoulder", shapes("arm")) + head)
     return (f'<g transform="translate({rdx} {rdy}) translate({px} {py}) rotate({rrot}) scale({sx} {sy}) '
@@ -266,6 +323,31 @@ def bbox_of(svg_text):
 _ground = {}
 
 
+def _apply(pt, dx, dy, rot, jx, jy, sx=1, sy=1):
+    # translate(dx dy) translate(jx jy) rotate(rot) scale(sx sy) translate(-jx -jy)
+    x, y = pt[0] - jx, pt[1] - jy
+    x, y = x * sx, y * sy
+    c, s_ = math.cos(math.radians(rot)), math.sin(math.radians(rot))
+    x, y = x * c - y * s_, x * s_ + y * c
+    return (x + jx + dx, y + jy + dy)
+
+
+def anchors_for(p, ground_dy):
+    """Where a hat and a collar sit in this frame (viewBox units) and the head's angle."""
+    rdx, rdy, rrot, sx, sy = p["root"]
+    hdx, hdy, hrot, *ln = p.get("head", (0, 0, 0))
+    k = ln[0] if ln else 1
+    out = {}
+    for name, pt in ANCHORS[SPECIES_NAME].items():
+        # head bone: translate, rotate about the neck, fold about the neck
+        x, y = _apply(pt, 0, 0, 0, *J["neck"], k, k)
+        x, y = _apply((x, y), hdx, hdy, hrot, *J["neck"])
+        x, y = _apply((x, y), rdx, rdy, rrot, *J["root"], sx, sy)
+        out[name] = [round(x, 1), round(y + ground_dy, 1)]
+    out["rot"] = round(rrot + hrot, 1)
+    return out
+
+
 def svg_for(p):
     inner = svg_body(p)
     if inner not in _ground:   # measure, then sit the lowest point on the ground
@@ -273,6 +355,11 @@ def svg_for(p):
         _ground[inner] = GROUND - (FY + b[1] + b[3])
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{FX} {FY} {FW} {FH}">'
             f'<g transform="translate(0 {_ground[inner]:.2f})">{inner}</g></svg>\n')
+
+
+def ground_of(p):
+    svg_for(p)
+    return _ground[svg_body(p)]
 
 
 def model_sheet(out_png, poses):
@@ -346,6 +433,9 @@ ACT_DEFS = {
     # rest-pose variants the player toggles on a slow timer: breathing
     "breathe": ([BREATHE], [0]),
     "sleepbreathe": ([SLEEP_IN], [0]),
+    # dozing: sitting up, eyes shut, head nodding a little (a light nap)
+    "doze":    ([P(eye="closed", head=(0, 2, 6), **EARS(-12))], [0]),
+    "dozebreathe": ([P(root=(0, 0, 0, 0.99, 1.02), eye="closed", head=(0, 3, 9), **EARS(-14))], [0]),
     "sniff":   ([P(head=(0, 0, -4)), P(head=(0, 1, 3)), P(head=(0, 0, -4), **TWITCH), P(head=(0, 1, 3)), P(head=(0, 0, -2)), SIT], [0] * 6),
     "groom":   ([GROOM(45, 12), GROOM(80, 25), GROOM(70, 22), GROOM(80, 25), GROOM(60, 18), P(head=(0, 2, 8)), SIT], [0] * 7),
     # music: head bobs on the beat, the ears swing after it, the hind foot taps
@@ -372,12 +462,15 @@ ACT_DEFS = {
     "pet":     ([P(root=(0, 0, -3, 1, 1), head=(0, 1, 6), eye="closed", **EARS(-10)), P(root=(0, 0, -6, 1.02, 0.98), head=(0, 2, 10), eye="closed", **EARS(-20)),
                  P(root=(0, 0, -6, 1.02, 0.98), head=(0, 2, 10), eye="closed", **EARS(-20)), P(root=(0, 0, -6, 1.02, 0.98), head=(0, 2, 10), eye="closed", **EARS(-22)),
                  P(root=(0, 0, -3, 1, 1), head=(0, 1, 5), eye="closed", **EARS(-10)), SIT], [0] * 6),
+    # a hungry sigh: ears down, head lowers, a small breath out
+    "sigh":    ([P(head=(0, 1, 4), **EARS(-10)), P(root=(0, 0, 0, 1.01, 0.97), head=(0, 3, 10), **EARS(-22)),
+                 P(root=(0, 0, 0, 1.01, 0.97), head=(0, 3, 10), **EARS(-22)), P(head=(0, 2, 8), **EARS(-16)), P(head=(0, 1, 3), **EARS(-6)), SIT], [0] * 6),
     # shiver (rain): a 1 px side jitter, ears down
     "shiver":  ([P(root=(-1, 0, 0, 1, 0.98), **EARS(-30)), P(root=(1, 0, 0, 1, 0.98), **EARS(-32)), P(root=(-1, 0, 0, 1, 0.98), **EARS(-30)), P(root=(0, 0, 0, 1, 0.99), **EARS(-28))], [0] * 4),
     "tired":   ([TIRED], [0]),
 }
 # With music on, the idle acts play with headphones: "<act>@music".
-for act in ("sit", "breathe", "blink", "flick", "look", "sniff", "nibble", "groom", "bob", "hop", "dig", "sniffup", "pet", "shake"):
+for act in ("sit", "breathe", "blink", "flick", "look", "sniff", "nibble", "groom", "bob", "hop", "dig", "sniffup", "pet", "shake", "doze", "dozebreathe"):
     frames, ys = ACT_DEFS[act]
     ACT_DEFS[act + "@music"] = ([{**f, "phones": True} for f in frames], ys)
 
@@ -415,13 +508,19 @@ def write_props(out):
     for state, shapes in FOOD[SPECIES_NAME].items():
         open(os.path.join(out, f"food-{state}-symbolic.svg"), "w").write(
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{PROP_BOX}">{"".join(shapes)}</svg>\n')
+    open(os.path.join(out, "prop-house-symbolic.svg"), "w").write(
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{PROP_BOX}">{"".join(HOUSES[SPECIES_NAME])}</svg>\n')
+    for name, shapes in WEAR.items():
+        open(os.path.join(out, f"wear-{name}-symbolic.svg"), "w").write(
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{PROP_BOX}">{"".join(shapes)}</svg>\n')
 
 
 if __name__ == "__main__":
     OUT, ACTS = sys.argv[1], sys.argv[2]
     os.makedirs(OUT, exist_ok=True)
     write_props(OUT)
-    files, names, acts = {}, [], {}
+    files, names, acts, anchors = {}, [], {}, {}
+    base_of = {}   # frame name -> pose, for the hat variants
     for act, (frames, ys) in ACT_DEFS.items():
         assert len(frames) == len(ys), act
         idx = []
@@ -431,7 +530,21 @@ if __name__ == "__main__":
                 files[svg] = f"rabbit-{len(names):02d}-symbolic.svg"
                 names.append(files[svg])
                 open(os.path.join(OUT, files[svg]), "w").write(svg)
+                anchors[files[svg]] = anchors_for(f, ground_of(f))
+                base_of[files[svg]] = f
             idx.append(files[svg])
         acts[act] = {"frames": idx, "y": ys}
-    json.dump({"fps": 12, "acts": acts}, open(ACTS, "w"), indent=1)
+    # hat variants: the same poses with the hat drawn in; hats[name][base frame] = hat frame
+    hats = {}
+    for hat in HATS:
+        seen, m = {}, {}
+        for base, f in base_of.items():
+            svg = svg_for({**f, "hat": hat})
+            if svg not in seen:
+                seen[svg] = f"hat-{hat}-{len(seen):02d}-symbolic.svg"
+                open(os.path.join(OUT, seen[svg]), "w").write(svg)
+            m[base] = seen[svg]
+        hats[hat] = m
+    # anchors are in viewBox units; the player maps them with its icon size / FW
+    json.dump({"fps": 12, "box": [FX, FY, FW, FH], "acts": acts, "anchors": anchors, "hats": hats}, open(ACTS, "w"), indent=1)
     print(len(names), "frames,", len(acts), "acts")

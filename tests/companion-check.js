@@ -4,7 +4,8 @@
 import Gio from 'gi://Gio';
 import {
     diffEvents, strongest, restAct, ambient, breathing, rank, REACTION_ACT, meadow, wantsLunch, wantsMushroom,
-    sheltering, facing, weatherKind, isNight, cleanSpecies, SPECIES, isIdle, napLength,
+    sheltering, facing, weatherKind, isNight, cleanSpecies, SPECIES, isIdle, napLength, NAPS,
+    ROUTINES, WANDER_STYLES, period, pickRoutine, wantsRoutine,
 } from '../src/helpers/companion-brain.js';
 
 let n = 0;
@@ -94,12 +95,20 @@ eq(ambient(s({ unread: 5 }), 0).act, 'perk', '5 unread: perks toward the bell');
 eq(facing(s({ unread: 5 })), 1, 'faces the bell (right)');
 eq(facing(base), null, 'otherwise keeps facing');
 const seen = new Set();
-for (let i = 0; i < 100; i++) {
-    let a = ambient(base, i / 100);
+let routines = 0;
+for (let i = 0; i < 400; i++) {
+    let a = ambient(base, i / 400);
+    if (a.routine) {
+        routines++;
+        ok(a.delay >= 20000 && a.delay <= 60000, `quiet routine every 20-60 s (${a.delay})`);
+        ok(ROUTINES[a.routine] === a.steps, 'routine steps come from the table');
+        continue;
+    }
     ok(a.delay >= 3000 && a.delay <= 8000, `idle delay in 3-8 s (${a.delay})`);
     seen.add(a.act);
 }
 eq([...seen].sort(), ['blink', 'chase', 'dig', 'flick', 'groom', 'look', 'nibble', 'sniff', 'sniffup', 'turn', 'wander'], 'every idle move gets picked');
+ok(routines > 60 && routines < 140, `about a quarter of quiet slots are routines (${routines}/400)`);
 const music = new Set();
 for (let i = 0; i < 100; i++)
     music.add(ambient(s({ music: true }), i / 100).act);
@@ -112,9 +121,13 @@ const lively = new Set();
 for (let i = 0; i < 200; i++) {
     let a = ambient(s({ lively: true }), i / 200);
     ok(a.delay >= 2000 && a.delay <= 5000, `lively delay in 2-5 s (${a.delay})`);
+    if (a.routine) {
+        ok(ROUTINES[a.routine], `lively routine ${a.routine} exists`);
+        continue;
+    }
     lively.add(a.act);
 }
-for (let a of ['nap', 'snack', 'meal', 'chase', 'wander', 'twostep', 'dig', 'groom'])
+for (let a of ['nap:doze', 'nap:nap', 'snack', 'meal', 'chase', 'wander:patrol', 'wander:explore', 'twostep', 'dig', 'groom'])
     ok(lively.has(a), `lively picks ${a}`);
 eq(ambient(s({ lively: true, music: true }), 0.5).act !== 'nap', true, 'music still has the music moves');
 eq(ambient(s({ lively: true, calm: true }), 0.5), null, 'calm wins over lively');
@@ -123,7 +136,38 @@ eq(restAct(s({ nap: true, mood: 'working' })), 'sit', 'a nap ends when Claude wo
 eq(meadow(s({ nap: true })), 'wide', 'a nap keeps the meadow');
 eq(ambient(s({ nap: true, lively: true }), 0.5), null, 'no moves while napping');
 eq(breathing(s({ nap: true })), { act: 'sleepbreathe', ms: 2600 }, 'napping breathes slowly');
-ok(napLength(0) >= 8000 && napLength(0.999) <= 15000, 'a nap is 8-15 s');
+ok(napLength('nap', 0) >= 8000 && napLength('nap', 0.999) <= 15000, 'a nap is 8-15 s');
+ok(napLength('doze', 0.999) <= 7000 && napLength('deep', 0) >= 20000, 'a doze is short, a deep sleep long');
+eq(napLength('what', 0), NAPS.nap[0], 'unknown kind: a nap');
+eq(restAct(s({ nap: 'doze' })), 'doze', 'dozing sits with eyes shut');
+eq(restAct(s({ nap: 'deep' })), 'sleep', 'deep sleep lies down');
+eq(breathing(s({ nap: 'deep' })).ms, 3400, 'deep sleep breathes slower');
+eq(breathing(s({ nap: 'doze' })).act, 'dozebreathe', 'dozing has its own breath');
+
+// repertoire
+const known = new Set(['sit', 'blink', 'flick', 'look', 'nibble', 'sniff', 'groom', 'hop', 'run', 'thump', 'binky', 'stretch',
+    'yawn', 'shake', 'dig', 'sniffup', 'pet', 'shiver', 'bob', 'perk', 'flop', 'tired', 'sleep', 'doze',
+    'wander', 'turn', 'twostep', 'chase', 'eat', 'meal', 'snack', 'nap']);
+for (let [name, steps] of Object.entries(ROUTINES)) {
+    ok(steps.length >= 3 && steps.length <= 6, `${name}: 3-6 steps`);
+    for (let st of steps) {
+        let [act, param] = st.split(':');
+        ok(known.has(act), `${name}: step ${st} is a known move`);
+        if (act === 'wander')
+            ok(WANDER_STYLES.includes(param), `${name}: wander style ${param}`);
+        if (act === 'nap')
+            ok(param in NAPS, `${name}: nap kind ${param}`);
+    }
+}
+eq([period(8 * 60), period(12 * 60), period(15 * 60), period(20 * 60)], ['morning', 'midday', 'afternoon', 'evening'], 'periods');
+const picks = p => { let c = {}; for (let i = 0; i < 200; i++) { let r = pickRoutine(s({ minutes: p }), i / 200); c[r] = (c[r] || 0) + 1; } return c; };
+let morning = picks(8 * 60), afternoon = picks(15 * 60);
+ok(morning.zoomies > 0 && !morning.siesta && !morning.lazy, 'mornings are energetic');
+ok(afternoon.lazy > (afternoon.zoomies ?? 0) && afternoon.siesta > 0, 'afternoons are lazy');
+eq(pickRoutine(s({ music: true }), 0.3), 'dance', 'music: the dance routine');
+for (let name of Object.keys(ROUTINES))
+    ok(Object.keys(morning).concat(Object.keys(afternoon), Object.keys(picks(12 * 60)), Object.keys(picks(20 * 60)), ['dance']).includes(name), `${name} can be picked some time of day`);
+ok(wantsRoutine(s({ lively: true }), 0.4) && !wantsRoutine(base, 0.4), 'lively has routines twice as often');
 
 // breathing
 eq(breathing(base), { act: 'breathe', ms: 1600 }, 'sitting breathes');
@@ -158,7 +202,7 @@ ok(isIdle(base) && !isIdle(s({ away: true })), 'idle means present and free');
 const root = Gio.File.new_for_uri(import.meta.url).get_parent().get_parent().get_child('src').get_child('companions');
 const needed = new Set([...Object.values(REACTION_ACT).flat().filter(a => !['eat', 'snack'].includes(a)),
     'sit', 'blink', 'flick', 'look', 'nibble', 'sniff', 'groom', 'hop', 'run', 'thump', 'sleep', 'flop', 'tired',
-    'breathe', 'sleepbreathe', 'bob', 'dig', 'sniffup', 'shiver', 'yawn', 'shake', 'pet',
+    'breathe', 'sleepbreathe', 'doze', 'dozebreathe', 'bob', 'dig', 'sniffup', 'shiver', 'yawn', 'shake', 'pet',
     'bob@music', 'sit@music', 'breathe@music', 'hop@music', 'dig@music']);
 for (let sp of SPECIES) {
     let dir = root.get_child(sp);
@@ -171,8 +215,112 @@ for (let sp of SPECIES) {
         for (let f of a.frames)
             ok(dir.get_child(f).query_exists(null), `${sp}/${act}: ${f} exists`);
     }
-    for (let f of ['food-whole', 'food-half', 'food-stub', 'prop-mushroom', 'prop-bit', 'prop-flower-bud', 'prop-flower', 'prop-leaf', 'prop-drop', 'prop-flake'])
+    for (let f of ['food-whole', 'food-half', 'food-stub', 'prop-mushroom', 'prop-bit', 'prop-flower-bud', 'prop-flower', 'prop-leaf', 'prop-drop', 'prop-flake', 'prop-house',
+        'wear-bell', 'wear-ribbon', 'wear-scarf'])
         ok(dir.get_child(`${f}-symbolic.svg`).query_exists(null), `${sp}: ${f} shipped`);
+    // hats are frame sets: every base frame has a hatted twin that exists on disk
+    let bases = new Set(Object.values(spec.acts).flatMap(a => a.frames));
+    for (let hat of ['straw', 'beanie', 'crown']) {
+        let m = spec.hats?.[hat];
+        ok(m && Object.keys(m).length === bases.size, `${sp}: ${hat} covers every frame`);
+        for (let f of new Set(Object.values(m ?? {})))
+            ok(dir.get_child(f).query_exists(null), `${sp}: ${hat} frame ${f} exists`);
+    }
+    for (let f of bases)
+        ok(spec.anchors?.[f]?.neck, `${sp}: ${f} has a neck anchor`);
 }
 
 print(`companion-check: ${n} checks passed`);
+
+// ---- needs
+{
+    const { freshNeeds, progressNeeds, applyNeed, thought, needAct, digFind, earned, FINDS, WEARABLES, NEED_KEYS } =
+        await import('../src/helpers/companion-brain.js');
+    let t0 = 1_000_000_000_000;
+    let f = freshNeeds(t0);
+    eq(NEED_KEYS, ['energy', 'hunger', 'mood', 'clean'], 'four needs');
+    let h = progressNeeds(f, t0 + 60 * 60000);
+    ok(h.energy === 74 && h.hunger === 34 && h.mood === 68 && h.clean === 79, `an hour awake drifts gently (${JSON.stringify(h)})`);
+    let z = progressNeeds({ ...f, energy: 20 }, t0 + 30 * 60000, true);
+    ok(z.energy === 50 && z.hunger === 31, 'half an hour asleep restores energy, hunger grows slowly');
+    let week = progressNeeds(f, t0 + 7 * 24 * 60 * 60000);
+    ok(week.energy === 0 && week.hunger === 100 && week.mood === 0 && week.clean === 0, 'a week away floors, never below 0 or above 100');
+    eq(progressNeeds(f, t0 - 1000).energy, 80, 'a clock set back changes nothing');
+    eq(applyNeed(f, 'meal').hunger, 0, 'a meal when barely hungry floors at 0');
+    eq(applyNeed({ ...f, hunger: 80 }, 'meal').hunger, 40, 'a meal takes 40');
+    eq(applyNeed(f, 'pet').mood, 80, 'a pet gives 10');
+    eq(applyNeed(f, 'nothing'), f, 'unknown event: unchanged');
+    eq(thought({ energy: 10, hunger: 90, mood: 10, clean: 10 }), 'sleepy', 'sleepy first');
+    eq(thought({ energy: 80, hunger: 90, mood: 80, clean: 80 }), 'hungry', 'then hungry');
+    eq(thought({ energy: 80, hunger: 20, mood: 95, clean: 80 }), 'full of beans', 'high mood');
+    eq(thought(f), 'doing fine', 'default');
+    eq(needAct(s({ needs: { ...f, energy: 10 } }), 0.9).act, 'nap:nap', 'exhausted: naps by itself');
+    eq(needAct(s({ needs: { ...f, hunger: 80 } }), 0.1).act, 'seek', 'hungry: looks for food');
+    eq(needAct(s({ needs: { ...f, hunger: 80 } }), 0.4).act, 'sigh', 'hungry: sighs');
+    ok(needAct(s({ needs: { ...f, hunger: 80 } }), 0.4).delay >= 180000, 'the sigh is rare');
+    eq(needAct(s({ needs: { ...f, clean: 20 } }), 0.1).act, 'groom', 'scruffy: grooms itself');
+    eq(needAct(s({ needs: f }), 0.1), null, 'content: nothing special');
+    eq(needAct(s({ needs: { ...f, energy: 10 }, mood: 'working' }), 0.1), null, 'never while Claude works');
+    eq(restAct(s({ needs: { ...f, energy: 10 } })), 'tired', 'low energy shows the tired pose');
+    eq(restAct(s({ needs: { ...f, energy: 10 }, nap: 'nap' })), 'sleep', 'a nap lies down even when tired');
+    eq(ambient(s({ needs: { ...f, energy: 10 } }), 0.5).act, 'nap:nap', 'ambient picks the need first');
+    // finds
+    eq(digFind(0.5), null, 'most digs find nothing');
+    let found = {};
+    for (let i = 0; i < 1000; i++) { let r = digFind(i / 1000); if (r) found[r] = (found[r] || 0) + 1; }
+    ok(Math.abs(Object.values(found).reduce((a, b) => a + b, 0) - 200) <= 2, 'one dig in five finds something');
+    ok(found.treat > found.beanie && found.ribbon > 0, 'treats are common, wearables rare');
+    for (let id of Object.keys(found))
+        ok(FINDS[id], `${id} is a find`);
+    eq(earned('focusdone'), 'treat', 'a finished focus earns a treat');
+    eq(earned('finished'), 'seed', 'a closed Claude session earns a seed');
+    eq([earned('streak', 5), earned('streak', 7), earned('streak', 6)], ['straw', 'bell', null], 'streak hats');
+    for (let w of ['straw', 'bell', 'beanie', 'ribbon'])
+        ok(WEARABLES[w], `${w} is wearable`);
+    print(`companion-check (needs): ok`);
+}
+
+// ---- store: its own file, atomic, once-a-day restock, streak gifts, diary cap
+{
+    const GLib = (await import('gi://GLib')).default;
+    const { CompanionStore, dayKeyOf, FOOD_PER_DAY } = await import('../src/helpers/companion-store.js');
+    let dir = GLib.Dir.make_tmp('nnx-companion-XXXXXX');
+    let clock = new Date(2026, 10, 9, 9, 0).getTime();
+    let now = () => clock;
+    let st = new CompanionStore({ dataDir: dir, now });
+    eq(st.state.pantry.food, FOOD_PER_DAY, 'dawn restock on first run');
+    eq(st.state.restocked, '2026-11-09', 'restock remembered by day');
+    ok(!st.restock(), 'no second restock the same day');
+    st.state.pantry.food = 1; clock += 24 * 3600 * 1000;
+    ok(st.restock() && st.state.pantry.food === FOOD_PER_DAY, 'next day tops the pantry up');
+    st.meal('meal');
+    eq([st.state.pantry.food, st.state.streak.days, st.state.diary.at(-1).what], [2, 1, 'ate a meal'], 'a meal: pantry, streak, diary');
+    st.meal('meal');
+    eq(st.state.streak.days, 1, 'two meals a day count once');
+    for (let d = 2; d <= 7; d++) { clock += 24 * 3600 * 1000; st.meal('meal'); }
+    eq(st.state.streak.days, 7, 'a week of meals');
+    ok(st.state.items.includes('straw') && st.state.items.includes('bell'), 'the straw hat at 5 days and the bell at 7');
+    ok(st.state.diary.some(e => e.what.includes('straw hat')), 'the gift is in the diary');
+    clock += 2 * 24 * 3600 * 1000; st.meal('meal');
+    eq(st.state.streak.days, 1, 'a missed day resets the streak');
+    ok(st.wear('straw') && st.state.worn.head === 'straw', 'wearing an owned hat');
+    ok(st.wear('straw') && st.state.worn.head === null, 'again takes it off');
+    ok(!st.wear('crown'), 'cannot wear what it does not own');
+    eq(st.dig(0.5), null, 'a dig that finds nothing');
+    ok(st.dig(0.0) === 'treat' && st.state.pantry.treat === 1, 'the first fifth of rolls finds (a treat first)');
+    eq(st.earn('focusdone'), 'treat', 'a finished focus: a treat');
+    eq(st.earn('finished'), 'seed', 'a Claude session: a seed');
+    ok(st.plant() && st.state.flowers === 1 && st.state.pantry.seed === 0, 'planting a seed');
+    for (let i = 0; i < 20; i++) st.record(`line ${i}`);
+    eq(st.state.diary.length, 12, 'the diary keeps 12 lines');
+    st.state.needs.energy = 80; let before = st.needs().energy; clock += 60 * 60000;
+    ok(st.needs().energy < before, 'needs drift with the clock');
+    st.event('pet'); let m = st.state.needs.mood;
+    st.flush();
+    let again = new CompanionStore({ dataDir: dir, now });
+    eq(again.state.needs.mood, m, 'reloaded from disk');
+    eq(again.state.worn, { head: null, neck: null }, 'worn survives (nothing worn now)');
+    ok(again.state.items.includes('bell'), 'items survive');
+    GLib.spawn_command_line_sync(`rm -rf ${dir}`);
+    print('companion-check (store): ok');
+}

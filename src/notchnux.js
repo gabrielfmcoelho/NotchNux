@@ -36,6 +36,7 @@ import { installLedge, swapContent } from './tabs/ledge.js';
 import { installTray } from './tabs/tray.js';
 import { installClaude } from './tabs/claude.js';
 import { installDev } from './tabs/dev.js';
+import { installCompanion } from './tabs/companion.js';
 import { installKeyboard } from './tabs/keyboard.js';
 import { installActivities } from './tabs/activities.js';
 import { installCalendarEdit } from './tabs/calendaredit.js';
@@ -213,7 +214,10 @@ export const NotchNux = GObject.registerClass({
             species: this._config.companion.species,
             onWidth: () => { if (!this.isExpanded && !this._alertShowing) this._applyPillWidth(); },
             onMemory: (key, value) => this._config.setCompanion({ [key]: value }),
+            onEvent: name => this._onCompanionEvent(name),
         });
+        // The Pet tab's store: needs, pantry, finds, diary (reads the pill companion).
+        this._initCompanionTab();
         this._pillRabbit.visible = this._config.isFeatureEnabled('rabbitCompanion');
         this._pill.insert_child_at_index(this._pillRabbit, 0);
         // Recolour the active-state chrome to match the persisted accent.
@@ -402,6 +406,7 @@ export const NotchNux = GObject.registerClass({
             minutes: now.getHours() * 60 + now.getMinutes(),
             dayKey: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
             mem: { lastFed: mem.lastFed, lastMushroom: mem.lastMushroom },
+            needs: this._companionNeeds(),
         };
     }
 
@@ -591,6 +596,7 @@ export const NotchNux = GObject.registerClass({
         this._destroyVpn();
         this._destroyClaude();
         this._destroyDev();
+        this._destroyCompanionTab();
         this._destroyActivities();
         if (this._ifaceSettings && this._ifaceAccentId)
             this._ifaceSettings.disconnect(this._ifaceAccentId);
@@ -2208,6 +2214,7 @@ export const NotchNux = GObject.registerClass({
             case 'wallpaper': this._renderWallpaperTab(); break;
             case 'claude': this._renderClaudeTab(); break;
             case 'dev': this._renderDevTab(); break;
+            case 'companion': this._renderCompanionTab(); break;
             }
         } finally {
             this._mountTarget = null;
@@ -6920,6 +6927,7 @@ installLedge(NotchNux.prototype);
 installTray(NotchNux.prototype);
 installClaude(NotchNux.prototype);
 installDev(NotchNux.prototype);
+installCompanion(NotchNux.prototype);
 installKeyboard(NotchNux.prototype);
 installActivities(NotchNux.prototype);
 installCalendarEdit(NotchNux.prototype);

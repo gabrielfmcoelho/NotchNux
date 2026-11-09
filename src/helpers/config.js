@@ -40,7 +40,8 @@ export const TAB_DEFS = [
     { id: 'studio',        label: 'Studio',   icon: 'camera-web-symbolic' },
     { id: 'wallpaper',     label: 'Wallpaper', icon: 'preferences-desktop-wallpaper-symbolic' },
     { id: 'claude',        label: 'Claude',   icon: 'utilities-terminal-symbolic' },
-    { id: 'dev',           label: 'Dev',      icon: 'applications-engineering-symbolic' }
+    { id: 'dev',           label: 'Dev',      icon: 'applications-engineering-symbolic' },
+    { id: 'companion',     label: 'Pet',      icon: 'face-smile-symbolic' }
 ];
 
 // Auto-enhancement strengths — the tuned defaults used when the user leaves

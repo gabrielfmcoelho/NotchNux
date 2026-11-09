@@ -1,5 +1,11 @@
 {
  "fps": 12,
+ "box": [
+  -20,
+  -31,
+  135,
+  135
+ ],
  "acts": {
   "sit": {
    "frames": [
@@ -219,13 +225,29 @@
     0
    ]
   },
+  "doze": {
+   "frames": [
+    "rabbit-35-symbolic.svg"
+   ],
+   "y": [
+    0
+   ]
+  },
+  "dozebreathe": {
+   "frames": [
+    "rabbit-36-symbolic.svg"
+   ],
+   "y": [
+    0
+   ]
+  },
   "sniff": {
    "frames": [
-    "rabbit-35-symbolic.svg",
-    "rabbit-36-symbolic.svg",
     "rabbit-37-symbolic.svg",
-    "rabbit-36-symbolic.svg",
     "rabbit-38-symbolic.svg",
+    "rabbit-39-symbolic.svg",
+    "rabbit-38-symbolic.svg",
+    "rabbit-40-symbolic.svg",
     "rabbit-00-symbolic.svg"
    ],
    "y": [
@@ -239,12 +261,12 @@
   },
   "groom": {
    "frames": [
-    "rabbit-39-symbolic.svg",
-    "rabbit-40-symbolic.svg",
     "rabbit-41-symbolic.svg",
-    "rabbit-40-symbolic.svg",
     "rabbit-42-symbolic.svg",
     "rabbit-43-symbolic.svg",
+    "rabbit-42-symbolic.svg",
+    "rabbit-44-symbolic.svg",
+    "rabbit-45-symbolic.svg",
     "rabbit-00-symbolic.svg"
    ],
    "y": [
@@ -259,13 +281,13 @@
   },
   "bob": {
    "frames": [
-    "rabbit-44-symbolic.svg",
-    "rabbit-45-symbolic.svg",
     "rabbit-46-symbolic.svg",
     "rabbit-47-symbolic.svg",
     "rabbit-48-symbolic.svg",
     "rabbit-49-symbolic.svg",
     "rabbit-50-symbolic.svg",
+    "rabbit-51-symbolic.svg",
+    "rabbit-52-symbolic.svg",
     "rabbit-00-symbolic.svg"
    ],
    "y": [
@@ -282,8 +304,8 @@
   "flop": {
    "frames": [
     "rabbit-25-symbolic.svg",
-    "rabbit-51-symbolic.svg",
-    "rabbit-52-symbolic.svg"
+    "rabbit-53-symbolic.svg",
+    "rabbit-54-symbolic.svg"
    ],
    "y": [
     0,
@@ -293,11 +315,11 @@
   },
   "yawn": {
    "frames": [
-    "rabbit-53-symbolic.svg",
-    "rabbit-54-symbolic.svg",
     "rabbit-55-symbolic.svg",
-    "rabbit-54-symbolic.svg",
     "rabbit-56-symbolic.svg",
+    "rabbit-57-symbolic.svg",
+    "rabbit-56-symbolic.svg",
+    "rabbit-58-symbolic.svg",
     "rabbit-00-symbolic.svg"
    ],
    "y": [
@@ -311,12 +333,12 @@
   },
   "shake": {
    "frames": [
-    "rabbit-57-symbolic.svg",
-    "rabbit-58-symbolic.svg",
     "rabbit-59-symbolic.svg",
     "rabbit-60-symbolic.svg",
     "rabbit-61-symbolic.svg",
     "rabbit-62-symbolic.svg",
+    "rabbit-63-symbolic.svg",
+    "rabbit-64-symbolic.svg",
     "rabbit-00-symbolic.svg"
    ],
    "y": [
@@ -331,12 +353,12 @@
   },
   "dig": {
    "frames": [
-    "rabbit-63-symbolic.svg",
-    "rabbit-64-symbolic.svg",
-    "rabbit-65-symbolic.svg",
-    "rabbit-64-symbolic.svg",
     "rabbit-65-symbolic.svg",
     "rabbit-66-symbolic.svg",
+    "rabbit-67-symbolic.svg",
+    "rabbit-66-symbolic.svg",
+    "rabbit-67-symbolic.svg",
+    "rabbit-68-symbolic.svg",
     "rabbit-00-symbolic.svg"
    ],
    "y": [
@@ -351,11 +373,11 @@
   },
   "sniffup": {
    "frames": [
-    "rabbit-67-symbolic.svg",
-    "rabbit-68-symbolic.svg",
     "rabbit-69-symbolic.svg",
-    "rabbit-68-symbolic.svg",
     "rabbit-70-symbolic.svg",
+    "rabbit-71-symbolic.svg",
+    "rabbit-70-symbolic.svg",
+    "rabbit-72-symbolic.svg",
     "rabbit-00-symbolic.svg"
    ],
    "y": [
@@ -369,11 +391,29 @@
   },
   "pet": {
    "frames": [
-    "rabbit-71-symbolic.svg",
-    "rabbit-72-symbolic.svg",
-    "rabbit-72-symbolic.svg",
     "rabbit-73-symbolic.svg",
     "rabbit-74-symbolic.svg",
+    "rabbit-74-symbolic.svg",
+    "rabbit-75-symbolic.svg",
+    "rabbit-76-symbolic.svg",
+    "rabbit-00-symbolic.svg"
+   ],
+   "y": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "sigh": {
+   "frames": [
+    "rabbit-77-symbolic.svg",
+    "rabbit-78-symbolic.svg",
+    "rabbit-78-symbolic.svg",
+    "rabbit-79-symbolic.svg",
+    "rabbit-80-symbolic.svg",
     "rabbit-00-symbolic.svg"
    ],
    "y": [
@@ -387,10 +427,10 @@
   },
   "shiver": {
    "frames": [
-    "rabbit-75-symbolic.svg",
-    "rabbit-76-symbolic.svg",
-    "rabbit-75-symbolic.svg",
-    "rabbit-77-symbolic.svg"
+    "rabbit-81-symbolic.svg",
+    "rabbit-82-symbolic.svg",
+    "rabbit-81-symbolic.svg",
+    "rabbit-83-symbolic.svg"
    ],
    "y": [
     0,
@@ -401,7 +441,7 @@
   },
   "tired": {
    "frames": [
-    "rabbit-78-symbolic.svg"
+    "rabbit-84-symbolic.svg"
    ],
    "y": [
     0
@@ -409,7 +449,7 @@
   },
   "sit@music": {
    "frames": [
-    "rabbit-79-symbolic.svg"
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0
@@ -417,7 +457,7 @@
   },
   "breathe@music": {
    "frames": [
-    "rabbit-80-symbolic.svg"
+    "rabbit-86-symbolic.svg"
    ],
    "y": [
     0
@@ -425,9 +465,9 @@
   },
   "blink@music": {
    "frames": [
-    "rabbit-81-symbolic.svg",
-    "rabbit-81-symbolic.svg",
-    "rabbit-79-symbolic.svg"
+    "rabbit-87-symbolic.svg",
+    "rabbit-87-symbolic.svg",
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0,
@@ -437,11 +477,11 @@
   },
   "flick@music": {
    "frames": [
-    "rabbit-82-symbolic.svg",
-    "rabbit-83-symbolic.svg",
-    "rabbit-84-symbolic.svg",
-    "rabbit-85-symbolic.svg",
-    "rabbit-79-symbolic.svg"
+    "rabbit-88-symbolic.svg",
+    "rabbit-89-symbolic.svg",
+    "rabbit-90-symbolic.svg",
+    "rabbit-91-symbolic.svg",
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0,
@@ -453,12 +493,12 @@
   },
   "look@music": {
    "frames": [
-    "rabbit-86-symbolic.svg",
-    "rabbit-87-symbolic.svg",
-    "rabbit-88-symbolic.svg",
-    "rabbit-89-symbolic.svg",
-    "rabbit-90-symbolic.svg",
-    "rabbit-79-symbolic.svg"
+    "rabbit-92-symbolic.svg",
+    "rabbit-93-symbolic.svg",
+    "rabbit-94-symbolic.svg",
+    "rabbit-95-symbolic.svg",
+    "rabbit-96-symbolic.svg",
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0,
@@ -471,12 +511,12 @@
   },
   "sniff@music": {
    "frames": [
-    "rabbit-91-symbolic.svg",
-    "rabbit-92-symbolic.svg",
-    "rabbit-93-symbolic.svg",
-    "rabbit-92-symbolic.svg",
-    "rabbit-94-symbolic.svg",
-    "rabbit-79-symbolic.svg"
+    "rabbit-97-symbolic.svg",
+    "rabbit-98-symbolic.svg",
+    "rabbit-99-symbolic.svg",
+    "rabbit-98-symbolic.svg",
+    "rabbit-100-symbolic.svg",
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0,
@@ -489,13 +529,13 @@
   },
   "nibble@music": {
    "frames": [
-    "rabbit-95-symbolic.svg",
-    "rabbit-96-symbolic.svg",
-    "rabbit-97-symbolic.svg",
-    "rabbit-96-symbolic.svg",
-    "rabbit-97-symbolic.svg",
-    "rabbit-98-symbolic.svg",
-    "rabbit-79-symbolic.svg"
+    "rabbit-101-symbolic.svg",
+    "rabbit-102-symbolic.svg",
+    "rabbit-103-symbolic.svg",
+    "rabbit-102-symbolic.svg",
+    "rabbit-103-symbolic.svg",
+    "rabbit-104-symbolic.svg",
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0,
@@ -509,13 +549,13 @@
   },
   "groom@music": {
    "frames": [
-    "rabbit-99-symbolic.svg",
-    "rabbit-100-symbolic.svg",
-    "rabbit-101-symbolic.svg",
-    "rabbit-100-symbolic.svg",
-    "rabbit-102-symbolic.svg",
-    "rabbit-103-symbolic.svg",
-    "rabbit-79-symbolic.svg"
+    "rabbit-105-symbolic.svg",
+    "rabbit-106-symbolic.svg",
+    "rabbit-107-symbolic.svg",
+    "rabbit-106-symbolic.svg",
+    "rabbit-108-symbolic.svg",
+    "rabbit-109-symbolic.svg",
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0,
@@ -529,14 +569,14 @@
   },
   "bob@music": {
    "frames": [
-    "rabbit-104-symbolic.svg",
-    "rabbit-105-symbolic.svg",
-    "rabbit-106-symbolic.svg",
-    "rabbit-107-symbolic.svg",
-    "rabbit-108-symbolic.svg",
-    "rabbit-109-symbolic.svg",
     "rabbit-110-symbolic.svg",
-    "rabbit-79-symbolic.svg"
+    "rabbit-111-symbolic.svg",
+    "rabbit-112-symbolic.svg",
+    "rabbit-113-symbolic.svg",
+    "rabbit-114-symbolic.svg",
+    "rabbit-115-symbolic.svg",
+    "rabbit-116-symbolic.svg",
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0,
@@ -551,14 +591,14 @@
   },
   "hop@music": {
    "frames": [
-    "rabbit-111-symbolic.svg",
-    "rabbit-112-symbolic.svg",
-    "rabbit-113-symbolic.svg",
-    "rabbit-114-symbolic.svg",
-    "rabbit-115-symbolic.svg",
-    "rabbit-116-symbolic.svg",
     "rabbit-117-symbolic.svg",
-    "rabbit-79-symbolic.svg"
+    "rabbit-118-symbolic.svg",
+    "rabbit-119-symbolic.svg",
+    "rabbit-120-symbolic.svg",
+    "rabbit-121-symbolic.svg",
+    "rabbit-122-symbolic.svg",
+    "rabbit-123-symbolic.svg",
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0,
@@ -573,13 +613,13 @@
   },
   "dig@music": {
    "frames": [
-    "rabbit-118-symbolic.svg",
-    "rabbit-119-symbolic.svg",
-    "rabbit-120-symbolic.svg",
-    "rabbit-119-symbolic.svg",
-    "rabbit-120-symbolic.svg",
-    "rabbit-121-symbolic.svg",
-    "rabbit-79-symbolic.svg"
+    "rabbit-124-symbolic.svg",
+    "rabbit-125-symbolic.svg",
+    "rabbit-126-symbolic.svg",
+    "rabbit-125-symbolic.svg",
+    "rabbit-126-symbolic.svg",
+    "rabbit-127-symbolic.svg",
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0,
@@ -593,12 +633,12 @@
   },
   "sniffup@music": {
    "frames": [
-    "rabbit-122-symbolic.svg",
-    "rabbit-123-symbolic.svg",
-    "rabbit-124-symbolic.svg",
-    "rabbit-123-symbolic.svg",
-    "rabbit-125-symbolic.svg",
-    "rabbit-79-symbolic.svg"
+    "rabbit-128-symbolic.svg",
+    "rabbit-129-symbolic.svg",
+    "rabbit-130-symbolic.svg",
+    "rabbit-129-symbolic.svg",
+    "rabbit-131-symbolic.svg",
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0,
@@ -611,12 +651,12 @@
   },
   "pet@music": {
    "frames": [
-    "rabbit-126-symbolic.svg",
-    "rabbit-127-symbolic.svg",
-    "rabbit-127-symbolic.svg",
-    "rabbit-128-symbolic.svg",
-    "rabbit-129-symbolic.svg",
-    "rabbit-79-symbolic.svg"
+    "rabbit-132-symbolic.svg",
+    "rabbit-133-symbolic.svg",
+    "rabbit-133-symbolic.svg",
+    "rabbit-134-symbolic.svg",
+    "rabbit-135-symbolic.svg",
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0,
@@ -629,13 +669,13 @@
   },
   "shake@music": {
    "frames": [
-    "rabbit-130-symbolic.svg",
-    "rabbit-131-symbolic.svg",
-    "rabbit-132-symbolic.svg",
-    "rabbit-133-symbolic.svg",
-    "rabbit-134-symbolic.svg",
-    "rabbit-135-symbolic.svg",
-    "rabbit-79-symbolic.svg"
+    "rabbit-136-symbolic.svg",
+    "rabbit-137-symbolic.svg",
+    "rabbit-138-symbolic.svg",
+    "rabbit-139-symbolic.svg",
+    "rabbit-140-symbolic.svg",
+    "rabbit-141-symbolic.svg",
+    "rabbit-85-symbolic.svg"
    ],
    "y": [
     0,
@@ -646,6 +686,2048 @@
     0,
     0
    ]
+  },
+  "doze@music": {
+   "frames": [
+    "rabbit-142-symbolic.svg"
+   ],
+   "y": [
+    0
+   ]
+  },
+  "dozebreathe@music": {
+   "frames": [
+    "rabbit-143-symbolic.svg"
+   ],
+   "y": [
+    0
+   ]
+  }
+ },
+ "anchors": {
+  "rabbit-00-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.0
+   ],
+   "neck": [
+    53.0,
+    65.0
+   ],
+   "rot": 0
+  },
+  "rabbit-01-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.0
+   ],
+   "neck": [
+    53.0,
+    65.0
+   ],
+   "rot": 0
+  },
+  "rabbit-02-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.0
+   ],
+   "neck": [
+    53.0,
+    65.0
+   ],
+   "rot": 0
+  },
+  "rabbit-03-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.0
+   ],
+   "neck": [
+    53.0,
+    65.0
+   ],
+   "rot": 0
+  },
+  "rabbit-04-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.0
+   ],
+   "neck": [
+    53.0,
+    65.0
+   ],
+   "rot": 0
+  },
+  "rabbit-05-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.0
+   ],
+   "neck": [
+    53.0,
+    65.0
+   ],
+   "rot": 0
+  },
+  "rabbit-06-symbolic.svg": {
+   "hat": [
+    65.6,
+    46.6
+   ],
+   "neck": [
+    52.1,
+    68.5
+   ],
+   "rot": 18
+  },
+  "rabbit-07-symbolic.svg": {
+   "hat": [
+    68.7,
+    50.6
+   ],
+   "neck": [
+    51.7,
+    69.9
+   ],
+   "rot": 28
+  },
+  "rabbit-08-symbolic.svg": {
+   "hat": [
+    67.5,
+    48.9
+   ],
+   "neck": [
+    51.9,
+    69.3
+   ],
+   "rot": 24
+  },
+  "rabbit-09-symbolic.svg": {
+   "hat": [
+    63.5,
+    44.5
+   ],
+   "neck": [
+    52.4,
+    67.7
+   ],
+   "rot": 12
+  },
+  "rabbit-10-symbolic.svg": {
+   "hat": [
+    55.9,
+    38.5
+   ],
+   "neck": [
+    53.4,
+    64.1
+   ],
+   "rot": -8
+  },
+  "rabbit-11-symbolic.svg": {
+   "hat": [
+    53.5,
+    37.4
+   ],
+   "neck": [
+    53.8,
+    63.2
+   ],
+   "rot": -14
+  },
+  "rabbit-12-symbolic.svg": {
+   "hat": [
+    53.5,
+    37.4
+   ],
+   "neck": [
+    53.8,
+    63.2
+   ],
+   "rot": -14
+  },
+  "rabbit-13-symbolic.svg": {
+   "hat": [
+    53.5,
+    37.4
+   ],
+   "neck": [
+    53.8,
+    63.2
+   ],
+   "rot": -14
+  },
+  "rabbit-14-symbolic.svg": {
+   "hat": [
+    56.7,
+    38.6
+   ],
+   "neck": [
+    53.3,
+    64.1
+   ],
+   "rot": -6
+  },
+  "rabbit-15-symbolic.svg": {
+   "hat": [
+    56.7,
+    38.6
+   ],
+   "neck": [
+    53.3,
+    64.1
+   ],
+   "rot": -6
+  },
+  "rabbit-16-symbolic.svg": {
+   "hat": [
+    55.1,
+    37.5
+   ],
+   "neck": [
+    53.5,
+    63.1
+   ],
+   "rot": -10
+  },
+  "rabbit-17-symbolic.svg": {
+   "hat": [
+    55.1,
+    37.5
+   ],
+   "neck": [
+    53.5,
+    63.1
+   ],
+   "rot": -10
+  },
+  "rabbit-18-symbolic.svg": {
+   "hat": [
+    57.5,
+    38.7
+   ],
+   "neck": [
+    53.2,
+    64.1
+   ],
+   "rot": -4
+  },
+  "rabbit-19-symbolic.svg": {
+   "hat": [
+    61.8,
+    48.8
+   ],
+   "neck": [
+    53.3,
+    70.8
+   ],
+   "rot": 5
+  },
+  "rabbit-20-symbolic.svg": {
+   "hat": [
+    64.8,
+    53.1
+   ],
+   "neck": [
+    54.4,
+    73.2
+   ],
+   "rot": 9
+  },
+  "rabbit-21-symbolic.svg": {
+   "hat": [
+    43.4,
+    30.5
+   ],
+   "neck": [
+    42.7,
+    57.3
+   ],
+   "rot": -12
+  },
+  "rabbit-22-symbolic.svg": {
+   "hat": [
+    49.4,
+    37.3
+   ],
+   "neck": [
+    49.2,
+    61.1
+   ],
+   "rot": -15
+  },
+  "rabbit-23-symbolic.svg": {
+   "hat": [
+    64.6,
+    41.0
+   ],
+   "neck": [
+    56.4,
+    64.3
+   ],
+   "rot": 4
+  },
+  "rabbit-24-symbolic.svg": {
+   "hat": [
+    71.7,
+    50.4
+   ],
+   "neck": [
+    58.1,
+    70.3
+   ],
+   "rot": 18
+  },
+  "rabbit-25-symbolic.svg": {
+   "hat": [
+    62.5,
+    43.8
+   ],
+   "neck": [
+    54.2,
+    67.2
+   ],
+   "rot": 5
+  },
+  "rabbit-26-symbolic.svg": {
+   "hat": [
+    33.1,
+    28.4
+   ],
+   "neck": [
+    29.3,
+    53.8
+   ],
+   "rot": -5
+  },
+  "rabbit-27-symbolic.svg": {
+   "hat": [
+    37.7,
+    31.4
+   ],
+   "neck": [
+    33.1,
+    56.2
+   ],
+   "rot": -4
+  },
+  "rabbit-28-symbolic.svg": {
+   "hat": [
+    75.5,
+    47.6
+   ],
+   "neck": [
+    64.0,
+    69.3
+   ],
+   "rot": 13
+  },
+  "rabbit-29-symbolic.svg": {
+   "hat": [
+    35.9,
+    35.8
+   ],
+   "neck": [
+    41.1,
+    59.8
+   ],
+   "rot": -27
+  },
+  "rabbit-30-symbolic.svg": {
+   "hat": [
+    60.6,
+    47.8
+   ],
+   "neck": [
+    57.2,
+    70.2
+   ],
+   "rot": -6
+  },
+  "rabbit-31-symbolic.svg": {
+   "hat": [
+    57.1,
+    45.8
+   ],
+   "neck": [
+    57.9,
+    68.5
+   ],
+   "rot": -14
+  },
+  "rabbit-32-symbolic.svg": {
+   "hat": [
+    63.0,
+    57.5
+   ],
+   "neck": [
+    53.1,
+    76.7
+   ],
+   "rot": 8
+  },
+  "rabbit-33-symbolic.svg": {
+   "hat": [
+    58.8,
+    37.9
+   ],
+   "neck": [
+    52.9,
+    63.5
+   ],
+   "rot": 0
+  },
+  "rabbit-34-symbolic.svg": {
+   "hat": [
+    62.8,
+    55.9
+   ],
+   "neck": [
+    53.0,
+    75.8
+   ],
+   "rot": 8
+  },
+  "rabbit-35-symbolic.svg": {
+   "hat": [
+    61.3,
+    42.6
+   ],
+   "neck": [
+    52.7,
+    66.9
+   ],
+   "rot": 6
+  },
+  "rabbit-36-symbolic.svg": {
+   "hat": [
+    62.2,
+    42.9
+   ],
+   "neck": [
+    52.4,
+    67.2
+   ],
+   "rot": 9
+  },
+  "rabbit-37-symbolic.svg": {
+   "hat": [
+    57.5,
+    39.7
+   ],
+   "neck": [
+    53.2,
+    65.1
+   ],
+   "rot": -4
+  },
+  "rabbit-38-symbolic.svg": {
+   "hat": [
+    60.1,
+    41.3
+   ],
+   "neck": [
+    52.8,
+    65.9
+   ],
+   "rot": 3
+  },
+  "rabbit-39-symbolic.svg": {
+   "hat": [
+    57.5,
+    39.7
+   ],
+   "neck": [
+    53.2,
+    65.1
+   ],
+   "rot": -4
+  },
+  "rabbit-40-symbolic.svg": {
+   "hat": [
+    58.2,
+    39.8
+   ],
+   "neck": [
+    53.1,
+    65.0
+   ],
+   "rot": -2
+  },
+  "rabbit-41-symbolic.svg": {
+   "hat": [
+    63.5,
+    45.5
+   ],
+   "neck": [
+    52.4,
+    68.7
+   ],
+   "rot": 12
+  },
+  "rabbit-42-symbolic.svg": {
+   "hat": [
+    67.8,
+    48.2
+   ],
+   "neck": [
+    51.8,
+    68.3
+   ],
+   "rot": 25
+  },
+  "rabbit-43-symbolic.svg": {
+   "hat": [
+    66.9,
+    47.5
+   ],
+   "neck": [
+    51.9,
+    68.4
+   ],
+   "rot": 22
+  },
+  "rabbit-44-symbolic.svg": {
+   "hat": [
+    65.6,
+    46.6
+   ],
+   "neck": [
+    52.1,
+    68.5
+   ],
+   "rot": 18
+  },
+  "rabbit-45-symbolic.svg": {
+   "hat": [
+    62.0,
+    42.9
+   ],
+   "neck": [
+    52.6,
+    66.8
+   ],
+   "rot": 8
+  },
+  "rabbit-46-symbolic.svg": {
+   "hat": [
+    62.0,
+    42.9
+   ],
+   "neck": [
+    52.6,
+    66.8
+   ],
+   "rot": 8
+  },
+  "rabbit-47-symbolic.svg": {
+   "hat": [
+    59.0,
+    39.3
+   ],
+   "neck": [
+    53.0,
+    64.3
+   ],
+   "rot": 0
+  },
+  "rabbit-48-symbolic.svg": {
+   "hat": [
+    62.0,
+    42.9
+   ],
+   "neck": [
+    52.6,
+    66.8
+   ],
+   "rot": 8
+  },
+  "rabbit-49-symbolic.svg": {
+   "hat": [
+    59.0,
+    39.3
+   ],
+   "neck": [
+    53.0,
+    64.3
+   ],
+   "rot": 0
+  },
+  "rabbit-50-symbolic.svg": {
+   "hat": [
+    62.0,
+    42.9
+   ],
+   "neck": [
+    52.6,
+    66.8
+   ],
+   "rot": 8
+  },
+  "rabbit-51-symbolic.svg": {
+   "hat": [
+    59.0,
+    39.3
+   ],
+   "neck": [
+    53.0,
+    64.3
+   ],
+   "rot": 0
+  },
+  "rabbit-52-symbolic.svg": {
+   "hat": [
+    60.9,
+    41.5
+   ],
+   "neck": [
+    52.7,
+    65.9
+   ],
+   "rot": 5
+  },
+  "rabbit-53-symbolic.svg": {
+   "hat": [
+    66.7,
+    59.6
+   ],
+   "neck": [
+    53.0,
+    77.1
+   ],
+   "rot": 16
+  },
+  "rabbit-54-symbolic.svg": {
+   "hat": [
+    74.2,
+    69.1
+   ],
+   "neck": [
+    53.4,
+    80.7
+   ],
+   "rot": 30
+  },
+  "rabbit-55-symbolic.svg": {
+   "hat": [
+    55.1,
+    37.5
+   ],
+   "neck": [
+    53.5,
+    63.1
+   ],
+   "rot": -10
+  },
+  "rabbit-56-symbolic.svg": {
+   "hat": [
+    50.4,
+    35.7
+   ],
+   "neck": [
+    54.2,
+    61.2
+   ],
+   "rot": -22
+  },
+  "rabbit-57-symbolic.svg": {
+   "hat": [
+    49.6,
+    35.9
+   ],
+   "neck": [
+    54.3,
+    61.1
+   ],
+   "rot": -24
+  },
+  "rabbit-58-symbolic.svg": {
+   "hat": [
+    55.9,
+    37.5
+   ],
+   "neck": [
+    53.4,
+    63.1
+   ],
+   "rot": -8
+  },
+  "rabbit-59-symbolic.svg": {
+   "hat": [
+    56.7,
+    39.6
+   ],
+   "neck": [
+    53.3,
+    65.1
+   ],
+   "rot": -6
+  },
+  "rabbit-60-symbolic.svg": {
+   "hat": [
+    61.3,
+    40.6
+   ],
+   "neck": [
+    52.7,
+    64.9
+   ],
+   "rot": 6
+  },
+  "rabbit-61-symbolic.svg": {
+   "hat": [
+    56.7,
+    39.6
+   ],
+   "neck": [
+    53.3,
+    65.1
+   ],
+   "rot": -6
+  },
+  "rabbit-62-symbolic.svg": {
+   "hat": [
+    60.9,
+    40.5
+   ],
+   "neck": [
+    52.7,
+    64.9
+   ],
+   "rot": 5
+  },
+  "rabbit-63-symbolic.svg": {
+   "hat": [
+    57.8,
+    39.8
+   ],
+   "neck": [
+    53.2,
+    65.0
+   ],
+   "rot": -3
+  },
+  "rabbit-64-symbolic.svg": {
+   "hat": [
+    59.8,
+    40.2
+   ],
+   "neck": [
+    52.9,
+    65.0
+   ],
+   "rot": 2
+  },
+  "rabbit-65-symbolic.svg": {
+   "hat": [
+    66.9,
+    48.5
+   ],
+   "neck": [
+    51.9,
+    69.4
+   ],
+   "rot": 22
+  },
+  "rabbit-66-symbolic.svg": {
+   "hat": [
+    68.1,
+    50.4
+   ],
+   "neck": [
+    51.8,
+    70.3
+   ],
+   "rot": 26
+  },
+  "rabbit-67-symbolic.svg": {
+   "hat": [
+    68.1,
+    50.4
+   ],
+   "neck": [
+    51.8,
+    70.3
+   ],
+   "rot": 26
+  },
+  "rabbit-68-symbolic.svg": {
+   "hat": [
+    64.2,
+    45.9
+   ],
+   "neck": [
+    52.3,
+    68.7
+   ],
+   "rot": 14
+  },
+  "rabbit-69-symbolic.svg": {
+   "hat": [
+    41.0,
+    30.4
+   ],
+   "neck": [
+    43.4,
+    57.5
+   ],
+   "rot": -18
+  },
+  "rabbit-70-symbolic.svg": {
+   "hat": [
+    27.3,
+    27.2
+   ],
+   "neck": [
+    37.3,
+    53.7
+   ],
+   "rot": -34
+  },
+  "rabbit-71-symbolic.svg": {
+   "hat": [
+    29.5,
+    26.5
+   ],
+   "neck": [
+    37.0,
+    53.7
+   ],
+   "rot": -28
+  },
+  "rabbit-72-symbolic.svg": {
+   "hat": [
+    43.8,
+    31.4
+   ],
+   "neck": [
+    44.8,
+    58.3
+   ],
+   "rot": -15
+  },
+  "rabbit-73-symbolic.svg": {
+   "hat": [
+    58.2,
+    40.1
+   ],
+   "neck": [
+    50.9,
+    64.7
+   ],
+   "rot": 3
+  },
+  "rabbit-74-symbolic.svg": {
+   "hat": [
+    57.2,
+    41.2
+   ],
+   "neck": [
+    49.2,
+    65.2
+   ],
+   "rot": 4
+  },
+  "rabbit-75-symbolic.svg": {
+   "hat": [
+    57.2,
+    41.2
+   ],
+   "neck": [
+    49.2,
+    65.2
+   ],
+   "rot": 4
+  },
+  "rabbit-76-symbolic.svg": {
+   "hat": [
+    57.8,
+    40.0
+   ],
+   "neck": [
+    50.9,
+    64.8
+   ],
+   "rot": 2
+  },
+  "rabbit-77-symbolic.svg": {
+   "hat": [
+    60.5,
+    41.4
+   ],
+   "neck": [
+    52.8,
+    65.9
+   ],
+   "rot": 4
+  },
+  "rabbit-78-symbolic.svg": {
+   "hat": [
+    63.0,
+    45.9
+   ],
+   "neck": [
+    52.6,
+    68.7
+   ],
+   "rot": 10
+  },
+  "rabbit-79-symbolic.svg": {
+   "hat": [
+    62.0,
+    42.9
+   ],
+   "neck": [
+    52.6,
+    66.8
+   ],
+   "rot": 8
+  },
+  "rabbit-80-symbolic.svg": {
+   "hat": [
+    60.1,
+    41.3
+   ],
+   "neck": [
+    52.8,
+    65.9
+   ],
+   "rot": 3
+  },
+  "rabbit-81-symbolic.svg": {
+   "hat": [
+    58.0,
+    41.2
+   ],
+   "neck": [
+    52.0,
+    65.7
+   ],
+   "rot": 0
+  },
+  "rabbit-82-symbolic.svg": {
+   "hat": [
+    60.0,
+    41.2
+   ],
+   "neck": [
+    54.0,
+    65.7
+   ],
+   "rot": 0
+  },
+  "rabbit-83-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.6
+   ],
+   "neck": [
+    53.0,
+    65.3
+   ],
+   "rot": 0
+  },
+  "rabbit-84-symbolic.svg": {
+   "hat": [
+    64.3,
+    55.9
+   ],
+   "neck": [
+    52.8,
+    75.4
+   ],
+   "rot": 12
+  },
+  "rabbit-85-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.0
+   ],
+   "neck": [
+    53.0,
+    65.0
+   ],
+   "rot": 0
+  },
+  "rabbit-86-symbolic.svg": {
+   "hat": [
+    58.8,
+    37.9
+   ],
+   "neck": [
+    52.9,
+    63.5
+   ],
+   "rot": 0
+  },
+  "rabbit-87-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.0
+   ],
+   "neck": [
+    53.0,
+    65.0
+   ],
+   "rot": 0
+  },
+  "rabbit-88-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.0
+   ],
+   "neck": [
+    53.0,
+    65.0
+   ],
+   "rot": 0
+  },
+  "rabbit-89-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.0
+   ],
+   "neck": [
+    53.0,
+    65.0
+   ],
+   "rot": 0
+  },
+  "rabbit-90-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.0
+   ],
+   "neck": [
+    53.0,
+    65.0
+   ],
+   "rot": 0
+  },
+  "rabbit-91-symbolic.svg": {
+   "hat": [
+    59.0,
+    40.0
+   ],
+   "neck": [
+    53.0,
+    65.0
+   ],
+   "rot": 0
+  },
+  "rabbit-92-symbolic.svg": {
+   "hat": [
+    55.9,
+    38.5
+   ],
+   "neck": [
+    53.4,
+    64.1
+   ],
+   "rot": -8
+  },
+  "rabbit-93-symbolic.svg": {
+   "hat": [
+    53.5,
+    37.4
+   ],
+   "neck": [
+    53.8,
+    63.2
+   ],
+   "rot": -14
+  },
+  "rabbit-94-symbolic.svg": {
+   "hat": [
+    53.5,
+    37.4
+   ],
+   "neck": [
+    53.8,
+    63.2
+   ],
+   "rot": -14
+  },
+  "rabbit-95-symbolic.svg": {
+   "hat": [
+    53.5,
+    37.4
+   ],
+   "neck": [
+    53.8,
+    63.2
+   ],
+   "rot": -14
+  },
+  "rabbit-96-symbolic.svg": {
+   "hat": [
+    56.7,
+    38.6
+   ],
+   "neck": [
+    53.3,
+    64.1
+   ],
+   "rot": -6
+  },
+  "rabbit-97-symbolic.svg": {
+   "hat": [
+    57.5,
+    39.7
+   ],
+   "neck": [
+    53.2,
+    65.1
+   ],
+   "rot": -4
+  },
+  "rabbit-98-symbolic.svg": {
+   "hat": [
+    60.1,
+    41.3
+   ],
+   "neck": [
+    52.8,
+    65.9
+   ],
+   "rot": 3
+  },
+  "rabbit-99-symbolic.svg": {
+   "hat": [
+    57.5,
+    39.7
+   ],
+   "neck": [
+    53.2,
+    65.1
+   ],
+   "rot": -4
+  },
+  "rabbit-100-symbolic.svg": {
+   "hat": [
+    58.2,
+    39.8
+   ],
+   "neck": [
+    53.1,
+    65.0
+   ],
+   "rot": -2
+  },
+  "rabbit-101-symbolic.svg": {
+   "hat": [
+    65.6,
+    46.6
+   ],
+   "neck": [
+    52.1,
+    68.5
+   ],
+   "rot": 18
+  },
+  "rabbit-102-symbolic.svg": {
+   "hat": [
+    68.7,
+    50.6
+   ],
+   "neck": [
+    51.7,
+    69.9
+   ],
+   "rot": 28
+  },
+  "rabbit-103-symbolic.svg": {
+   "hat": [
+    67.5,
+    48.9
+   ],
+   "neck": [
+    51.9,
+    69.3
+   ],
+   "rot": 24
+  },
+  "rabbit-104-symbolic.svg": {
+   "hat": [
+    63.5,
+    44.5
+   ],
+   "neck": [
+    52.4,
+    67.7
+   ],
+   "rot": 12
+  },
+  "rabbit-105-symbolic.svg": {
+   "hat": [
+    63.5,
+    45.5
+   ],
+   "neck": [
+    52.4,
+    68.7
+   ],
+   "rot": 12
+  },
+  "rabbit-106-symbolic.svg": {
+   "hat": [
+    67.8,
+    48.2
+   ],
+   "neck": [
+    51.8,
+    68.3
+   ],
+   "rot": 25
+  },
+  "rabbit-107-symbolic.svg": {
+   "hat": [
+    66.9,
+    47.5
+   ],
+   "neck": [
+    51.9,
+    68.4
+   ],
+   "rot": 22
+  },
+  "rabbit-108-symbolic.svg": {
+   "hat": [
+    65.6,
+    46.6
+   ],
+   "neck": [
+    52.1,
+    68.5
+   ],
+   "rot": 18
+  },
+  "rabbit-109-symbolic.svg": {
+   "hat": [
+    62.0,
+    42.9
+   ],
+   "neck": [
+    52.6,
+    66.8
+   ],
+   "rot": 8
+  },
+  "rabbit-110-symbolic.svg": {
+   "hat": [
+    62.0,
+    42.9
+   ],
+   "neck": [
+    52.6,
+    66.8
+   ],
+   "rot": 8
+  },
+  "rabbit-111-symbolic.svg": {
+   "hat": [
+    59.0,
+    39.3
+   ],
+   "neck": [
+    53.0,
+    64.3
+   ],
+   "rot": 0
+  },
+  "rabbit-112-symbolic.svg": {
+   "hat": [
+    62.0,
+    42.9
+   ],
+   "neck": [
+    52.6,
+    66.8
+   ],
+   "rot": 8
+  },
+  "rabbit-113-symbolic.svg": {
+   "hat": [
+    59.0,
+    39.3
+   ],
+   "neck": [
+    53.0,
+    64.3
+   ],
+   "rot": 0
+  },
+  "rabbit-114-symbolic.svg": {
+   "hat": [
+    62.0,
+    42.9
+   ],
+   "neck": [
+    52.6,
+    66.8
+   ],
+   "rot": 8
+  },
+  "rabbit-115-symbolic.svg": {
+   "hat": [
+    59.0,
+    39.3
+   ],
+   "neck": [
+    53.0,
+    64.3
+   ],
+   "rot": 0
+  },
+  "rabbit-116-symbolic.svg": {
+   "hat": [
+    60.9,
+    41.5
+   ],
+   "neck": [
+    52.7,
+    65.9
+   ],
+   "rot": 5
+  },
+  "rabbit-117-symbolic.svg": {
+   "hat": [
+    61.8,
+    48.8
+   ],
+   "neck": [
+    53.3,
+    70.8
+   ],
+   "rot": 5
+  },
+  "rabbit-118-symbolic.svg": {
+   "hat": [
+    64.8,
+    53.1
+   ],
+   "neck": [
+    54.4,
+    73.2
+   ],
+   "rot": 9
+  },
+  "rabbit-119-symbolic.svg": {
+   "hat": [
+    43.4,
+    30.5
+   ],
+   "neck": [
+    42.7,
+    57.3
+   ],
+   "rot": -12
+  },
+  "rabbit-120-symbolic.svg": {
+   "hat": [
+    49.4,
+    37.3
+   ],
+   "neck": [
+    49.2,
+    61.1
+   ],
+   "rot": -15
+  },
+  "rabbit-121-symbolic.svg": {
+   "hat": [
+    64.6,
+    41.0
+   ],
+   "neck": [
+    56.4,
+    64.3
+   ],
+   "rot": 4
+  },
+  "rabbit-122-symbolic.svg": {
+   "hat": [
+    71.7,
+    50.4
+   ],
+   "neck": [
+    58.1,
+    70.3
+   ],
+   "rot": 18
+  },
+  "rabbit-123-symbolic.svg": {
+   "hat": [
+    62.5,
+    43.8
+   ],
+   "neck": [
+    54.2,
+    67.2
+   ],
+   "rot": 5
+  },
+  "rabbit-124-symbolic.svg": {
+   "hat": [
+    66.9,
+    48.5
+   ],
+   "neck": [
+    51.9,
+    69.4
+   ],
+   "rot": 22
+  },
+  "rabbit-125-symbolic.svg": {
+   "hat": [
+    68.1,
+    50.4
+   ],
+   "neck": [
+    51.8,
+    70.3
+   ],
+   "rot": 26
+  },
+  "rabbit-126-symbolic.svg": {
+   "hat": [
+    68.1,
+    50.4
+   ],
+   "neck": [
+    51.8,
+    70.3
+   ],
+   "rot": 26
+  },
+  "rabbit-127-symbolic.svg": {
+   "hat": [
+    64.2,
+    45.9
+   ],
+   "neck": [
+    52.3,
+    68.7
+   ],
+   "rot": 14
+  },
+  "rabbit-128-symbolic.svg": {
+   "hat": [
+    41.0,
+    30.4
+   ],
+   "neck": [
+    43.4,
+    57.5
+   ],
+   "rot": -18
+  },
+  "rabbit-129-symbolic.svg": {
+   "hat": [
+    27.3,
+    27.2
+   ],
+   "neck": [
+    37.3,
+    53.7
+   ],
+   "rot": -34
+  },
+  "rabbit-130-symbolic.svg": {
+   "hat": [
+    29.5,
+    26.5
+   ],
+   "neck": [
+    37.0,
+    53.7
+   ],
+   "rot": -28
+  },
+  "rabbit-131-symbolic.svg": {
+   "hat": [
+    43.8,
+    31.4
+   ],
+   "neck": [
+    44.8,
+    58.3
+   ],
+   "rot": -15
+  },
+  "rabbit-132-symbolic.svg": {
+   "hat": [
+    58.2,
+    40.1
+   ],
+   "neck": [
+    50.9,
+    64.7
+   ],
+   "rot": 3
+  },
+  "rabbit-133-symbolic.svg": {
+   "hat": [
+    57.2,
+    41.2
+   ],
+   "neck": [
+    49.2,
+    65.2
+   ],
+   "rot": 4
+  },
+  "rabbit-134-symbolic.svg": {
+   "hat": [
+    57.2,
+    41.2
+   ],
+   "neck": [
+    49.2,
+    65.2
+   ],
+   "rot": 4
+  },
+  "rabbit-135-symbolic.svg": {
+   "hat": [
+    57.8,
+    40.0
+   ],
+   "neck": [
+    50.9,
+    64.8
+   ],
+   "rot": 2
+  },
+  "rabbit-136-symbolic.svg": {
+   "hat": [
+    56.7,
+    39.6
+   ],
+   "neck": [
+    53.3,
+    65.1
+   ],
+   "rot": -6
+  },
+  "rabbit-137-symbolic.svg": {
+   "hat": [
+    61.3,
+    40.6
+   ],
+   "neck": [
+    52.7,
+    64.9
+   ],
+   "rot": 6
+  },
+  "rabbit-138-symbolic.svg": {
+   "hat": [
+    56.7,
+    39.6
+   ],
+   "neck": [
+    53.3,
+    65.1
+   ],
+   "rot": -6
+  },
+  "rabbit-139-symbolic.svg": {
+   "hat": [
+    60.9,
+    40.5
+   ],
+   "neck": [
+    52.7,
+    64.9
+   ],
+   "rot": 5
+  },
+  "rabbit-140-symbolic.svg": {
+   "hat": [
+    57.8,
+    39.8
+   ],
+   "neck": [
+    53.2,
+    65.0
+   ],
+   "rot": -3
+  },
+  "rabbit-141-symbolic.svg": {
+   "hat": [
+    59.8,
+    40.2
+   ],
+   "neck": [
+    52.9,
+    65.0
+   ],
+   "rot": 2
+  },
+  "rabbit-142-symbolic.svg": {
+   "hat": [
+    61.3,
+    42.6
+   ],
+   "neck": [
+    52.7,
+    66.9
+   ],
+   "rot": 6
+  },
+  "rabbit-143-symbolic.svg": {
+   "hat": [
+    62.2,
+    42.9
+   ],
+   "neck": [
+    52.4,
+    67.2
+   ],
+   "rot": 9
+  }
+ },
+ "hats": {
+  "straw": {
+   "rabbit-00-symbolic.svg": "hat-straw-00-symbolic.svg",
+   "rabbit-01-symbolic.svg": "hat-straw-01-symbolic.svg",
+   "rabbit-02-symbolic.svg": "hat-straw-02-symbolic.svg",
+   "rabbit-03-symbolic.svg": "hat-straw-03-symbolic.svg",
+   "rabbit-04-symbolic.svg": "hat-straw-04-symbolic.svg",
+   "rabbit-05-symbolic.svg": "hat-straw-05-symbolic.svg",
+   "rabbit-06-symbolic.svg": "hat-straw-06-symbolic.svg",
+   "rabbit-07-symbolic.svg": "hat-straw-07-symbolic.svg",
+   "rabbit-08-symbolic.svg": "hat-straw-08-symbolic.svg",
+   "rabbit-09-symbolic.svg": "hat-straw-09-symbolic.svg",
+   "rabbit-10-symbolic.svg": "hat-straw-10-symbolic.svg",
+   "rabbit-11-symbolic.svg": "hat-straw-11-symbolic.svg",
+   "rabbit-12-symbolic.svg": "hat-straw-12-symbolic.svg",
+   "rabbit-13-symbolic.svg": "hat-straw-13-symbolic.svg",
+   "rabbit-14-symbolic.svg": "hat-straw-14-symbolic.svg",
+   "rabbit-15-symbolic.svg": "hat-straw-15-symbolic.svg",
+   "rabbit-16-symbolic.svg": "hat-straw-16-symbolic.svg",
+   "rabbit-17-symbolic.svg": "hat-straw-17-symbolic.svg",
+   "rabbit-18-symbolic.svg": "hat-straw-18-symbolic.svg",
+   "rabbit-19-symbolic.svg": "hat-straw-19-symbolic.svg",
+   "rabbit-20-symbolic.svg": "hat-straw-20-symbolic.svg",
+   "rabbit-21-symbolic.svg": "hat-straw-21-symbolic.svg",
+   "rabbit-22-symbolic.svg": "hat-straw-22-symbolic.svg",
+   "rabbit-23-symbolic.svg": "hat-straw-23-symbolic.svg",
+   "rabbit-24-symbolic.svg": "hat-straw-24-symbolic.svg",
+   "rabbit-25-symbolic.svg": "hat-straw-25-symbolic.svg",
+   "rabbit-26-symbolic.svg": "hat-straw-26-symbolic.svg",
+   "rabbit-27-symbolic.svg": "hat-straw-27-symbolic.svg",
+   "rabbit-28-symbolic.svg": "hat-straw-28-symbolic.svg",
+   "rabbit-29-symbolic.svg": "hat-straw-29-symbolic.svg",
+   "rabbit-30-symbolic.svg": "hat-straw-30-symbolic.svg",
+   "rabbit-31-symbolic.svg": "hat-straw-31-symbolic.svg",
+   "rabbit-32-symbolic.svg": "hat-straw-32-symbolic.svg",
+   "rabbit-33-symbolic.svg": "hat-straw-33-symbolic.svg",
+   "rabbit-34-symbolic.svg": "hat-straw-34-symbolic.svg",
+   "rabbit-35-symbolic.svg": "hat-straw-35-symbolic.svg",
+   "rabbit-36-symbolic.svg": "hat-straw-36-symbolic.svg",
+   "rabbit-37-symbolic.svg": "hat-straw-37-symbolic.svg",
+   "rabbit-38-symbolic.svg": "hat-straw-38-symbolic.svg",
+   "rabbit-39-symbolic.svg": "hat-straw-39-symbolic.svg",
+   "rabbit-40-symbolic.svg": "hat-straw-40-symbolic.svg",
+   "rabbit-41-symbolic.svg": "hat-straw-41-symbolic.svg",
+   "rabbit-42-symbolic.svg": "hat-straw-42-symbolic.svg",
+   "rabbit-43-symbolic.svg": "hat-straw-43-symbolic.svg",
+   "rabbit-44-symbolic.svg": "hat-straw-44-symbolic.svg",
+   "rabbit-45-symbolic.svg": "hat-straw-45-symbolic.svg",
+   "rabbit-46-symbolic.svg": "hat-straw-46-symbolic.svg",
+   "rabbit-47-symbolic.svg": "hat-straw-47-symbolic.svg",
+   "rabbit-48-symbolic.svg": "hat-straw-48-symbolic.svg",
+   "rabbit-49-symbolic.svg": "hat-straw-49-symbolic.svg",
+   "rabbit-50-symbolic.svg": "hat-straw-50-symbolic.svg",
+   "rabbit-51-symbolic.svg": "hat-straw-51-symbolic.svg",
+   "rabbit-52-symbolic.svg": "hat-straw-52-symbolic.svg",
+   "rabbit-53-symbolic.svg": "hat-straw-53-symbolic.svg",
+   "rabbit-54-symbolic.svg": "hat-straw-54-symbolic.svg",
+   "rabbit-55-symbolic.svg": "hat-straw-55-symbolic.svg",
+   "rabbit-56-symbolic.svg": "hat-straw-56-symbolic.svg",
+   "rabbit-57-symbolic.svg": "hat-straw-57-symbolic.svg",
+   "rabbit-58-symbolic.svg": "hat-straw-58-symbolic.svg",
+   "rabbit-59-symbolic.svg": "hat-straw-59-symbolic.svg",
+   "rabbit-60-symbolic.svg": "hat-straw-60-symbolic.svg",
+   "rabbit-61-symbolic.svg": "hat-straw-61-symbolic.svg",
+   "rabbit-62-symbolic.svg": "hat-straw-62-symbolic.svg",
+   "rabbit-63-symbolic.svg": "hat-straw-63-symbolic.svg",
+   "rabbit-64-symbolic.svg": "hat-straw-64-symbolic.svg",
+   "rabbit-65-symbolic.svg": "hat-straw-65-symbolic.svg",
+   "rabbit-66-symbolic.svg": "hat-straw-66-symbolic.svg",
+   "rabbit-67-symbolic.svg": "hat-straw-67-symbolic.svg",
+   "rabbit-68-symbolic.svg": "hat-straw-68-symbolic.svg",
+   "rabbit-69-symbolic.svg": "hat-straw-69-symbolic.svg",
+   "rabbit-70-symbolic.svg": "hat-straw-70-symbolic.svg",
+   "rabbit-71-symbolic.svg": "hat-straw-71-symbolic.svg",
+   "rabbit-72-symbolic.svg": "hat-straw-72-symbolic.svg",
+   "rabbit-73-symbolic.svg": "hat-straw-73-symbolic.svg",
+   "rabbit-74-symbolic.svg": "hat-straw-74-symbolic.svg",
+   "rabbit-75-symbolic.svg": "hat-straw-75-symbolic.svg",
+   "rabbit-76-symbolic.svg": "hat-straw-76-symbolic.svg",
+   "rabbit-77-symbolic.svg": "hat-straw-77-symbolic.svg",
+   "rabbit-78-symbolic.svg": "hat-straw-78-symbolic.svg",
+   "rabbit-79-symbolic.svg": "hat-straw-79-symbolic.svg",
+   "rabbit-80-symbolic.svg": "hat-straw-80-symbolic.svg",
+   "rabbit-81-symbolic.svg": "hat-straw-81-symbolic.svg",
+   "rabbit-82-symbolic.svg": "hat-straw-82-symbolic.svg",
+   "rabbit-83-symbolic.svg": "hat-straw-83-symbolic.svg",
+   "rabbit-84-symbolic.svg": "hat-straw-84-symbolic.svg",
+   "rabbit-85-symbolic.svg": "hat-straw-85-symbolic.svg",
+   "rabbit-86-symbolic.svg": "hat-straw-86-symbolic.svg",
+   "rabbit-87-symbolic.svg": "hat-straw-87-symbolic.svg",
+   "rabbit-88-symbolic.svg": "hat-straw-88-symbolic.svg",
+   "rabbit-89-symbolic.svg": "hat-straw-89-symbolic.svg",
+   "rabbit-90-symbolic.svg": "hat-straw-90-symbolic.svg",
+   "rabbit-91-symbolic.svg": "hat-straw-91-symbolic.svg",
+   "rabbit-92-symbolic.svg": "hat-straw-92-symbolic.svg",
+   "rabbit-93-symbolic.svg": "hat-straw-93-symbolic.svg",
+   "rabbit-94-symbolic.svg": "hat-straw-94-symbolic.svg",
+   "rabbit-95-symbolic.svg": "hat-straw-95-symbolic.svg",
+   "rabbit-96-symbolic.svg": "hat-straw-96-symbolic.svg",
+   "rabbit-97-symbolic.svg": "hat-straw-97-symbolic.svg",
+   "rabbit-98-symbolic.svg": "hat-straw-98-symbolic.svg",
+   "rabbit-99-symbolic.svg": "hat-straw-99-symbolic.svg",
+   "rabbit-100-symbolic.svg": "hat-straw-100-symbolic.svg",
+   "rabbit-101-symbolic.svg": "hat-straw-101-symbolic.svg",
+   "rabbit-102-symbolic.svg": "hat-straw-102-symbolic.svg",
+   "rabbit-103-symbolic.svg": "hat-straw-103-symbolic.svg",
+   "rabbit-104-symbolic.svg": "hat-straw-104-symbolic.svg",
+   "rabbit-105-symbolic.svg": "hat-straw-105-symbolic.svg",
+   "rabbit-106-symbolic.svg": "hat-straw-106-symbolic.svg",
+   "rabbit-107-symbolic.svg": "hat-straw-107-symbolic.svg",
+   "rabbit-108-symbolic.svg": "hat-straw-108-symbolic.svg",
+   "rabbit-109-symbolic.svg": "hat-straw-109-symbolic.svg",
+   "rabbit-110-symbolic.svg": "hat-straw-110-symbolic.svg",
+   "rabbit-111-symbolic.svg": "hat-straw-111-symbolic.svg",
+   "rabbit-112-symbolic.svg": "hat-straw-112-symbolic.svg",
+   "rabbit-113-symbolic.svg": "hat-straw-113-symbolic.svg",
+   "rabbit-114-symbolic.svg": "hat-straw-114-symbolic.svg",
+   "rabbit-115-symbolic.svg": "hat-straw-115-symbolic.svg",
+   "rabbit-116-symbolic.svg": "hat-straw-116-symbolic.svg",
+   "rabbit-117-symbolic.svg": "hat-straw-117-symbolic.svg",
+   "rabbit-118-symbolic.svg": "hat-straw-118-symbolic.svg",
+   "rabbit-119-symbolic.svg": "hat-straw-119-symbolic.svg",
+   "rabbit-120-symbolic.svg": "hat-straw-120-symbolic.svg",
+   "rabbit-121-symbolic.svg": "hat-straw-121-symbolic.svg",
+   "rabbit-122-symbolic.svg": "hat-straw-122-symbolic.svg",
+   "rabbit-123-symbolic.svg": "hat-straw-123-symbolic.svg",
+   "rabbit-124-symbolic.svg": "hat-straw-124-symbolic.svg",
+   "rabbit-125-symbolic.svg": "hat-straw-125-symbolic.svg",
+   "rabbit-126-symbolic.svg": "hat-straw-126-symbolic.svg",
+   "rabbit-127-symbolic.svg": "hat-straw-127-symbolic.svg",
+   "rabbit-128-symbolic.svg": "hat-straw-128-symbolic.svg",
+   "rabbit-129-symbolic.svg": "hat-straw-129-symbolic.svg",
+   "rabbit-130-symbolic.svg": "hat-straw-130-symbolic.svg",
+   "rabbit-131-symbolic.svg": "hat-straw-131-symbolic.svg",
+   "rabbit-132-symbolic.svg": "hat-straw-132-symbolic.svg",
+   "rabbit-133-symbolic.svg": "hat-straw-133-symbolic.svg",
+   "rabbit-134-symbolic.svg": "hat-straw-134-symbolic.svg",
+   "rabbit-135-symbolic.svg": "hat-straw-135-symbolic.svg",
+   "rabbit-136-symbolic.svg": "hat-straw-136-symbolic.svg",
+   "rabbit-137-symbolic.svg": "hat-straw-137-symbolic.svg",
+   "rabbit-138-symbolic.svg": "hat-straw-138-symbolic.svg",
+   "rabbit-139-symbolic.svg": "hat-straw-139-symbolic.svg",
+   "rabbit-140-symbolic.svg": "hat-straw-140-symbolic.svg",
+   "rabbit-141-symbolic.svg": "hat-straw-141-symbolic.svg",
+   "rabbit-142-symbolic.svg": "hat-straw-142-symbolic.svg",
+   "rabbit-143-symbolic.svg": "hat-straw-143-symbolic.svg"
+  },
+  "beanie": {
+   "rabbit-00-symbolic.svg": "hat-beanie-00-symbolic.svg",
+   "rabbit-01-symbolic.svg": "hat-beanie-01-symbolic.svg",
+   "rabbit-02-symbolic.svg": "hat-beanie-02-symbolic.svg",
+   "rabbit-03-symbolic.svg": "hat-beanie-03-symbolic.svg",
+   "rabbit-04-symbolic.svg": "hat-beanie-04-symbolic.svg",
+   "rabbit-05-symbolic.svg": "hat-beanie-05-symbolic.svg",
+   "rabbit-06-symbolic.svg": "hat-beanie-06-symbolic.svg",
+   "rabbit-07-symbolic.svg": "hat-beanie-07-symbolic.svg",
+   "rabbit-08-symbolic.svg": "hat-beanie-08-symbolic.svg",
+   "rabbit-09-symbolic.svg": "hat-beanie-09-symbolic.svg",
+   "rabbit-10-symbolic.svg": "hat-beanie-10-symbolic.svg",
+   "rabbit-11-symbolic.svg": "hat-beanie-11-symbolic.svg",
+   "rabbit-12-symbolic.svg": "hat-beanie-12-symbolic.svg",
+   "rabbit-13-symbolic.svg": "hat-beanie-13-symbolic.svg",
+   "rabbit-14-symbolic.svg": "hat-beanie-14-symbolic.svg",
+   "rabbit-15-symbolic.svg": "hat-beanie-15-symbolic.svg",
+   "rabbit-16-symbolic.svg": "hat-beanie-16-symbolic.svg",
+   "rabbit-17-symbolic.svg": "hat-beanie-17-symbolic.svg",
+   "rabbit-18-symbolic.svg": "hat-beanie-18-symbolic.svg",
+   "rabbit-19-symbolic.svg": "hat-beanie-19-symbolic.svg",
+   "rabbit-20-symbolic.svg": "hat-beanie-20-symbolic.svg",
+   "rabbit-21-symbolic.svg": "hat-beanie-21-symbolic.svg",
+   "rabbit-22-symbolic.svg": "hat-beanie-22-symbolic.svg",
+   "rabbit-23-symbolic.svg": "hat-beanie-23-symbolic.svg",
+   "rabbit-24-symbolic.svg": "hat-beanie-24-symbolic.svg",
+   "rabbit-25-symbolic.svg": "hat-beanie-25-symbolic.svg",
+   "rabbit-26-symbolic.svg": "hat-beanie-26-symbolic.svg",
+   "rabbit-27-symbolic.svg": "hat-beanie-27-symbolic.svg",
+   "rabbit-28-symbolic.svg": "hat-beanie-28-symbolic.svg",
+   "rabbit-29-symbolic.svg": "hat-beanie-29-symbolic.svg",
+   "rabbit-30-symbolic.svg": "hat-beanie-30-symbolic.svg",
+   "rabbit-31-symbolic.svg": "hat-beanie-31-symbolic.svg",
+   "rabbit-32-symbolic.svg": "hat-beanie-32-symbolic.svg",
+   "rabbit-33-symbolic.svg": "hat-beanie-33-symbolic.svg",
+   "rabbit-34-symbolic.svg": "hat-beanie-34-symbolic.svg",
+   "rabbit-35-symbolic.svg": "hat-beanie-35-symbolic.svg",
+   "rabbit-36-symbolic.svg": "hat-beanie-36-symbolic.svg",
+   "rabbit-37-symbolic.svg": "hat-beanie-37-symbolic.svg",
+   "rabbit-38-symbolic.svg": "hat-beanie-38-symbolic.svg",
+   "rabbit-39-symbolic.svg": "hat-beanie-39-symbolic.svg",
+   "rabbit-40-symbolic.svg": "hat-beanie-40-symbolic.svg",
+   "rabbit-41-symbolic.svg": "hat-beanie-41-symbolic.svg",
+   "rabbit-42-symbolic.svg": "hat-beanie-42-symbolic.svg",
+   "rabbit-43-symbolic.svg": "hat-beanie-43-symbolic.svg",
+   "rabbit-44-symbolic.svg": "hat-beanie-44-symbolic.svg",
+   "rabbit-45-symbolic.svg": "hat-beanie-45-symbolic.svg",
+   "rabbit-46-symbolic.svg": "hat-beanie-46-symbolic.svg",
+   "rabbit-47-symbolic.svg": "hat-beanie-47-symbolic.svg",
+   "rabbit-48-symbolic.svg": "hat-beanie-48-symbolic.svg",
+   "rabbit-49-symbolic.svg": "hat-beanie-49-symbolic.svg",
+   "rabbit-50-symbolic.svg": "hat-beanie-50-symbolic.svg",
+   "rabbit-51-symbolic.svg": "hat-beanie-51-symbolic.svg",
+   "rabbit-52-symbolic.svg": "hat-beanie-52-symbolic.svg",
+   "rabbit-53-symbolic.svg": "hat-beanie-53-symbolic.svg",
+   "rabbit-54-symbolic.svg": "hat-beanie-54-symbolic.svg",
+   "rabbit-55-symbolic.svg": "hat-beanie-55-symbolic.svg",
+   "rabbit-56-symbolic.svg": "hat-beanie-56-symbolic.svg",
+   "rabbit-57-symbolic.svg": "hat-beanie-57-symbolic.svg",
+   "rabbit-58-symbolic.svg": "hat-beanie-58-symbolic.svg",
+   "rabbit-59-symbolic.svg": "hat-beanie-59-symbolic.svg",
+   "rabbit-60-symbolic.svg": "hat-beanie-60-symbolic.svg",
+   "rabbit-61-symbolic.svg": "hat-beanie-61-symbolic.svg",
+   "rabbit-62-symbolic.svg": "hat-beanie-62-symbolic.svg",
+   "rabbit-63-symbolic.svg": "hat-beanie-63-symbolic.svg",
+   "rabbit-64-symbolic.svg": "hat-beanie-64-symbolic.svg",
+   "rabbit-65-symbolic.svg": "hat-beanie-65-symbolic.svg",
+   "rabbit-66-symbolic.svg": "hat-beanie-66-symbolic.svg",
+   "rabbit-67-symbolic.svg": "hat-beanie-67-symbolic.svg",
+   "rabbit-68-symbolic.svg": "hat-beanie-68-symbolic.svg",
+   "rabbit-69-symbolic.svg": "hat-beanie-69-symbolic.svg",
+   "rabbit-70-symbolic.svg": "hat-beanie-70-symbolic.svg",
+   "rabbit-71-symbolic.svg": "hat-beanie-71-symbolic.svg",
+   "rabbit-72-symbolic.svg": "hat-beanie-72-symbolic.svg",
+   "rabbit-73-symbolic.svg": "hat-beanie-73-symbolic.svg",
+   "rabbit-74-symbolic.svg": "hat-beanie-74-symbolic.svg",
+   "rabbit-75-symbolic.svg": "hat-beanie-75-symbolic.svg",
+   "rabbit-76-symbolic.svg": "hat-beanie-76-symbolic.svg",
+   "rabbit-77-symbolic.svg": "hat-beanie-77-symbolic.svg",
+   "rabbit-78-symbolic.svg": "hat-beanie-78-symbolic.svg",
+   "rabbit-79-symbolic.svg": "hat-beanie-79-symbolic.svg",
+   "rabbit-80-symbolic.svg": "hat-beanie-80-symbolic.svg",
+   "rabbit-81-symbolic.svg": "hat-beanie-81-symbolic.svg",
+   "rabbit-82-symbolic.svg": "hat-beanie-82-symbolic.svg",
+   "rabbit-83-symbolic.svg": "hat-beanie-83-symbolic.svg",
+   "rabbit-84-symbolic.svg": "hat-beanie-84-symbolic.svg",
+   "rabbit-85-symbolic.svg": "hat-beanie-85-symbolic.svg",
+   "rabbit-86-symbolic.svg": "hat-beanie-86-symbolic.svg",
+   "rabbit-87-symbolic.svg": "hat-beanie-87-symbolic.svg",
+   "rabbit-88-symbolic.svg": "hat-beanie-88-symbolic.svg",
+   "rabbit-89-symbolic.svg": "hat-beanie-89-symbolic.svg",
+   "rabbit-90-symbolic.svg": "hat-beanie-90-symbolic.svg",
+   "rabbit-91-symbolic.svg": "hat-beanie-91-symbolic.svg",
+   "rabbit-92-symbolic.svg": "hat-beanie-92-symbolic.svg",
+   "rabbit-93-symbolic.svg": "hat-beanie-93-symbolic.svg",
+   "rabbit-94-symbolic.svg": "hat-beanie-94-symbolic.svg",
+   "rabbit-95-symbolic.svg": "hat-beanie-95-symbolic.svg",
+   "rabbit-96-symbolic.svg": "hat-beanie-96-symbolic.svg",
+   "rabbit-97-symbolic.svg": "hat-beanie-97-symbolic.svg",
+   "rabbit-98-symbolic.svg": "hat-beanie-98-symbolic.svg",
+   "rabbit-99-symbolic.svg": "hat-beanie-99-symbolic.svg",
+   "rabbit-100-symbolic.svg": "hat-beanie-100-symbolic.svg",
+   "rabbit-101-symbolic.svg": "hat-beanie-101-symbolic.svg",
+   "rabbit-102-symbolic.svg": "hat-beanie-102-symbolic.svg",
+   "rabbit-103-symbolic.svg": "hat-beanie-103-symbolic.svg",
+   "rabbit-104-symbolic.svg": "hat-beanie-104-symbolic.svg",
+   "rabbit-105-symbolic.svg": "hat-beanie-105-symbolic.svg",
+   "rabbit-106-symbolic.svg": "hat-beanie-106-symbolic.svg",
+   "rabbit-107-symbolic.svg": "hat-beanie-107-symbolic.svg",
+   "rabbit-108-symbolic.svg": "hat-beanie-108-symbolic.svg",
+   "rabbit-109-symbolic.svg": "hat-beanie-109-symbolic.svg",
+   "rabbit-110-symbolic.svg": "hat-beanie-110-symbolic.svg",
+   "rabbit-111-symbolic.svg": "hat-beanie-111-symbolic.svg",
+   "rabbit-112-symbolic.svg": "hat-beanie-112-symbolic.svg",
+   "rabbit-113-symbolic.svg": "hat-beanie-113-symbolic.svg",
+   "rabbit-114-symbolic.svg": "hat-beanie-114-symbolic.svg",
+   "rabbit-115-symbolic.svg": "hat-beanie-115-symbolic.svg",
+   "rabbit-116-symbolic.svg": "hat-beanie-116-symbolic.svg",
+   "rabbit-117-symbolic.svg": "hat-beanie-117-symbolic.svg",
+   "rabbit-118-symbolic.svg": "hat-beanie-118-symbolic.svg",
+   "rabbit-119-symbolic.svg": "hat-beanie-119-symbolic.svg",
+   "rabbit-120-symbolic.svg": "hat-beanie-120-symbolic.svg",
+   "rabbit-121-symbolic.svg": "hat-beanie-121-symbolic.svg",
+   "rabbit-122-symbolic.svg": "hat-beanie-122-symbolic.svg",
+   "rabbit-123-symbolic.svg": "hat-beanie-123-symbolic.svg",
+   "rabbit-124-symbolic.svg": "hat-beanie-124-symbolic.svg",
+   "rabbit-125-symbolic.svg": "hat-beanie-125-symbolic.svg",
+   "rabbit-126-symbolic.svg": "hat-beanie-126-symbolic.svg",
+   "rabbit-127-symbolic.svg": "hat-beanie-127-symbolic.svg",
+   "rabbit-128-symbolic.svg": "hat-beanie-128-symbolic.svg",
+   "rabbit-129-symbolic.svg": "hat-beanie-129-symbolic.svg",
+   "rabbit-130-symbolic.svg": "hat-beanie-130-symbolic.svg",
+   "rabbit-131-symbolic.svg": "hat-beanie-131-symbolic.svg",
+   "rabbit-132-symbolic.svg": "hat-beanie-132-symbolic.svg",
+   "rabbit-133-symbolic.svg": "hat-beanie-133-symbolic.svg",
+   "rabbit-134-symbolic.svg": "hat-beanie-134-symbolic.svg",
+   "rabbit-135-symbolic.svg": "hat-beanie-135-symbolic.svg",
+   "rabbit-136-symbolic.svg": "hat-beanie-136-symbolic.svg",
+   "rabbit-137-symbolic.svg": "hat-beanie-137-symbolic.svg",
+   "rabbit-138-symbolic.svg": "hat-beanie-138-symbolic.svg",
+   "rabbit-139-symbolic.svg": "hat-beanie-139-symbolic.svg",
+   "rabbit-140-symbolic.svg": "hat-beanie-140-symbolic.svg",
+   "rabbit-141-symbolic.svg": "hat-beanie-141-symbolic.svg",
+   "rabbit-142-symbolic.svg": "hat-beanie-142-symbolic.svg",
+   "rabbit-143-symbolic.svg": "hat-beanie-143-symbolic.svg"
+  },
+  "crown": {
+   "rabbit-00-symbolic.svg": "hat-crown-00-symbolic.svg",
+   "rabbit-01-symbolic.svg": "hat-crown-01-symbolic.svg",
+   "rabbit-02-symbolic.svg": "hat-crown-02-symbolic.svg",
+   "rabbit-03-symbolic.svg": "hat-crown-03-symbolic.svg",
+   "rabbit-04-symbolic.svg": "hat-crown-04-symbolic.svg",
+   "rabbit-05-symbolic.svg": "hat-crown-05-symbolic.svg",
+   "rabbit-06-symbolic.svg": "hat-crown-06-symbolic.svg",
+   "rabbit-07-symbolic.svg": "hat-crown-07-symbolic.svg",
+   "rabbit-08-symbolic.svg": "hat-crown-08-symbolic.svg",
+   "rabbit-09-symbolic.svg": "hat-crown-09-symbolic.svg",
+   "rabbit-10-symbolic.svg": "hat-crown-10-symbolic.svg",
+   "rabbit-11-symbolic.svg": "hat-crown-11-symbolic.svg",
+   "rabbit-12-symbolic.svg": "hat-crown-12-symbolic.svg",
+   "rabbit-13-symbolic.svg": "hat-crown-13-symbolic.svg",
+   "rabbit-14-symbolic.svg": "hat-crown-14-symbolic.svg",
+   "rabbit-15-symbolic.svg": "hat-crown-15-symbolic.svg",
+   "rabbit-16-symbolic.svg": "hat-crown-16-symbolic.svg",
+   "rabbit-17-symbolic.svg": "hat-crown-17-symbolic.svg",
+   "rabbit-18-symbolic.svg": "hat-crown-18-symbolic.svg",
+   "rabbit-19-symbolic.svg": "hat-crown-19-symbolic.svg",
+   "rabbit-20-symbolic.svg": "hat-crown-20-symbolic.svg",
+   "rabbit-21-symbolic.svg": "hat-crown-21-symbolic.svg",
+   "rabbit-22-symbolic.svg": "hat-crown-22-symbolic.svg",
+   "rabbit-23-symbolic.svg": "hat-crown-23-symbolic.svg",
+   "rabbit-24-symbolic.svg": "hat-crown-24-symbolic.svg",
+   "rabbit-25-symbolic.svg": "hat-crown-25-symbolic.svg",
+   "rabbit-26-symbolic.svg": "hat-crown-26-symbolic.svg",
+   "rabbit-27-symbolic.svg": "hat-crown-27-symbolic.svg",
+   "rabbit-28-symbolic.svg": "hat-crown-28-symbolic.svg",
+   "rabbit-29-symbolic.svg": "hat-crown-29-symbolic.svg",
+   "rabbit-30-symbolic.svg": "hat-crown-30-symbolic.svg",
+   "rabbit-31-symbolic.svg": "hat-crown-31-symbolic.svg",
+   "rabbit-32-symbolic.svg": "hat-crown-32-symbolic.svg",
+   "rabbit-33-symbolic.svg": "hat-crown-33-symbolic.svg",
+   "rabbit-34-symbolic.svg": "hat-crown-34-symbolic.svg",
+   "rabbit-35-symbolic.svg": "hat-crown-35-symbolic.svg",
+   "rabbit-36-symbolic.svg": "hat-crown-36-symbolic.svg",
+   "rabbit-37-symbolic.svg": "hat-crown-37-symbolic.svg",
+   "rabbit-38-symbolic.svg": "hat-crown-38-symbolic.svg",
+   "rabbit-39-symbolic.svg": "hat-crown-39-symbolic.svg",
+   "rabbit-40-symbolic.svg": "hat-crown-40-symbolic.svg",
+   "rabbit-41-symbolic.svg": "hat-crown-41-symbolic.svg",
+   "rabbit-42-symbolic.svg": "hat-crown-42-symbolic.svg",
+   "rabbit-43-symbolic.svg": "hat-crown-43-symbolic.svg",
+   "rabbit-44-symbolic.svg": "hat-crown-44-symbolic.svg",
+   "rabbit-45-symbolic.svg": "hat-crown-45-symbolic.svg",
+   "rabbit-46-symbolic.svg": "hat-crown-46-symbolic.svg",
+   "rabbit-47-symbolic.svg": "hat-crown-47-symbolic.svg",
+   "rabbit-48-symbolic.svg": "hat-crown-48-symbolic.svg",
+   "rabbit-49-symbolic.svg": "hat-crown-49-symbolic.svg",
+   "rabbit-50-symbolic.svg": "hat-crown-50-symbolic.svg",
+   "rabbit-51-symbolic.svg": "hat-crown-51-symbolic.svg",
+   "rabbit-52-symbolic.svg": "hat-crown-52-symbolic.svg",
+   "rabbit-53-symbolic.svg": "hat-crown-53-symbolic.svg",
+   "rabbit-54-symbolic.svg": "hat-crown-54-symbolic.svg",
+   "rabbit-55-symbolic.svg": "hat-crown-55-symbolic.svg",
+   "rabbit-56-symbolic.svg": "hat-crown-56-symbolic.svg",
+   "rabbit-57-symbolic.svg": "hat-crown-57-symbolic.svg",
+   "rabbit-58-symbolic.svg": "hat-crown-58-symbolic.svg",
+   "rabbit-59-symbolic.svg": "hat-crown-59-symbolic.svg",
+   "rabbit-60-symbolic.svg": "hat-crown-60-symbolic.svg",
+   "rabbit-61-symbolic.svg": "hat-crown-61-symbolic.svg",
+   "rabbit-62-symbolic.svg": "hat-crown-62-symbolic.svg",
+   "rabbit-63-symbolic.svg": "hat-crown-63-symbolic.svg",
+   "rabbit-64-symbolic.svg": "hat-crown-64-symbolic.svg",
+   "rabbit-65-symbolic.svg": "hat-crown-65-symbolic.svg",
+   "rabbit-66-symbolic.svg": "hat-crown-66-symbolic.svg",
+   "rabbit-67-symbolic.svg": "hat-crown-67-symbolic.svg",
+   "rabbit-68-symbolic.svg": "hat-crown-68-symbolic.svg",
+   "rabbit-69-symbolic.svg": "hat-crown-69-symbolic.svg",
+   "rabbit-70-symbolic.svg": "hat-crown-70-symbolic.svg",
+   "rabbit-71-symbolic.svg": "hat-crown-71-symbolic.svg",
+   "rabbit-72-symbolic.svg": "hat-crown-72-symbolic.svg",
+   "rabbit-73-symbolic.svg": "hat-crown-73-symbolic.svg",
+   "rabbit-74-symbolic.svg": "hat-crown-74-symbolic.svg",
+   "rabbit-75-symbolic.svg": "hat-crown-75-symbolic.svg",
+   "rabbit-76-symbolic.svg": "hat-crown-76-symbolic.svg",
+   "rabbit-77-symbolic.svg": "hat-crown-77-symbolic.svg",
+   "rabbit-78-symbolic.svg": "hat-crown-78-symbolic.svg",
+   "rabbit-79-symbolic.svg": "hat-crown-79-symbolic.svg",
+   "rabbit-80-symbolic.svg": "hat-crown-80-symbolic.svg",
+   "rabbit-81-symbolic.svg": "hat-crown-81-symbolic.svg",
+   "rabbit-82-symbolic.svg": "hat-crown-82-symbolic.svg",
+   "rabbit-83-symbolic.svg": "hat-crown-83-symbolic.svg",
+   "rabbit-84-symbolic.svg": "hat-crown-84-symbolic.svg",
+   "rabbit-85-symbolic.svg": "hat-crown-85-symbolic.svg",
+   "rabbit-86-symbolic.svg": "hat-crown-86-symbolic.svg",
+   "rabbit-87-symbolic.svg": "hat-crown-87-symbolic.svg",
+   "rabbit-88-symbolic.svg": "hat-crown-88-symbolic.svg",
+   "rabbit-89-symbolic.svg": "hat-crown-89-symbolic.svg",
+   "rabbit-90-symbolic.svg": "hat-crown-90-symbolic.svg",
+   "rabbit-91-symbolic.svg": "hat-crown-91-symbolic.svg",
+   "rabbit-92-symbolic.svg": "hat-crown-92-symbolic.svg",
+   "rabbit-93-symbolic.svg": "hat-crown-93-symbolic.svg",
+   "rabbit-94-symbolic.svg": "hat-crown-94-symbolic.svg",
+   "rabbit-95-symbolic.svg": "hat-crown-95-symbolic.svg",
+   "rabbit-96-symbolic.svg": "hat-crown-96-symbolic.svg",
+   "rabbit-97-symbolic.svg": "hat-crown-97-symbolic.svg",
+   "rabbit-98-symbolic.svg": "hat-crown-98-symbolic.svg",
+   "rabbit-99-symbolic.svg": "hat-crown-99-symbolic.svg",
+   "rabbit-100-symbolic.svg": "hat-crown-100-symbolic.svg",
+   "rabbit-101-symbolic.svg": "hat-crown-101-symbolic.svg",
+   "rabbit-102-symbolic.svg": "hat-crown-102-symbolic.svg",
+   "rabbit-103-symbolic.svg": "hat-crown-103-symbolic.svg",
+   "rabbit-104-symbolic.svg": "hat-crown-104-symbolic.svg",
+   "rabbit-105-symbolic.svg": "hat-crown-105-symbolic.svg",
+   "rabbit-106-symbolic.svg": "hat-crown-106-symbolic.svg",
+   "rabbit-107-symbolic.svg": "hat-crown-107-symbolic.svg",
+   "rabbit-108-symbolic.svg": "hat-crown-108-symbolic.svg",
+   "rabbit-109-symbolic.svg": "hat-crown-109-symbolic.svg",
+   "rabbit-110-symbolic.svg": "hat-crown-110-symbolic.svg",
+   "rabbit-111-symbolic.svg": "hat-crown-111-symbolic.svg",
+   "rabbit-112-symbolic.svg": "hat-crown-112-symbolic.svg",
+   "rabbit-113-symbolic.svg": "hat-crown-113-symbolic.svg",
+   "rabbit-114-symbolic.svg": "hat-crown-114-symbolic.svg",
+   "rabbit-115-symbolic.svg": "hat-crown-115-symbolic.svg",
+   "rabbit-116-symbolic.svg": "hat-crown-116-symbolic.svg",
+   "rabbit-117-symbolic.svg": "hat-crown-117-symbolic.svg",
+   "rabbit-118-symbolic.svg": "hat-crown-118-symbolic.svg",
+   "rabbit-119-symbolic.svg": "hat-crown-119-symbolic.svg",
+   "rabbit-120-symbolic.svg": "hat-crown-120-symbolic.svg",
+   "rabbit-121-symbolic.svg": "hat-crown-121-symbolic.svg",
+   "rabbit-122-symbolic.svg": "hat-crown-122-symbolic.svg",
+   "rabbit-123-symbolic.svg": "hat-crown-123-symbolic.svg",
+   "rabbit-124-symbolic.svg": "hat-crown-124-symbolic.svg",
+   "rabbit-125-symbolic.svg": "hat-crown-125-symbolic.svg",
+   "rabbit-126-symbolic.svg": "hat-crown-126-symbolic.svg",
+   "rabbit-127-symbolic.svg": "hat-crown-127-symbolic.svg",
+   "rabbit-128-symbolic.svg": "hat-crown-128-symbolic.svg",
+   "rabbit-129-symbolic.svg": "hat-crown-129-symbolic.svg",
+   "rabbit-130-symbolic.svg": "hat-crown-130-symbolic.svg",
+   "rabbit-131-symbolic.svg": "hat-crown-131-symbolic.svg",
+   "rabbit-132-symbolic.svg": "hat-crown-132-symbolic.svg",
+   "rabbit-133-symbolic.svg": "hat-crown-133-symbolic.svg",
+   "rabbit-134-symbolic.svg": "hat-crown-134-symbolic.svg",
+   "rabbit-135-symbolic.svg": "hat-crown-135-symbolic.svg",
+   "rabbit-136-symbolic.svg": "hat-crown-136-symbolic.svg",
+   "rabbit-137-symbolic.svg": "hat-crown-137-symbolic.svg",
+   "rabbit-138-symbolic.svg": "hat-crown-138-symbolic.svg",
+   "rabbit-139-symbolic.svg": "hat-crown-139-symbolic.svg",
+   "rabbit-140-symbolic.svg": "hat-crown-140-symbolic.svg",
+   "rabbit-141-symbolic.svg": "hat-crown-141-symbolic.svg",
+   "rabbit-142-symbolic.svg": "hat-crown-142-symbolic.svg",
+   "rabbit-143-symbolic.svg": "hat-crown-143-symbolic.svg"
   }
  }
 }
