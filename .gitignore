@@ -15,3 +15,6 @@ dist/
 
 # Headless smoke test output
 tests/out/
+
+# Compiled GSettings schema
+schemas/gschemas.compiled

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.notchnux" path="/org/gnome/shell/extensions/notchnux/">
+    <key name="toggle-notch" type="as">
+      <default>["&lt;Super&gt;slash"]</default>
+      <summary>Toggle the notch</summary>
+      <description>Keyboard shortcut that opens the notch, or closes it when it is already open.</description>
+    </key>
+  </schema>
+</schemalist>

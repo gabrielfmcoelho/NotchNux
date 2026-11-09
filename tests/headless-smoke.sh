@@ -71,6 +71,7 @@ cat > "$PROFILE/config/glib-2.0/settings/keyfile" <<KF
 enabled-extensions=['unsafe@notchnux-test', '$UUID']
 welcome-dialog-last-shown-version='999'
 KF
+compgen -G "$SRC/schemas/*.gschema.xml" >/dev/null && glib-compile-schemas "$SRC/schemas"
 ln -s "$SRC" "$PROFILE/data/gnome-shell/extensions/$UUID"
 ln -s "$HERE/headless/unsafe@notchnux-test" "$PROFILE/data/gnome-shell/extensions/unsafe@notchnux-test"
 cp "$HERE/headless/config.json" "$PROFILE/config/notchnux/config.json"

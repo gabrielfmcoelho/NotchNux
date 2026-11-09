@@ -32,6 +32,7 @@ import { installLedge, swapContent } from './tabs/ledge.js';
 import { installTray } from './tabs/tray.js';
 import { installClaude } from './tabs/claude.js';
 import { installDev } from './tabs/dev.js';
+import { installKeyboard } from './tabs/keyboard.js';
 import { logError } from './helpers/log.js';
 import { VERTICAL, HORIZONTAL, disableUnredirect, enableUnredirect } from './helpers/compat.js';
 
@@ -191,6 +192,8 @@ export const NotchNux = GObject.registerClass({
         this._initClaude();
         // Dev tab: Docker containers (and their crash alerts), ports, projects.
         this._initDev();
+        // Global shortcut that toggles the notch.
+        this._initKeyboard();
         // Recolour the active-state chrome to match the persisted accent.
         this._applyAccentStyles();
         // Shoulders + the (hidden unless enabled) glass backdrop.
@@ -528,6 +531,7 @@ export const NotchNux = GObject.registerClass({
         this._destroyVpn();
         this._destroyClaude();
         this._destroyDev();
+        this._destroyKeyboard();
         this._destroyProductivity();
         stopSpring(this);
         this._railTimeline?.stop();
@@ -6516,6 +6520,7 @@ export const NotchNux = GObject.registerClass({
     collapse() {
         if (!this.isExpanded) return;
         this.isExpanded = false;
+        this._openedByKeyboard = false;
         this._closeScanOverlay();
         this._pauseMediaAnimations();
         this._leaveTab(this._activeTab);
@@ -6685,3 +6690,4 @@ installLedge(NotchNux.prototype);
 installTray(NotchNux.prototype);
 installClaude(NotchNux.prototype);
 installDev(NotchNux.prototype);
+installKeyboard(NotchNux.prototype);

@@ -73,6 +73,8 @@ install_files() {
     install -Dm644 "$SRC_DIR/prefs.js"       "$DEST_DIR/prefs.js"
     install -Dm644 "$SRC_DIR/stylesheet.css" "$DEST_DIR/stylesheet.css"
     cp -r "$SRC_DIR/src" "$DEST_DIR/"
+    cp -r "$SRC_DIR/schemas" "$DEST_DIR/"
+    glib-compile-schemas "$DEST_DIR/schemas"
 
     ok "Extension files copied"
 }
