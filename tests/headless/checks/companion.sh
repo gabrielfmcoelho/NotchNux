@@ -64,8 +64,16 @@ sleep 1.2; nnx_shot comp-fox 760 0 400 48
 nnx_check comp-switch-back "($R.setSpecies('rabbit'), true)" true
 sleep 3
 
+# lively nap: sleeps on the spot with fireflies, keeps the meadow, wakes by itself with a stretch
+nnx_check comp-nap "(() => { let r = $R; r._play('nap'); return [r._nap, r._worldId > 0, r._spec.acts.sleep.frames.includes(r._shown) || r._spec.acts.sleepbreathe.frames.includes(r._shown), r._ambientId, r.width === 120 || r._state.night]; })()" '[true,true,true,0,true]'
+sleep 1.2; nnx_shot comp-nap 760 0 400 48
+nnx_check comp-nap-interrupted "(() => { let r = $R; r.setClaude('working', 0, '#7aa2ff'); let out = [r._nap, r._act?.name]; r.setClaude('idle', 0, null); return out; })()" '[false,"hop"]'
+sleep 1.5
+nnx_check comp-nap-wakes "(() => { let r = $R; r._play('nap'); r._napId && imports.gi.GLib.source_remove(r._napId); r._napId = 0; r._endNap(true); return [r._nap, r._act?.name, r._flies.length]; })()" '[false,"stretch",0]'
+sleep 1
+
 # switched off: hidden, no timers; back on: alive again
-nnx_check comp-off-no-timers "($NNX._onFeatureToggled('rabbitCompanion', false), [$R.mapped, $R._ambientId, $R._breathId, $R._worldId])" '[false,0,0,0]'
+nnx_check comp-off-no-timers "($NNX._onFeatureToggled('rabbitCompanion', false), [$R.mapped, $R._ambientId, $R._breathId, $R._worldId, $R._napId])" '[false,0,0,0,0]'
 nnx_check comp-on-timers "($NNX._onFeatureToggled('rabbitCompanion', true), [$R._ambientId > 0, $R._breathId > 0])" '[true,true]'
 
 # asleep: slow breathing, no next move, compact requested; waking stretches

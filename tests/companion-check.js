@@ -4,7 +4,7 @@
 import Gio from 'gi://Gio';
 import {
     diffEvents, strongest, restAct, ambient, breathing, rank, REACTION_ACT, meadow, wantsLunch, wantsMushroom,
-    sheltering, facing, weatherKind, isNight, cleanSpecies, SPECIES, isIdle,
+    sheltering, facing, weatherKind, isNight, cleanSpecies, SPECIES, isIdle, napLength,
 } from '../src/helpers/companion-brain.js';
 
 let n = 0;
@@ -18,7 +18,7 @@ function ok(cond, what) {
 const eq = (a, b, what) => ok(JSON.stringify(a) === JSON.stringify(b), `${what}: got ${JSON.stringify(a)}`);
 
 const base = { mood: 'idle', fresh: 0, focus: 'idle', music: false, track: null, low: false, charging: false, away: false,
-    night: false, rain: false, snow: false, wind: 0, unread: 0, calm: false, minutes: 14 * 60, dayKey: '2026-11-09',
+    night: false, rain: false, snow: false, wind: 0, unread: 0, calm: false, lively: false, nap: false, minutes: 14 * 60, dayKey: '2026-11-09',
     mem: { lastFed: null, lastMushroom: null } };
 const s = o => ({ ...base, ...o });
 
@@ -106,6 +106,24 @@ for (let i = 0; i < 100; i++)
 ok(music.has('bob') && music.has('twostep'), 'music: bobs and two-steps');
 ok(ambient(s({ music: true }), 0.1).delay <= 4000, 'music: lively');
 ok(ambient(s({ focus: 'focus' }), 0).delay >= 15000, 'focus: quiet');
+
+// lively: the whole life every few seconds
+const lively = new Set();
+for (let i = 0; i < 200; i++) {
+    let a = ambient(s({ lively: true }), i / 200);
+    ok(a.delay >= 2000 && a.delay <= 5000, `lively delay in 2-5 s (${a.delay})`);
+    lively.add(a.act);
+}
+for (let a of ['nap', 'snack', 'meal', 'chase', 'wander', 'twostep', 'dig', 'groom'])
+    ok(lively.has(a), `lively picks ${a}`);
+eq(ambient(s({ lively: true, music: true }), 0.5).act !== 'nap', true, 'music still has the music moves');
+eq(ambient(s({ lively: true, calm: true }), 0.5), null, 'calm wins over lively');
+eq(restAct(s({ nap: true })), 'sleep', 'a nap is a short sleep');
+eq(restAct(s({ nap: true, mood: 'working' })), 'sit', 'a nap ends when Claude works');
+eq(meadow(s({ nap: true })), 'wide', 'a nap keeps the meadow');
+eq(ambient(s({ nap: true, lively: true }), 0.5), null, 'no moves while napping');
+eq(breathing(s({ nap: true })), { act: 'sleepbreathe', ms: 2600 }, 'napping breathes slowly');
+ok(napLength(0) >= 8000 && napLength(0.999) <= 15000, 'a nap is 8-15 s');
 
 // breathing
 eq(breathing(base), { act: 'breathe', ms: 1600 }, 'sitting breathes');

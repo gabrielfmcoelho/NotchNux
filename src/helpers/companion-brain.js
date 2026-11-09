@@ -6,7 +6,8 @@
 //   mood 'idle'|'working'|'waiting', fresh (Claude sessions finished unseen),
 //   focus 'idle'|'focus'|'break', music, track (id of the playing track),
 //   low, charging, away, night, rain, snow, wind (km/h), unread, calm,
-//   minutes (of the day), dayKey ('2026-11-09'),
+//   lively (its whole life every few seconds, not only at its times),
+//   nap (the player's short lively sleep), minutes (of the day), dayKey ('2026-11-09'),
 //   mem { lastFed, lastMushroom } (day keys, kept in the config)
 
 // Reactions, strongest first: a weaker one never cuts a stronger one short.
@@ -95,7 +96,7 @@ export function restAct(s) {
         return 'flop';
     if (s.mood !== 'idle' || s.focus === 'focus')
         return 'sit';
-    if (s.away || s.night)
+    if (s.away || s.night || s.nap)
         return 'sleep';
     if (s.low && !s.charging)
         return 'tired';
@@ -105,6 +106,7 @@ export function restAct(s) {
 // How much pill the companion gets: the wide meadow only when it has a life to
 // live in it; compact whenever you are busy or it is resting.
 export function meadow(s) {
+    // (a lively nap keeps the meadow: it wakes in a few seconds)
     if (s.mood !== 'idle' || s.focus !== 'idle' || s.calm || s.away || s.night || sheltering(s))
         return 'compact';
     if (s.low && !s.charging)
@@ -118,6 +120,14 @@ const IDLE_ACTS = ['blink', 'blink', 'flick', 'look', 'nibble', 'sniff', 'groom'
 // With music it wears the earpiece (the player picks '<act>@music' frames):
 // mostly bobs, every so often a two-step.
 const MUSIC_ACTS = ['bob', 'bob', 'bob', 'twostep', 'flick', 'look', 'sniff'];
+// Lively: the day's habits as idle moves too. 'meal' is lunch without the
+// memory (the real lunch still happens), 'nap' a short sleep with fireflies.
+const LIVELY_ACTS = [...IDLE_ACTS, 'wander', 'chase', 'snack', 'meal', 'nap', 'twostep'];
+
+// A lively nap lasts this long (ms), then it stretches awake.
+export function napLength(rand) {
+    return 8000 + 7000 * rand;
+}
 
 // The rest pose's breathing: the frame act to alternate with, and how often.
 // Only sitting and sleeping breathe; flopped and tired hold still.
@@ -150,6 +160,8 @@ export function ambient(s, rand) {
         return null;
     if (s.music)
         return { act: MUSIC_ACTS[Math.floor(rand * MUSIC_ACTS.length)], delay: 1500 + 2500 * rand };
+    if (s.lively)
+        return { act: LIVELY_ACTS[Math.floor(rand * LIVELY_ACTS.length)], delay: 2000 + 3000 * rand };
     return { act: IDLE_ACTS[Math.floor(rand * IDLE_ACTS.length)], delay: 3000 + 5000 * rand };
 }
 

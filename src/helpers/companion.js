@@ -17,7 +17,7 @@ import St from 'gi://St';
 
 import {
     diffEvents, strongest, restAct, ambient, breathing, rank, REACTION_ACT, meadow, wantsMushroom, sheltering, facing,
-    isIdle, cleanSpecies,
+    isIdle, cleanSpecies, napLength,
 } from './companion-brain.js';
 import { accentHex } from './widgets.js';
 
@@ -68,6 +68,8 @@ class Companion extends St.Widget {
         this._drops = [];          // [{x, y}] rain or snow
         this._flies = [];          // [{x, y}] fireflies at night
         this._flower = null;       // 'bud' | 'open'
+        this._nap = false;         // a lively short sleep
+        this._napId = 0;
 
         this._grass = new St.DrawingArea({ width: COMPACT, height: H });
         this._grass.connect('repaint', area => this._drawGrass(area));
@@ -119,10 +121,10 @@ class Companion extends St.Widget {
         this.connect('destroy', () => {
             this._cut();
             this._clearAmbient();
-            for (let id of [this._narrowId, this._worldId])
+            for (let id of [this._narrowId, this._worldId, this._napId])
                 if (id)
                     GLib.source_remove(id);
-            this._narrowId = this._worldId = 0;
+            this._narrowId = this._worldId = this._napId = 0;
             for (let id of [this._idleWatch, this._activeWatch])
                 if (id)
                     this._idleMon.remove_watch(id);
@@ -234,7 +236,10 @@ class Companion extends St.Widget {
 
     // Something the notch saw: re-read the state, react to what changed.
     update() {
-        let next = { ...this._getState(), mood: this._claude.mood, fresh: this._claude.fresh, away: this._away };
+        let next = { ...this._getState(), mood: this._claude.mood, fresh: this._claude.fresh, away: this._away, nap: this._nap };
+        if (this._nap && (!isIdle(next) || !next.lively))
+            this._endNap(false);   // something came up: wake without the stretch
+        next.nap = this._nap;
         let prev = this._state ?? next;
         this._state = next;
         this.set_style(`success-color: ${accentHex()};`);   // LEDs, earpiece, props' accent parts
@@ -364,19 +369,32 @@ class Companion extends St.Widget {
                 { act: 'sniff', onStart: () => this._prop(null) },
             ];
         }
+        case 'nap':
+            // a short sleep: the rest pose turns to sleep, fireflies drift, then it stretches awake
+            this._nap = true;
+            this._napId = GLib.timeout_add(GLib.PRIORITY_LOW, napLength(Math.random()), () => {
+                this._napId = 0;
+                this._endNap(true);
+                return GLib.SOURCE_REMOVE;
+            });
+            this.update();
+            return [];
         case 'eat':
+        case 'meal':
         case 'snack': {
-            // food lands at the far side (a snack right here), it hops over and eats it in bites
-            let fx = name === 'eat' ? this._farSpot() : x + (this._facing > 0 ? 18 : -10);
+            // food lands at the far side (a snack right here), it hops over and eats it in bites;
+            // 'meal' is the lively version of lunch, which leaves the once-a-day memory alone
+            let far = name !== 'snack';
+            let fx = far ? this._farSpot() : x + (this._facing > 0 ? 18 : -10);
             fx = Math.max(0, Math.min(this.width - PROP, fx));
             let stand = Math.max(0, Math.min(max, fx + (fx > x ? -14 : 14)));
-            let bites = name === 'eat' ? ['whole', 'half', 'stub'] : ['half', 'stub'];
+            let bites = far ? ['whole', 'half', 'stub'] : ['half', 'stub'];
             let items = [{ act: 'look', onStart: () => {
                 this._prop('food-whole', fx);
                 if (name === 'eat')
                     this._onMemory?.('lastFed', st.dayKey);
             } }];
-            if (name === 'eat')
+            if (far)
                 items.push({ act: 'hop', to: stand, onStart: () => this._face(fx > x ? 1 : -1) });
             for (let b of bites)
                 items.push({ act: 'nibble', onStart: () => this._prop(`food-${b}`, fx) });
@@ -440,6 +458,23 @@ class Companion extends St.Widget {
         step();
         if (i < a.frames.length)
             this._stepId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, this._frameMs, step);
+    }
+
+    // End a lively nap: with a stretch when it wakes by itself.
+    _endNap(stretch) {
+        if (this._napId)
+            GLib.source_remove(this._napId);
+        this._napId = 0;
+        if (!this._nap)
+            return;
+        this._nap = false;
+        if (this._state)
+            this._state.nap = false;
+        this._syncWorld();
+        if (stretch && this._canMove())
+            this._play('stretch');
+        else
+            this._settle();
     }
 
     // A spot on the other side of the meadow from where it stands.
@@ -572,7 +607,7 @@ class Companion extends St.Widget {
     // Rain, snow and fireflies move once a second, only while idle and on screen.
     _syncWorld() {
         let st = this._state;
-        let want = !!st && this.mapped && this.visible && isIdle(st) && (st.rain || st.snow || st.night);
+        let want = !!st && this.mapped && this.visible && isIdle(st) && (st.rain || st.snow || st.night || st.nap);
         if (want && !this._worldId) {
             this._worldId = GLib.timeout_add(GLib.PRIORITY_LOW, WORLD_MS, () => {
                 this._tickWorld();
@@ -599,7 +634,7 @@ class Companion extends St.Widget {
         } else {
             this._drops = [];
         }
-        if (st.night) {
+        if (st.night || st.nap) {
             if (this._flies.length < 2)
                 this._flies.push({ x: Math.random() * w, y: 8 + Math.random() * 12 });
             for (let f of this._flies) {
@@ -618,7 +653,7 @@ class Companion extends St.Widget {
         let cr = area.get_context();
         let st = this._state ?? {};
         let w = this.width, s = this._scroll;
-        let dim = st.night ? 0.7 : 1;
+        let dim = st.night || st.nap ? 0.7 : 1;
         let feet = this._sprite.translation_x + SPRITE / 2;
         let wind = (st.wind ?? 0) > 20 ? 1 : 0;
         for (let x = 1; x < w; x += 3) {

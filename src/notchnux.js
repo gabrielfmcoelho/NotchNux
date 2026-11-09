@@ -398,6 +398,7 @@ export const NotchNux = GObject.registerClass({
             wind: wx.windKmh ?? 0,
             unread: this._unreadCount ?? 0,
             calm: this._config.isFeatureEnabled('rabbitCalm'),
+            lively: this._config.isFeatureEnabled('rabbitLively'),
             minutes: now.getHours() * 60 + now.getMinutes(),
             dayKey: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
             mem: { lastFed: mem.lastFed, lastMushroom: mem.lastMushroom },
@@ -4604,6 +4605,7 @@ export const NotchNux = GObject.registerClass({
                     this._applyPillWidth();
                 break;
             case 'rabbitCalm':
+            case 'rabbitLively':
                 this._pillRabbit.update();
                 break;
             case 'showScreenShare':

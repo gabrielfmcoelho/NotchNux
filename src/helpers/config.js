@@ -180,6 +180,7 @@ export const FEATURE_DEFS = [
     // `group: 'companion'`: shown in Preferences' Companion group, with the animal picker.
     { id: 'rabbitCompanion',   label: 'Companion on the pill', description: 'A small animal lives at the left of the pill: it reacts to Claude Code, the focus timer, notifications, music, weather and battery.', default: true, group: 'companion' },
     { id: 'rabbitCalm',        label: 'Calm companion',       description: 'Keep its reactions but drop its idle life (wandering, grooming, digging, eating).', default: false, group: 'companion' },
+    { id: 'rabbitLively',      label: 'Lively companion',     description: 'Its whole life every few seconds: naps with fireflies, snacks and meals, chases and roaming, not only at their times of day.', default: true, group: 'companion' },
     { id: 'showScreenShare',   label: 'Screen sharing indicator', description: 'Show a red icon on the pill while the screen is shared or recorded.', default: true },
     { id: 'pillMarquee',       label: 'Scrolling track title', description: 'Scroll long track titles across the pill while playing.',  default: true },
     { id: 'weatherAutoRefresh', label: 'Auto-refresh weather', description: 'Periodically refresh weather in the background.',           default: true },
