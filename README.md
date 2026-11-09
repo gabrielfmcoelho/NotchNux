@@ -27,13 +27,13 @@ NotchNux replaces the default GNOME top-bar clock with a **living pill**. At a g
 | | Feature | What it does |
 |---|---|---|
 | 🏠 | **Home** | A glanceable start page: greeting and weather, your next calendar event, your top tasks with a quick-add field, the focus timer and now-playing controls. |
-| ✅ | **Tasks** | A fast to-do list right under the notch. Type and press Enter to add (start with `!` to star it), click to edit, check off with a satisfying tick, review what you finished in **Done**. |
+| ✅ | **Tasks** | A fast to-do list right under the notch. Type and press Enter to add (start with `!` to star it), click to edit, check off with a satisfying tick, review what you finished in **Done**. Optionally, the tab can show a Google Tasks list instead (see [Google Tasks & Calendar](#google-tasks--calendar-optional)). |
 | ⏱️ | **Focus** | A Pomodoro-style timer (15 / 25 / 50 min) with automatic short and long breaks. While it runs, the countdown lives in the pill, **Do Not Disturb** turns on (optional), and you get a banner with *Start break* when time's up. Survives screen locks. |
 | 📝 | **Notes** | A board of colour-coded post-its that autosave as you type. Pin any note to the desktop, where it sits on the wallpaper under your windows; drag it anywhere and double-click it to edit. A desktop-icons extension (such as Desktop Icons NG) draws its own layer over the wallpaper and can cover pinned post-its. Google Keep sync is not possible: its API only works for Google Workspace (business) accounts, not personal ones. |
 | 🎵 | **Music / MPRIS** | Full player with album art, a spinning vinyl, scrubber, shuffle/repeat, and a volume dial — plus a lyrics view with timed lyrics from lrclib.net that follow the song. Works with any MPRIS player (Spotify, browsers, etc.). |
 | 🌤️ | **Weather** | Current conditions, an analog clock, humidity, wind, sunrise/sunset and hourly forecast. Auto-locates or set a manual location. |
 | 📷 | **Studio** | Live webcam preview (GStreamer) plus video and audio-only recording, with camera/mic device selection. |
-| 📅 | **Calendar** | A scrollable day strip with your events pulled from GNOME Online Accounts — scroll the dates to jump between days. |
+| 📅 | **Calendar** | A scrollable day strip with your events pulled from GNOME Online Accounts — scroll the dates to jump between days. Optionally, create, edit and delete events from the notch (see [Google Tasks & Calendar](#google-tasks--calendar-optional)). |
 | 🔔 | **Alerts** | Notification history, and a **peek** mode where the pill expands into a banner with action buttons the moment a notification arrives. |
 | 🗂️ | **Shelf** | A click-to-browse / paste-a-file scratch space, plus **Quick Share** to send files to your phone and other paired [GSConnect](https://github.com/GSConnect/gnome-shell-extension-gsconnect) devices. |
 | 🖥️ | **Tray / System** | A Control Center: Wi-Fi, Bluetooth, hotspot and airplane toggles with in-notch network and device pickers; a **VPN** row for Tailscale and the Forti VPN (openfortivpn, [one-time setup](#vpn-optional)); Silence, Night Light, screenshot and lock tiles; volume and brightness sliders; device batteries; live CPU, memory, disk and network; and the **power mode** (Saver · Balanced · Performance, from power-profiles-daemon, saying why when Performance is held back). Optional: CPU, SSD and GPU temperatures (a sleeping GPU reads *asleep* and is never woken to be read), and fan levels (Auto · Low · Med · High · Max · Off, beta, [one-time setup](#fan-control-beta-optional)) that go back to Auto at 85 °C unless you turn that off. |
@@ -188,6 +188,21 @@ Then open Tray → **VPN**. Until the setup has run, Forti reads *Set up once* t
 
 If Forti says *Didn't connect*, `journalctl -u notchnux-forti` shows openfortivpn's own message.
 
+### Google Tasks & Calendar (optional)
+Both are off by default. NotchNux never signs in to Google itself and never sees your password: it goes through GNOME's own calendar service (Evolution Data Server), which syncs the Google account you add in GNOME Settings. Its calls run in a small helper process, so a slow network never freezes the desktop.
+
+1. Install GNOME's calendar libraries for JavaScript:
+   ```bash
+   sudo apt install gir1.2-ecal-2.0 gir1.2-edataserver-1.2   # Ubuntu / Debian
+   sudo dnf install evolution-data-server                    # Fedora
+   ```
+2. Add your Google account in **Settings → Online Accounts** with **Calendar** turned on (Google Tasks comes with it).
+3. In NotchNux's Preferences, **Google** group:
+   - **Google Tasks in the Tasks tab**, then pick a list (lists are shown as *list — account*). The Tasks tab and the Home card then add, tick, rename and delete in that list. Changes made elsewhere show after a refresh (automatic every 5 minutes while the tab is open, or the refresh button). Stars stay on this computer, since Google Tasks has no star. Your local tasks are kept and come back when you pick *Local*.
+   - **Create and edit calendar events**: a **+** on the Calendar day strip, and Edit/Delete on events from calendars you can write to (read-only ones, like holidays and birthdays, get no buttons). For a repeating event, Edit changes that occurrence and Delete asks *This event* or *All events*.
+
+If a change can't be saved (offline, signed out), the notch puts things back as they were, says *Couldn't save to Google* with the reason, and keeps what you typed. If the save timed out, it re-reads the list instead, since the change may have gone through. When something is missing, Preferences names the packages to install or says to add a Google account in Settings → Online Accounts. Google Keep can't be synced (see Notes).
+
 ## 🕹️ Usage
 
 - **Hover or click the pill** to open the dashboard; click outside to collapse it.
@@ -230,6 +245,7 @@ Progress is 0–1 (-1 = no bar). An activity stays until `End`, its timeout (1�
 | `~/.config/notchnux/settings.json` | Weather location and the last forecast |
 | `~/.local/share/notchnux/tasks.json` | Your tasks |
 | `~/.local/share/notchnux/notes.json` | Your post-it notes (an old `notes.md` is migrated once and kept as `notes.md.bak`) |
+| `~/.local/share/notchnux/gtask-stars.json` | Stars on Google tasks (Google Tasks has no star field) |
 | `~/.local/share/notchnux/focus.json` | Focus timer state and today's stats |
 | `~/.local/share/notchnux/shelf/` | Files added to the Shelf (cleared once per login) |
 | `~/.cache/notchnux/` | Album art, wallpaper thumbnails and processed wallpapers (pruned automatically) |
@@ -263,6 +279,8 @@ tests/headless-smoke.sh --tabs home,notes --src /path/to/other/checkout
 ```
 
 It needs `gnome-shell`, `dbus-broker-launch` (the broker needs systemd user units) and a GPU render node (`/dev/dri/renderD*`). A run takes about 30 s to 2 min. Extra options: `--script FILE` (extra checks, sourced with the helpers from `tests/headless/lib.sh`), `--data SRC:REL` (seed a file under the test profile's `~/.local/share`), `--keep`, `--out DIR`.
+
+`tests/eds-check.sh` tests the Google Tasks & Calendar helper against a private copy of GNOME's calendar service (its own D-Bus session and folders), so your real calendars and Google account are never touched. It needs the libraries from step 1 of Google Tasks & Calendar.
 
 ## 🤝 Contributing
 

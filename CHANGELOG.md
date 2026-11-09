@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Google Tasks & Calendar (optional, off by default)
+- **Google Tasks in the Tasks tab**: pick one of your Google task lists in
+  Preferences; the Tasks tab, the Home card and the `t` command then add,
+  tick, rename and delete in it. Refreshes every 5 minutes while the tab is
+  open. Stars stay local (`gtask-stars.json`).
+- **Create and edit calendar events**: a **+** on the Calendar day strip and
+  Edit/Delete on events from writable calendars; repeating events ask
+  *This event* or *All events* on delete.
+- Both go through GNOME's Evolution Data Server and the accounts in
+  Settings → Online Accounts (no Google login inside NotchNux), in a helper
+  process so a slow network never blocks the shell. Needs
+  `gir1.2-ecal-2.0 gir1.2-edataserver-1.2` (Ubuntu/Debian) or
+  `evolution-data-server` (Fedora).
+- A failed save is undone in the notch with a *Couldn't save to Google*
+  alert, and the typed text is kept; a timed-out save re-reads instead.
+
+### Fixed
+- Super+/ now opens the notch from the Activities overview.
+
 ### Added — post-it notes
 - The Notes tab is now a board of colour-coded post-its (yellow, green, blue,
   pink, purple), each autosaved, with undo for deletes.
