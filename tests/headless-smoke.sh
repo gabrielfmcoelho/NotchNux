@@ -15,8 +15,10 @@ while [ $# -gt 0 ]; do
     case $1 in
         --src) SRC=$(cd "$2" && pwd) || exit 2; shift 2 ;;
         --tabs) TABS=$2; shift 2 ;;
-        --script) SCRIPT=$(realpath "$2"); shift 2 ;;
-        --data) DATA+=("$(realpath "${2%%:*}"):${2#*:}"); shift 2 ;;
+        --script) [ -f "$2" ] || { echo "--script: no such file: $2" >&2; exit 2; }
+                  SCRIPT=$(realpath "$2"); shift 2 ;;
+        --data) [ -f "${2%%:*}" ] && [[ $2 == *:* ]] || { echo "--data: want SRC:REL with an existing SRC, got: $2" >&2; exit 2; }
+                DATA+=("$(realpath "${2%%:*}"):${2#*:}"); shift 2 ;;
         --keep) KEEP=1; shift ;;
         --out) mkdir -p "$2"; OUT=$(cd "$2" && pwd); shift 2 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
@@ -38,12 +40,18 @@ NNX_OUT="$OUT"
 export NNX_LOG NNX_OUT
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/$NAME"
 
+# Print the PIDs of every descendant of $1 (children first).
+descendants() { local p; for p in $(pgrep -P "$1"); do descendants "$p"; echo "$p"; done; }
+
 cleanup() {
     trap - EXIT INT TERM
-    if [ -n "$SHELL_PID" ] && kill -0 "$SHELL_PID" 2>/dev/null; then
-        kill "$SHELL_PID" 2>/dev/null
+    if [ -n "$SHELL_PID" ]; then
+        kids=$(descendants "$SHELL_PID")   # collect before the shell dies and they get reparented
+        # shellcheck disable=SC2086
+        kill "$SHELL_PID" $kids 2>/dev/null
         for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$SHELL_PID" 2>/dev/null || break; sleep 0.5; done
-        kill -9 "$SHELL_PID" 2>/dev/null
+        # shellcheck disable=SC2086
+        kill -9 "$SHELL_PID" $kids 2>/dev/null
     fi
     systemctl --user stop "$NAME.service" "$NAME.socket" 2>/dev/null
     rm -f "$UNITDIR/$NAME.service" "$UNITDIR/$NAME.socket" "$XDG_RUNTIME_DIR/$NAME"
@@ -56,7 +64,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 # Isolated profile: settings keyfile, data/config/cache dirs, extension symlinks.
-mkdir -p "$PROFILE/config/glib-2.0/settings" "$PROFILE/config/notchnux" "$PROFILE/cache" \
+mkdir -p "$PROFILE/config/glib-2.0/settings" "$PROFILE/config/notchnux" "$PROFILE/cache" "$PROFILE/state" \
          "$PROFILE/data/gnome-shell/extensions" "$UNITDIR"
 cat > "$PROFILE/config/glib-2.0/settings/keyfile" <<KF
 [org/gnome/shell]
@@ -88,6 +96,7 @@ systemctl --user daemon-reload && systemctl --user start "$NAME.socket" || { ech
 unset DISPLAY WAYLAND_DISPLAY
 env GSETTINGS_BACKEND=keyfile \
     XDG_DATA_HOME="$PROFILE/data" XDG_CONFIG_HOME="$PROFILE/config" XDG_CACHE_HOME="$PROFILE/cache" \
+    XDG_STATE_HOME="$PROFILE/state" \
     GST_REGISTRY="${GST_REGISTRY:-$HOME/.cache/gstreamer-1.0/registry.$(uname -m).bin}" \
     gnome-shell --headless --virtual-monitor 1920x1080 > "$NNX_LOG" 2>&1 &
 SHELL_PID=$!
@@ -122,29 +131,53 @@ nnx_mark
 
 if nnx_eval "$NNX.expand(), true" >/dev/null; then echo "PASS expand"; else nnx_fail expand 'expand() threw or got no answer'; fi
 
+HUNG=0
 if [ -z "$TABS" ]; then
-    TABS=$(nnx_eval "JSON.stringify($NNX._tabOrder)" | tr -d '[]"\\' | tr ',' ' ')
+    if list=$(nnx_eval "JSON.stringify($NNX._tabOrder)"); then
+        TABS=$(printf '%s' "$list" | tr -d '[]"\\' | tr ',' ' ')
+    else
+        nnx_fail tab-list 'could not read _tabOrder from the shell'
+    fi
 else
     TABS=${TABS//,/ }
 fi
+if [ -z "${TABS// /}" ]; then
+    [ "$NNX_FAILS" -gt 0 ] || nnx_fail tab-list 'no tabs to check'
+    TABS=''
+fi
 echo "tabs: $TABS"
 for id in $TABS; do
-    nnx_eval "$NNX._switchTab('$id'), true" >/dev/null
-    ok=0; t0=$SECONDS
-    while [ $((SECONDS - t0)) -lt 20 ]; do
-        [ "$(NNX_EVAL_TIMEOUT=5 nnx_eval "$NNX._activeTab === '$id'")" = true ] && { ok=1; break; }
-        sleep 0.5
-    done
+    if [ $HUNG = 1 ]; then echo "SKIP $id (shell unresponsive)"; continue; fi
+    ok=0
+    if nnx_eval "$NNX._switchTab('$id'), true" >/dev/null; then
+        t0=$SECONDS
+        while [ $((SECONDS - t0)) -lt 20 ]; do
+            [ "$(NNX_EVAL_TIMEOUT=5 nnx_eval "$NNX._activeTab === '$id'")" = true ] && { ok=1; break; }
+            sleep 0.5
+        done
+    fi
     if [ $ok = 1 ]; then
         sleep 0.5
         nnx_shot "tab-$id" && echo "PASS tab-$id"
     else
-        nnx_fail "tab-$id" 'did not become active within 20 s'
+        if NNX_EVAL_TIMEOUT=5 nnx_eval true >/dev/null; then
+            nnx_fail "tab-$id" 'did not become active within 20 s'
+        else
+            nnx_fail "tab-$id" 'shell stopped answering'
+            HUNG=1
+        fi
     fi
 done
 
-# shellcheck disable=SC1090
-[ -z "$SCRIPT" ] || source "$SCRIPT"
+if [ -n "$SCRIPT" ]; then
+    if [ $HUNG = 1 ]; then
+        nnx_fail script 'skipped: shell unresponsive'
+    else
+        # shellcheck disable=SC1090
+        source "$SCRIPT"; rc=$?
+        [ $rc -eq 0 ] || nnx_fail script "exited with status $rc"
+    fi
+fi
 
 errs=$(nnx_errors)
 if [ -z "$errs" ]; then

@@ -1,6 +1,9 @@
 # Helpers for tests/headless-smoke.sh and feature check scripts (sourced).
 # Needs in the environment: DBUS_SESSION_BUS_ADDRESS, NNX_LOG, NNX_OUT.
 
+# Note: Eval JSON-encodes its result, so a JS string comes back double-escaped.
+# Write checks that return booleans, numbers or arrays (e.g. `x === 'a'`, `a.length`),
+# not JSON.stringify(...) strings, and compare against `true`, `3`, etc.
 NNX="Main.extensionManager.lookup('notchnux@adityasah.programs').stateObj._notch"
 NNX_FAILS=0
 NNX_MARK=0
