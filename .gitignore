@@ -12,3 +12,6 @@ dist/
 
 # MCP browser tool logs
 .playwright-mcp/
+
+# Headless smoke test output
+tests/out/

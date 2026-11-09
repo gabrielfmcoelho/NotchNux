@@ -1,0 +1,6 @@
+{
+  "uuid": "unsafe@notchnux-test",
+  "name": "NotchNux test helper",
+  "description": "Turns on unsafe_mode so the smoke test can call org.gnome.Shell.Eval.",
+  "shell-version": ["46", "47", "48", "49", "50", "51"]
+}

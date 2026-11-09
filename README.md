@@ -224,6 +224,17 @@ Everything is stored locally, readable only by you (`0600` files in `0700` folde
 - **VPN row says "Set up once"** → run the [one-time setup](#vpn-optional). If Forti says *Didn't connect*, `journalctl -u notchnux-forti` shows openfortivpn's own message.
 - **Fan control (beta) greyed out** → run the [one-time setup](#fan-control-beta-optional), and reboot if it asks you to. It's hidden when no fan here can be set by software.
 
+## 🧪 Testing
+
+`tests/headless-smoke.sh` boots a throwaway headless GNOME Shell (its own D-Bus session, settings and data folders; your real session is never touched), loads the extension from the working tree, opens every tab and saves a screenshot of each to `tests/out/`. It fails if the extension doesn't activate, a tab doesn't open within 20 s, or NotchNux logs a `JS ERROR`/`CRITICAL`.
+
+```bash
+tests/headless-smoke.sh                  # all tabs, exit 0 = pass, 1 = a check failed, 2 = environment unusable
+tests/headless-smoke.sh --tabs home,notes --src /path/to/other/checkout
+```
+
+It needs `gnome-shell`, `dbus-broker-launch` (the broker needs systemd user units) and a GPU render node (`/dev/dri/renderD*`). A run takes about 30 s to 2 min. Extra options: `--script FILE` (extra checks, sourced with the helpers from `tests/headless/lib.sh`), `--data SRC:REL` (seed a file under the test profile's `~/.local/share`), `--keep`, `--out DIR`.
+
 ## 🤝 Contributing
 
 This is a young project and **help is very welcome** — bug reports, feature ideas, theming tweaks, and PRs all make it better. If you're on Fedora (or any GNOME distro) and try it out, please open an issue with what worked and what didn't. 🙏
