@@ -90,17 +90,18 @@ const KeyboardFeatures = {
         this._commandBar.add_child(this._commandEntry);
         this._commandBar.add_child(this._commandHint);
 
-        this._makeTypable(this._commandEntry);
         let text = this._commandEntry.clutter_text;
         text.connect('text-changed', () => this._updateCommandHint());
         text.connect('activate', () => this._submitCommand());
+        // Connected before _makeTypable so Esc collapses (which releases the
+        // grab) instead of only releasing it; EVENT_STOP skips _makeTypable's.
         text.connect('key-press-event', (a, ev) => {
             if (ev.get_key_symbol() !== Clutter.KEY_Escape)
                 return Clutter.EVENT_PROPAGATE;
-            // collapse() releases the keyboard grab with the tab teardown.
             this.collapse();
             return Clutter.EVENT_STOP;
         });
+        this._makeTypable(this._commandEntry);
         return this._commandBar;
     },
 

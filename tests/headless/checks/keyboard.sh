@@ -19,3 +19,10 @@ nnx_check command-closes "(() => { const n = $NNX; return [n.isExpanded, n._kbGr
 nnx_check command-tab "(() => { const n = $NNX; n._toggleFromKeyboard(); n._commandEntry.text = 'home'; n._submitCommand(); const r = n.isExpanded; n.collapse(); return [r, n._kbGrab === null]; })()" '[true,true]'
 # A plain (hover-style) open does not show the bar.
 nnx_check bar-hidden-on-plain-expand "(() => { const n = $NNX; n.collapse(); n.expand(); return n._commandBar.visible; })()" false
+# Esc in the command entry, sent as a real key press through a virtual keyboard
+# (reaches both key-press handlers in connection order), closes the notch.
+nnx_check esc-open "(() => { const n = $NNX; n.collapse(); n._toggleFromKeyboard(); return [n.isExpanded, n._kbGrab !== null]; })()" '[true,true]'
+sleep 1
+nnx_check esc-press "(() => { const C = imports.gi.Clutter; const d = global.stage.context.get_backend().get_default_seat().create_virtual_device(C.InputDeviceType.KEYBOARD_DEVICE); const t = global.get_current_time() * 1000; d.notify_keyval(t, C.KEY_Escape, C.KeyState.PRESSED); d.notify_keyval(t + 1000, C.KEY_Escape, C.KeyState.RELEASED); return true; })()" true
+sleep 1
+nnx_check esc-collapses "(() => { const n = $NNX; return [n.isExpanded, n._kbGrab === null]; })()" '[false,true]'
