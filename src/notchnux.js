@@ -33,6 +33,7 @@ import { installTray } from './tabs/tray.js';
 import { installClaude } from './tabs/claude.js';
 import { installDev } from './tabs/dev.js';
 import { logError } from './helpers/log.js';
+import { VERTICAL, HORIZONTAL, disableUnredirect, enableUnredirect } from './helpers/compat.js';
 
 // Configuration constants
 // Minimum idle width. _pillWidth() measures the actual content (clock + battery
@@ -157,7 +158,7 @@ export const NotchNux = GObject.registerClass({
             x_expand: true,
             y_expand: true,
             clip_to_allocation: true,
-            vertical: true });
+            ...VERTICAL });
         this.add_child(this._surface);
 
         // 1. Collapsed pill
@@ -786,7 +787,7 @@ export const NotchNux = GObject.registerClass({
             layout_manager: new Clutter.BinLayout() });
         // The track holds both copies side by side; it's what we translate.
         this._pillTitleTrack = new St.BoxLayout({
-            vertical: false,
+            ...HORIZONTAL,
             x_align: Clutter.ActorAlign.START,
             y_align: Clutter.ActorAlign.CENTER });
         const mkTitleLabel = () => {
@@ -913,7 +914,7 @@ export const NotchNux = GObject.registerClass({
         // own clickable buttons without nesting buttons-in-buttons.
         this._notifBanner = new St.BoxLayout({
             style_class: 'nook-notif-peek',
-            vertical: true,
+            ...VERTICAL,
             x_expand: true,
             y_expand: true,
             reactive: true });
@@ -932,7 +933,7 @@ export const NotchNux = GObject.registerClass({
         // text still centre themselves.
         let row = new St.BoxLayout({
             style_class: 'nook-notif-peek-row',
-            vertical: false,
+            ...HORIZONTAL,
             x_expand: true });
 
         this._notifPeekIconBin = new St.Bin({
@@ -946,7 +947,7 @@ export const NotchNux = GObject.registerClass({
 
         let textCol = new St.BoxLayout({
             style_class: 'nook-notif-peek-text',
-            vertical: true,
+            ...VERTICAL,
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER });
         this._notifPeekTitle = new St.Label({
@@ -965,7 +966,7 @@ export const NotchNux = GObject.registerClass({
         //     notification. Hidden when the notification has no actions. ---
         this._notifPeekActions = new St.BoxLayout({
             style_class: 'nook-notif-peek-actions',
-            vertical: false,
+            ...HORIZONTAL,
             x_expand: true,
             visible: false });
         this._notifBanner.add_child(this._notifPeekActions);
@@ -1064,7 +1065,7 @@ export const NotchNux = GObject.registerClass({
     _buildDashboard() {
         this._dashboard = new St.BoxLayout({
             style_class: 'notchnux-dashboard-content',
-            vertical: true,
+            ...VERTICAL,
             x_expand: true,
             y_expand: true });
 
@@ -1082,7 +1083,7 @@ export const NotchNux = GObject.registerClass({
 
         let headerWrap = new St.BoxLayout({
             style_class: 'notchnux-dashboard-header-wrap',
-            vertical: false,
+            ...HORIZONTAL,
             x_expand: true });
 
         // Tab rail: icon buttons over one travelling accent indicator. Only the
@@ -1547,11 +1548,8 @@ export const NotchNux = GObject.registerClass({
         if (this._unredirectInhibited)
             return;
         try {
-            let compositor = global.compositor ?? global.get_compositor?.();
-            if (compositor && typeof compositor.disable_unredirect === 'function') {
-                compositor.disable_unredirect();
+            if (disableUnredirect())
                 this._unredirectInhibited = true;
-            }
         } catch (e) {
             logError('Failed to inhibit unredirect.', e);
         }
@@ -1563,9 +1561,7 @@ export const NotchNux = GObject.registerClass({
         if (!this._unredirectInhibited)
             return;
         try {
-            let compositor = global.compositor ?? global.get_compositor?.();
-            if (compositor && typeof compositor.enable_unredirect === 'function')
-                compositor.enable_unredirect();
+            enableUnredirect();
         } catch (e) {
             logError('Failed to release unredirect inhibit.', e);
         } finally {
@@ -2007,7 +2003,7 @@ export const NotchNux = GObject.registerClass({
         let host = this._tabHosts.get(tab);
         if (!host) {
             host = new St.BoxLayout({
-                style_class: 'notchnux-tab-host', vertical: true,
+                style_class: 'notchnux-tab-host', ...VERTICAL,
                 x_expand: true, y_expand: true, visible: false });
             this._contentContainer.add_child(host);
             this._tabHosts.set(tab, host);
@@ -2781,10 +2777,10 @@ export const NotchNux = GObject.registerClass({
     // lyrics (Apple Music's layout). The title, transport and timeline are
     // the same actors in both views, so switching never rebuilds the tab.
     _renderMediaTab() {
-        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-music', vertical: true, x_expand: true, y_expand: true });
+        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-music', ...VERTICAL, x_expand: true, y_expand: true });
         let info = this._mpris.getActiveTrackInfo();
 
-        let body = new St.BoxLayout({ style_class: 'nook-media-body', vertical: false, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+        let body = new St.BoxLayout({ style_class: 'nook-media-body', ...HORIZONTAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
 
         // --- Player view: spinning vinyl (Cairo) with the art pressed in ---
         let vinyl = new Vinyl(140);
@@ -2816,8 +2812,8 @@ export const NotchNux = GObject.registerClass({
         body.add_child(coverWrap);
 
         // --- Info + transport (shared by both views) ---
-        let mid = new St.BoxLayout({ style_class: 'nook-media-mid', vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
-        let eyebrow = new St.BoxLayout({ style_class: 'nook-eyebrow-row', vertical: false, x_expand: true });
+        let mid = new St.BoxLayout({ style_class: 'nook-media-mid', ...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+        let eyebrow = new St.BoxLayout({ style_class: 'nook-eyebrow-row', ...HORIZONTAL, x_expand: true });
         let eyebrowLabel = new St.Label({ style_class: 'nook-eyebrow', y_align: Clutter.ActorAlign.CENTER });
         eyebrowLabel.set_style(`color: ${accentHex()};`);
         eyebrowLabel.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
@@ -2840,7 +2836,7 @@ export const NotchNux = GObject.registerClass({
 
         // Transport controls. Each returns { btn, icon } so updates can retint
         // and re-enable them in place.
-        let controls = new St.BoxLayout({ style_class: 'nook-transport', vertical: false, x_expand: true });
+        let controls = new St.BoxLayout({ style_class: 'nook-transport', ...HORIZONTAL, x_expand: true });
         let mkBtn = (cb, primary = false, parent = controls) => {
             let btn = new St.Button({ style_class: primary ? 'nook-transport-btn nook-transport-primary' : 'nook-transport-btn',
                 can_focus: true });
@@ -2874,7 +2870,7 @@ export const NotchNux = GObject.registerClass({
         body.add_child(mid);
 
         // --- Player view: volume knob (Cairo, scroll to change) ---
-        let knobCol = new St.BoxLayout({ style_class: 'nook-knob-col', vertical: true, y_align: Clutter.ActorAlign.CENTER });
+        let knobCol = new St.BoxLayout({ style_class: 'nook-knob-col', ...VERTICAL, y_align: Clutter.ActorAlign.CENTER });
         let knob = new Knob(74);
         knob.setValue(this._system.volume / 100);
         let knobBtn = new St.Button({ style_class: 'nook-knob-btn', reactive: true, can_focus: false });
@@ -2922,7 +2918,7 @@ export const NotchNux = GObject.registerClass({
 
         // --- Timeline scrubber. In the player view it's indented to line up
         // with the title: 156 = 140 (vinyl) + 20 (body spacing) − 4 (padding).
-        let timelineRow = new St.BoxLayout({ vertical: false, x_expand: true });
+        let timelineRow = new St.BoxLayout({ ...HORIZONTAL, x_expand: true });
         let timelineIndent = new St.Widget({ width: 156 });
         timelineRow.add_child(timelineIndent);
         let timeline = this._buildMediaTimeline();
@@ -3044,7 +3040,7 @@ export const NotchNux = GObject.registerClass({
         this._timelineLenUs = 0;
         this._timelineTrackId = null;
 
-        let wrap = new St.BoxLayout({ style_class: 'nook-timeline', vertical: true, x_expand: true });
+        let wrap = new St.BoxLayout({ style_class: 'nook-timeline', ...VERTICAL, x_expand: true });
 
         // The track is a reactive button so it captures scroll events across the
         // whole width. The accent fill spans the whole base and shows progress
@@ -3068,7 +3064,7 @@ export const NotchNux = GObject.registerClass({
         this._timelineBase = base;
         this._timelineTrack = trackBtn;
 
-        let labels = new St.BoxLayout({ style_class: 'nook-timeline-labels', vertical: false, x_expand: true });
+        let labels = new St.BoxLayout({ style_class: 'nook-timeline-labels', ...HORIZONTAL, x_expand: true });
         let elapsed = new St.Label({ text: '0:00', style_class: 'nook-timeline-elapsed' });
         let total = new St.Label({ text: '--:--', style_class: 'nook-timeline-total', x_align: Clutter.ActorAlign.END, x_expand: true });
         labels.add_child(elapsed);
@@ -3227,9 +3223,9 @@ export const NotchNux = GObject.registerClass({
         let clickable = d.bluetooth && d.dbusPath;
         let row = clickable
             ? new St.Button({ style_class: 'nook-device-row nook-device-row-btn', reactive: true, x_expand: true, can_focus: true })
-            : new St.BoxLayout({ style_class: 'nook-device-row', vertical: false, x_expand: true });
+            : new St.BoxLayout({ style_class: 'nook-device-row', ...HORIZONTAL, x_expand: true });
         let inner = clickable
-            ? new St.BoxLayout({ style_class: 'nook-device-row-inner', vertical: false, x_expand: true })
+            ? new St.BoxLayout({ style_class: 'nook-device-row-inner', ...HORIZONTAL, x_expand: true })
             : row;
         inner.add_child(new St.Icon({ icon_name: d.icon, icon_size: 16, style_class: 'nook-device-icon', y_align: Clutter.ActorAlign.CENTER }));
         inner.add_child(new St.Label({ text: d.name, style_class: 'nook-device-name', x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
@@ -3302,10 +3298,10 @@ export const NotchNux = GObject.registerClass({
         // Card floats near the top of the dashboard (just under the header) so
         // it reads as a sheet dropping from the notch, not a box centered in the
         // tall dashboard allocation.
-        let card = new St.BoxLayout({ style_class: 'nook-scan-card', vertical: true,
+        let card = new St.BoxLayout({ style_class: 'nook-scan-card', ...VERTICAL,
             x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.START });
 
-        let header = new St.BoxLayout({ style_class: 'nook-scan-header', vertical: false, x_expand: true });
+        let header = new St.BoxLayout({ style_class: 'nook-scan-header', ...HORIZONTAL, x_expand: true });
         header.add_child(new St.Label({ text: title, style_class: 'nook-scan-title',
             x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
         let closeBtn = new St.Button({ style_class: 'nook-scan-close', reactive: true, can_focus: true });
@@ -3320,7 +3316,7 @@ export const NotchNux = GObject.registerClass({
 
         let scroll = new St.ScrollView({ style_class: 'nook-scan-scroll', x_expand: true });
         scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
-        let body = new St.BoxLayout({ style_class: 'nook-scan-body', vertical: true, x_expand: true });
+        let body = new St.BoxLayout({ style_class: 'nook-scan-body', ...VERTICAL, x_expand: true });
         scroll.set_child(body);
         card.add_child(scroll);
 
@@ -3430,7 +3426,7 @@ export const NotchNux = GObject.registerClass({
                 let busy = pairing.has(d.dbusPath);
                 let row = new St.Button({ style_class: 'nook-scan-row', reactive: !busy,
                     can_focus: !busy, x_expand: true });
-                let inner = new St.BoxLayout({ vertical: false, x_expand: true });
+                let inner = new St.BoxLayout({ ...HORIZONTAL, x_expand: true });
                 inner.add_child(new St.Icon({ icon_name: d.icon, icon_size: 16,
                     style_class: 'nook-scan-row-icon', y_align: Clutter.ActorAlign.CENTER }));
                 inner.add_child(new St.Label({ text: d.name, style_class: 'nook-scan-row-name',
@@ -3508,7 +3504,7 @@ export const NotchNux = GObject.registerClass({
 
                 let row = new St.Button({ style_class: 'nook-scan-row', reactive: !busy && !ap.active,
                     can_focus: !busy && !ap.active, x_expand: true });
-                let inner = new St.BoxLayout({ vertical: false, x_expand: true });
+                let inner = new St.BoxLayout({ ...HORIZONTAL, x_expand: true });
                 inner.add_child(new St.Icon({ icon_name: sigIcon, icon_size: 16,
                     style_class: 'nook-scan-row-icon', y_align: Clutter.ActorAlign.CENTER }));
                 inner.add_child(new St.Label({ text: ap.ssid, style_class: 'nook-scan-row-name',
@@ -3551,7 +3547,7 @@ export const NotchNux = GObject.registerClass({
 
                 // Inline password entry for the expanded secure network.
                 if (ap.secure && expanded === ap.ssid && !busy) {
-                    let pwRow = new St.BoxLayout({ style_class: 'nook-scan-pw', vertical: false, x_expand: true });
+                    let pwRow = new St.BoxLayout({ style_class: 'nook-scan-pw', ...HORIZONTAL, x_expand: true });
                     let entry = new St.Entry({ style_class: 'nook-scan-entry',
                         hint_text: 'Password', can_focus: true, x_expand: true });
                     entry.clutter_text.set_password_char('●');
@@ -3606,13 +3602,13 @@ export const NotchNux = GObject.registerClass({
 
         // One strip: "TOP BAR" then the icons, wrapping only when there are
         // more than fit on a line.
-        let card = new St.BoxLayout({ style_class: 'nook-tray-mirror nn-cc-mirror', vertical: false, x_expand: true });
+        let card = new St.BoxLayout({ style_class: 'nook-tray-mirror nn-cc-mirror', ...HORIZONTAL, x_expand: true });
         let mirrorLabel = new St.Label({ text: 'TOP BAR', style_class: 'nook-card-eyebrow nn-cc-mirror-label',
             y_align: Clutter.ActorAlign.CENTER });
         mirrorLabel.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
         card.add_child(mirrorLabel);
         const PER_ROW = 11;
-        let iconRow = new St.BoxLayout({ style_class: 'nook-tray-mirror-grid', vertical: true, x_expand: true });
+        let iconRow = new St.BoxLayout({ style_class: 'nook-tray-mirror-grid', ...VERTICAL, x_expand: true });
         let addIcon = btn => {
             let line = iconRow.get_last_child();
             if (!line || line.get_n_children() >= PER_ROW) {
@@ -4009,14 +4005,14 @@ export const NotchNux = GObject.registerClass({
     // Tab: Weather
     // ============================================================
     _renderWeatherTab() {
-        let panel = new St.BoxLayout({ style_class: 'notchnux-panel', vertical: true, x_expand: true, y_expand: true });
+        let panel = new St.BoxLayout({ style_class: 'notchnux-panel', ...VERTICAL, x_expand: true, y_expand: true });
         let w = this._weather.weatherData;
 
         // Top: analog clock · conditions.
-        let top = new St.BoxLayout({ style_class: 'nook-weather-top', vertical: false, x_expand: true });
+        let top = new St.BoxLayout({ style_class: 'nook-weather-top', ...HORIZONTAL, x_expand: true });
 
         // Analog clock column.
-        let clockCol = new St.BoxLayout({ style_class: 'nook-clock-col', vertical: true, x_align: Clutter.ActorAlign.CENTER });
+        let clockCol = new St.BoxLayout({ style_class: 'nook-clock-col', ...VERTICAL, x_align: Clutter.ActorAlign.CENTER });
         let clock = new AnalogClock(122);
         clock.setDate(new Date());
         clockCol.add_child(clock);
@@ -4030,8 +4026,8 @@ export const NotchNux = GObject.registerClass({
         top.add_child(clockCol);
 
         // Conditions column.
-        let cond = new St.BoxLayout({ style_class: 'nook-cond-col', vertical: true, x_expand: true });
-        let locRow = new St.BoxLayout({ style_class: 'nook-loc-row', vertical: false });
+        let cond = new St.BoxLayout({ style_class: 'nook-cond-col', ...VERTICAL, x_expand: true });
+        let locRow = new St.BoxLayout({ style_class: 'nook-loc-row', ...HORIZONTAL });
         locRow.add_child(new St.Icon({ icon_name: 'find-location-symbolic', icon_size: 14, y_align: Clutter.ActorAlign.CENTER }));
         locRow.add_child(new St.Label({ text: w.city || 'Locating…', y_align: Clutter.ActorAlign.CENTER }));
         let refreshWx = new St.Button({ style_class: 'nook-weather-icon-btn', reactive: true, y_align: Clutter.ActorAlign.CENTER });
@@ -4040,7 +4036,7 @@ export const NotchNux = GObject.registerClass({
         locRow.add_child(refreshWx);
         cond.add_child(locRow);
 
-        let tempRow = new St.BoxLayout({ style_class: 'nook-temp-row', vertical: false });
+        let tempRow = new St.BoxLayout({ style_class: 'nook-temp-row', ...HORIZONTAL });
         tempRow.add_child(new St.Label({ text: w.temp || '--°', style_class: 'nook-temp', x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
         tempRow.add_child(new St.Icon({ icon_name: w.icon || 'weather-few-clouds-symbolic', icon_size: 52, style_class: 'nook-cond-icon', y_align: Clutter.ActorAlign.CENTER }));
         cond.add_child(tempRow);
@@ -4051,7 +4047,7 @@ export const NotchNux = GObject.registerClass({
         let dGrid = new St.Widget({ style_class: 'nook-wx-grid', layout_manager: new Clutter.GridLayout() });
         let dl = dGrid.layout_manager;
         let mkStat = (icon, label, value) => {
-            let r = new St.BoxLayout({ style_class: 'nook-wx-stat', vertical: false });
+            let r = new St.BoxLayout({ style_class: 'nook-wx-stat', ...HORIZONTAL });
             r.add_child(new St.Icon({ icon_name: icon, icon_size: 14, style_class: 'nook-wx-icon', y_align: Clutter.ActorAlign.CENTER }));
             r.add_child(new St.Label({ text: label, style_class: 'nook-wx-label', x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
             r.add_child(new St.Label({ text: value, style_class: 'nook-wx-value', y_align: Clutter.ActorAlign.CENTER }));
@@ -4070,7 +4066,7 @@ export const NotchNux = GObject.registerClass({
             let strip = new St.BoxLayout({ style_class: 'nook-wx-hourly', x_expand: true });
             for (let [i, h] of w.hourly.entries()) {
                 let col = new St.BoxLayout({ style_class: 'nook-wx-hour' + (i === 0 ? ' nook-wx-hour-now' : ''),
-                    vertical: true, x_expand: true });
+                    ...VERTICAL, x_expand: true });
                 if (i === 0)
                     col.set_style(`background-color: rgba(${accentRgbStr()}, 0.14); border-color: rgba(${accentRgbStr()}, 0.32);`);
                 col.add_child(new St.Label({ text: h.label, style_class: 'nook-wx-hour-label', x_align: Clutter.ActorAlign.CENTER }));
@@ -4098,7 +4094,7 @@ export const NotchNux = GObject.registerClass({
         if (!this._media)
             this._media = new MediaHelper();
 
-        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-studio-panel', vertical: true, x_expand: true, y_expand: true });
+        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-studio-panel', ...VERTICAL, x_expand: true, y_expand: true });
 
         if (!this._media.available) {
             panel.add_child(new St.Label({
@@ -4118,10 +4114,10 @@ export const NotchNux = GObject.registerClass({
         if (!this._selectedMic || !mics.some(m => m.id === this._selectedMic.id))
             this._selectedMic = mics[0] || null;
 
-        let row = new St.BoxLayout({ style_class: 'nook-studio-row', vertical: false, x_expand: true });
+        let row = new St.BoxLayout({ style_class: 'nook-studio-row', ...HORIZONTAL, x_expand: true });
 
         // ---- Left: live camera square + video record button ----
-        let camCol = new St.BoxLayout({ style_class: 'nook-studio-col', vertical: true, x_align: Clutter.ActorAlign.CENTER });
+        let camCol = new St.BoxLayout({ style_class: 'nook-studio-col', ...VERTICAL, x_align: Clutter.ActorAlign.CENTER });
         let camView = new CameraView(150);
         this._studioCamView = camView;
         camCol.add_child(camView);
@@ -4137,7 +4133,7 @@ export const NotchNux = GObject.registerClass({
         row.add_child(camCol);
 
         // ---- Middle: camera + mic drop-downs ----
-        let mid = new St.BoxLayout({ style_class: 'nook-studio-mid', vertical: true, y_align: Clutter.ActorAlign.CENTER });
+        let mid = new St.BoxLayout({ style_class: 'nook-studio-mid', ...VERTICAL, y_align: Clutter.ActorAlign.CENTER });
         mid.add_child(this._mkStudioPicker('camera-web-symbolic', cams, this._selectedCam,
             (dev) => {
                 this._selectedCam = dev;
@@ -4152,7 +4148,7 @@ export const NotchNux = GObject.registerClass({
         row.add_child(mid);
 
         // ---- Right: audio recorder square ----
-        let audCol = new St.BoxLayout({ style_class: 'nook-studio-col', vertical: true, x_align: Clutter.ActorAlign.CENTER });
+        let audCol = new St.BoxLayout({ style_class: 'nook-studio-col', ...VERTICAL, x_align: Clutter.ActorAlign.CENTER });
         let audSquare = new St.Bin({ style_class: 'nook-studio-audio', x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER });
         audSquare.set_size(150, 150);
         let audIcon = new St.Icon({
@@ -4199,7 +4195,7 @@ export const NotchNux = GObject.registerClass({
 
     // A record button's inner content: a red dot + "Record"/"Stop".
     _mkRecLabel(on, idle) {
-        let box = new St.BoxLayout({ vertical: false, x_align: Clutter.ActorAlign.CENTER });
+        let box = new St.BoxLayout({ ...HORIZONTAL, x_align: Clutter.ActorAlign.CENTER });
         box.add_child(new St.Widget({ style_class: 'nook-studio-rec-dot' }));
         box.add_child(new St.Label({ text: on ? 'Stop' : idle, y_align: Clutter.ActorAlign.CENTER }));
         return box;
@@ -4209,7 +4205,7 @@ export const NotchNux = GObject.registerClass({
     // PopupMenu of the available devices. `onPick(device)` fires on selection.
     _mkStudioPicker(icon, devices, current, onPick, emptyLabel) {
         let btn = new St.Button({ style_class: 'nook-studio-picker', reactive: true, can_focus: true, x_expand: true });
-        let inner = new St.BoxLayout({ vertical: false, x_expand: true });
+        let inner = new St.BoxLayout({ ...HORIZONTAL, x_expand: true });
         inner.add_child(new St.Icon({ icon_name: icon, icon_size: 13, y_align: Clutter.ActorAlign.CENTER, style_class: 'nook-studio-picker-icon' }));
         let lbl = new St.Label({
             text: current ? current.name : emptyLabel,
@@ -4342,19 +4338,19 @@ export const NotchNux = GObject.registerClass({
     // Tab: Calendar
     // ============================================================
     _renderCalendarTab() {
-        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-calendar-panel', vertical: true, x_expand: true, y_expand: true });
+        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-calendar-panel', ...VERTICAL, x_expand: true, y_expand: true });
         let selected = this._selectedCalendarDate ?? new Date();
         selected.setHours(0, 0, 0, 0);
         this._requestCalendarServerRange(45, false);
 
-        let summary = new St.BoxLayout({ style_class: 'nook-calendar-summary', vertical: false, x_expand: true });
+        let summary = new St.BoxLayout({ style_class: 'nook-calendar-summary', ...HORIZONTAL, x_expand: true });
         let iconBox = new St.Bin({ style_class: 'nook-calendar-summary-icon', y_align: Clutter.ActorAlign.CENTER });
         let accRgb = accentRgbStr();
         iconBox.set_style(`background-color: rgba(${accRgb}, 0.18); border: 1px solid rgba(${accRgb}, 0.28);`);
         iconBox.set_child(new St.Icon({ icon_name: 'x-office-calendar-symbolic', icon_size: 24 }));
         summary.add_child(iconBox);
 
-        let text = new St.BoxLayout({ vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+        let text = new St.BoxLayout({ ...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
         this._calSummaryDay = new St.Label({
             text: fmt(selected, { weekday: 'long' }),
             style_class: 'nook-calendar-summary-day'
@@ -4609,7 +4605,7 @@ export const NotchNux = GObject.registerClass({
         });
         let row = new St.BoxLayout({
             style_class: 'nook-date-strip-row',
-            vertical: false,
+            ...HORIZONTAL,
             x_align: Clutter.ActorAlign.CENTER
         });
         strip.set_child(row);
@@ -4638,7 +4634,7 @@ export const NotchNux = GObject.registerClass({
             row._pills = [];
             for (let i = 0; i < 7; i++) {
                 let btn = new St.Button({ style_class: 'nook-date-pill', reactive: true, can_focus: true });
-                let col = new St.BoxLayout({ vertical: true, x_align: Clutter.ActorAlign.CENTER });
+                let col = new St.BoxLayout({ ...VERTICAL, x_align: Clutter.ActorAlign.CENTER });
                 let weekday = new St.Label({ style_class: 'nook-date-weekday', x_align: Clutter.ActorAlign.CENTER });
                 let number = new St.Label({ style_class: 'nook-date-number', x_align: Clutter.ActorAlign.CENTER });
                 let todayTag = new St.Label({ text: 'TODAY', style_class: 'nook-date-today', x_align: Clutter.ActorAlign.CENTER });
@@ -4784,10 +4780,10 @@ export const NotchNux = GObject.registerClass({
         let selectedDate = this._startOfDay(options.selectedDate ?? new Date());
         let outer = new St.BoxLayout({
             style_class: options.fullHeight ? 'nook-calendar nook-calendar-full' : 'nook-calendar',
-            vertical: true,
+            ...VERTICAL,
             x_expand: true
         });
-        let header = new St.BoxLayout({ style_class: 'nook-calendar-header', vertical: false, x_expand: true });
+        let header = new St.BoxLayout({ style_class: 'nook-calendar-header', ...HORIZONTAL, x_expand: true });
         header.add_child(new St.Label({ text: title, style_class: 'nook-calendar-title', x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
         header.add_child(new St.Label({
             text: fmt(selectedDate, { weekday: 'short', month: 'short', day: 'numeric' }),
@@ -4798,12 +4794,12 @@ export const NotchNux = GObject.registerClass({
         let scroll = new St.ScrollView({ style_class: 'nook-calendar-scroll', x_expand: true });
         scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
         scroll.set_overlay_scrollbars(true);
-        let list = new St.BoxLayout({ style_class: 'nook-calendar-list', vertical: true, x_expand: true });
+        let list = new St.BoxLayout({ style_class: 'nook-calendar-list', ...VERTICAL, x_expand: true });
         scroll.set_child(list);
 
         let events = this._collectCalendarEvents(days, selectedDate);
         if (events.length === 0) {
-            let empty = new St.BoxLayout({ style_class: 'nook-calendar-empty', vertical: true, x_expand: true, x_align: Clutter.ActorAlign.CENTER });
+            let empty = new St.BoxLayout({ style_class: 'nook-calendar-empty', ...VERTICAL, x_expand: true, x_align: Clutter.ActorAlign.CENTER });
             let emptyIcon = new St.Icon({ icon_name: 'x-office-calendar-symbolic', icon_size: 24, style_class: 'nook-calendar-empty-icon', x_align: Clutter.ActorAlign.CENTER });
             emptyIcon.set_style(`color: rgba(${accentRgbStr()}, 0.75);`);
             empty.add_child(emptyIcon);
@@ -4817,12 +4813,12 @@ export const NotchNux = GObject.registerClass({
                 day.set_style(`color: ${accentHex()};`);
                 list.add_child(day);
                 for (let ev of group.events) {
-                    let row = new St.BoxLayout({ style_class: 'nook-calendar-event', vertical: false, x_expand: true });
-                    let time = new St.BoxLayout({ style_class: 'nook-calendar-time', vertical: true, y_align: Clutter.ActorAlign.START });
+                    let row = new St.BoxLayout({ style_class: 'nook-calendar-event', ...HORIZONTAL, x_expand: true });
+                    let time = new St.BoxLayout({ style_class: 'nook-calendar-time', ...VERTICAL, y_align: Clutter.ActorAlign.START });
                     time.add_child(new St.Label({ text: ev.allDay ? 'All' : this._fmtEventTime(ev.start), style_class: 'nook-calendar-start' }));
                     time.add_child(new St.Label({ text: ev.allDay ? 'day' : this._fmtEventTime(ev.end), style_class: 'nook-calendar-end' }));
                     row.add_child(time);
-                    let text = new St.BoxLayout({ vertical: true, x_expand: true });
+                    let text = new St.BoxLayout({ ...VERTICAL, x_expand: true });
                     text.add_child(new St.Label({ text: this._ellipsize(ev.title || 'Untitled event', 42), style_class: 'nook-calendar-event-title' }));
                     if (ev.location)
                         text.add_child(new St.Label({ text: this._ellipsize(ev.location, 56), style_class: 'nook-calendar-event-location' }));
@@ -4927,7 +4923,7 @@ export const NotchNux = GObject.registerClass({
     // Tab: Notifications
     // ============================================================
     _renderNotificationsTab() {
-        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-alerts-panel', vertical: true, x_expand: true, y_expand: true });
+        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-alerts-panel', ...VERTICAL, x_expand: true, y_expand: true });
 
         let messages = this._collectNotifications();
         // Keep the tab-strip count badge in sync with what we're rendering.
@@ -4938,8 +4934,8 @@ export const NotchNux = GObject.registerClass({
         this._notifSignature = this._notificationsSignature(messages);
 
         // Header: "Notifications" + count badge · Clear all.
-        let header = new St.BoxLayout({ style_class: 'nook-alerts-header', vertical: false, x_expand: true });
-        let titleBox = new St.BoxLayout({ vertical: false, x_expand: true });
+        let header = new St.BoxLayout({ style_class: 'nook-alerts-header', ...HORIZONTAL, x_expand: true });
+        let titleBox = new St.BoxLayout({ ...HORIZONTAL, x_expand: true });
         titleBox.add_child(new St.Label({ text: 'Notifications', style_class: 'nook-alerts-title', y_align: Clutter.ActorAlign.CENTER }));
         if (messages.length > 0) {
             let badge = new St.Bin({ style_class: 'nook-alerts-badge', y_align: Clutter.ActorAlign.CENTER });
@@ -4949,7 +4945,7 @@ export const NotchNux = GObject.registerClass({
         }
         header.add_child(titleBox);
         let clearBtn = new St.Button({ style_class: 'nook-clear-btn', reactive: true, y_align: Clutter.ActorAlign.CENTER });
-        let clearRow = new St.BoxLayout({ vertical: false });
+        let clearRow = new St.BoxLayout({ ...HORIZONTAL });
         clearRow.add_child(new St.Icon({ icon_name: 'edit-clear-all-symbolic', icon_size: 13, y_align: Clutter.ActorAlign.CENTER }));
         clearRow.add_child(new St.Label({ text: 'Clear all', y_align: Clutter.ActorAlign.CENTER }));
         clearBtn.set_child(clearRow);
@@ -4962,13 +4958,13 @@ export const NotchNux = GObject.registerClass({
             // capped at 5 with a "+N more" stub, so the whole queue is reachable.
             let scroll = new St.ScrollView({ style_class: 'nook-alerts-scroll', x_expand: true, y_expand: true });
             scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
-            let list = new St.BoxLayout({ style_class: 'nook-alerts-list', vertical: true, x_expand: true });
+            let list = new St.BoxLayout({ style_class: 'nook-alerts-list', ...VERTICAL, x_expand: true });
             for (let m of messages)
                 list.add_child(this._buildAlertCard(m));
             scroll.set_child(list);
             panel.add_child(scroll);
         } else {
-            let empty = new St.BoxLayout({ style_class: 'nook-alerts-empty', vertical: true, x_expand: true, y_expand: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER });
+            let empty = new St.BoxLayout({ style_class: 'nook-alerts-empty', ...VERTICAL, x_expand: true, y_expand: true, x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER });
             empty.add_child(new St.Icon({ icon_name: 'preferences-system-notifications-symbolic', icon_size: 30, style_class: 'nook-alerts-empty-icon', x_align: Clutter.ActorAlign.CENTER }));
             empty.add_child(new St.Label({ text: 'You’re all caught up', style_class: 'nook-alerts-empty-title', x_align: Clutter.ActorAlign.CENTER }));
             empty.add_child(new St.Label({ text: 'New notifications will land here.', style_class: 'nook-alerts-empty-sub', x_align: Clutter.ActorAlign.CENTER }));
@@ -5050,14 +5046,14 @@ export const NotchNux = GObject.registerClass({
         // otherwise (keeps non-interactive cards out of the focus chain).
         let card = hasMore
             ? new St.Button({ style_class: cls, x_expand: true, reactive: true, can_focus: true })
-            : new St.BoxLayout({ style_class: cls, vertical: false, x_expand: true });
+            : new St.BoxLayout({ style_class: cls, ...HORIZONTAL, x_expand: true });
         // Accented cards follow the user accent instead of the CSS blue.
         if (meta.accent) {
             let accRgb = accentRgbStr();
             card.set_style(`background-color: rgba(${accRgb}, 0.1); border: 1px solid rgba(${accRgb}, 0.28);`);
         }
 
-        let inner = new St.BoxLayout({ vertical: false, x_expand: true });
+        let inner = new St.BoxLayout({ ...HORIZONTAL, x_expand: true });
         if (hasMore)
             card.set_child(inner);
 
@@ -5066,8 +5062,8 @@ export const NotchNux = GObject.registerClass({
         badge.set_style(`background-color: ${meta.color};`);
         inner.add_child(badge);
 
-        let txt = new St.BoxLayout({ vertical: true, x_expand: true });
-        let titleRow = new St.BoxLayout({ vertical: false, x_expand: true });
+        let txt = new St.BoxLayout({ ...VERTICAL, x_expand: true });
+        let titleRow = new St.BoxLayout({ ...HORIZONTAL, x_expand: true });
         let titleLabel = new St.Label({ style_class: 'nook-alert-title', x_expand: true, y_align: Clutter.ActorAlign.CENTER });
         titleRow.add_child(titleLabel);
         // Expand/collapse chevron, only on cards that have more to reveal.
@@ -5598,13 +5594,13 @@ export const NotchNux = GObject.registerClass({
     // fallback), or removed. A small notes box below offers quick-share text.
     // ============================================================
     _renderShelfTab() {
-        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-shelf-panel', vertical: true, x_expand: true, y_expand: true });
+        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-shelf-panel', ...VERTICAL, x_expand: true, y_expand: true });
 
         let files = this._shelf.getFiles();
 
         // Header: "Shelf" + count badge · Add file · Clear.
-        let header = new St.BoxLayout({ style_class: 'nook-shelf-header', vertical: false, x_expand: true });
-        let titleBox = new St.BoxLayout({ vertical: false, x_expand: true });
+        let header = new St.BoxLayout({ style_class: 'nook-shelf-header', ...HORIZONTAL, x_expand: true });
+        let titleBox = new St.BoxLayout({ ...HORIZONTAL, x_expand: true });
         titleBox.add_child(new St.Label({ text: 'Shelf', style_class: 'nook-shelf-title', y_align: Clutter.ActorAlign.CENTER }));
         if (files.length > 0) {
             let badge = new St.Bin({ style_class: 'nook-shelf-badge', y_align: Clutter.ActorAlign.CENTER });
@@ -5616,7 +5612,7 @@ export const NotchNux = GObject.registerClass({
 
         if (files.length > 0) {
             let clearBtn = new St.Button({ style_class: 'nook-clear-btn', reactive: true, y_align: Clutter.ActorAlign.CENTER });
-            let clearRow = new St.BoxLayout({ vertical: false });
+            let clearRow = new St.BoxLayout({ ...HORIZONTAL });
             clearRow.add_child(new St.Icon({ icon_name: 'edit-clear-all-symbolic', icon_size: 13, y_align: Clutter.ActorAlign.CENTER }));
             clearRow.add_child(new St.Label({ text: 'Clear', y_align: Clutter.ActorAlign.CENTER }));
             clearBtn.set_child(clearRow);
@@ -5634,7 +5630,7 @@ export const NotchNux = GObject.registerClass({
         if (files.length > 0) {
             let scroll = new St.ScrollView({ style_class: 'nook-shelf-scroll', x_expand: true, y_expand: true });
             scroll.set_policy(St.PolicyType.NEVER, St.PolicyType.AUTOMATIC);
-            let list = new St.BoxLayout({ style_class: 'nook-shelf-list', vertical: true, x_expand: true });
+            let list = new St.BoxLayout({ style_class: 'nook-shelf-list', ...VERTICAL, x_expand: true });
             for (let f of files)
                 list.add_child(this._buildShelfRow(f, devices));
             scroll.set_child(list);
@@ -5674,7 +5670,7 @@ export const NotchNux = GObject.registerClass({
             style_class: spacious ? 'nook-shelf-drop nook-shelf-drop-spacious' : 'nook-shelf-drop',
             reactive: true, can_focus: false, x_expand: true,
         });
-        let inner = new St.BoxLayout({ vertical: true, x_expand: true,
+        let inner = new St.BoxLayout({ ...VERTICAL, x_expand: true,
             x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER });
         inner.add_child(new St.Icon({ icon_name: 'document-send-symbolic',
             icon_size: spacious ? 30 : 22, style_class: 'nook-shelf-drop-icon',
@@ -5694,7 +5690,7 @@ export const NotchNux = GObject.registerClass({
         // also trigger the zone's browse click, so it swallows the event.
         let pasteBtn = new St.Button({ style_class: 'nook-shelf-paste', reactive: true, can_focus: false,
             x_align: Clutter.ActorAlign.CENTER });
-        let pasteRow = new St.BoxLayout({ vertical: false });
+        let pasteRow = new St.BoxLayout({ ...HORIZONTAL });
         pasteRow.add_child(new St.Icon({ icon_name: 'edit-paste-symbolic', icon_size: 12, y_align: Clutter.ActorAlign.CENTER }));
         pasteRow.add_child(new St.Label({ text: 'Paste from clipboard', y_align: Clutter.ActorAlign.CENTER }));
         pasteBtn.set_child(pasteRow);
@@ -5858,20 +5854,20 @@ export const NotchNux = GObject.registerClass({
 
     // One file row: icon + name/size, then Send / Copy / Open / Reveal / Remove.
     _buildShelfRow(f, devices) {
-        let row = new St.BoxLayout({ style_class: 'nook-shelf-row', vertical: false, x_expand: true });
+        let row = new St.BoxLayout({ style_class: 'nook-shelf-row', ...HORIZONTAL, x_expand: true });
         let rowIcon = new St.Icon({ icon_size: 20, style_class: 'nook-shelf-row-icon', y_align: Clutter.ActorAlign.CENTER });
         if (f.gicon) rowIcon.gicon = f.gicon;
         else rowIcon.icon_name = 'text-x-generic-symbolic';
         row.add_child(rowIcon);
 
-        let meta = new St.BoxLayout({ vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+        let meta = new St.BoxLayout({ ...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
         let name = new St.Label({ text: f.name, style_class: 'nook-shelf-row-name' });
         name.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
         meta.add_child(name);
         meta.add_child(new St.Label({ text: f.sizeStr, style_class: 'nook-shelf-row-size' }));
         row.add_child(meta);
 
-        let actions = new St.BoxLayout({ style_class: 'nook-shelf-row-actions', vertical: false, y_align: Clutter.ActorAlign.CENTER });
+        let actions = new St.BoxLayout({ style_class: 'nook-shelf-row-actions', ...HORIZONTAL, y_align: Clutter.ActorAlign.CENTER });
         const mkAction = (icon, tip, fn) => {
             let b = new St.Button({ style_class: 'nook-shelf-action', reactive: true, can_focus: false });
             b.set_child(new St.Icon({ icon_name: icon, icon_size: 14 }));
@@ -5918,9 +5914,9 @@ export const NotchNux = GObject.registerClass({
     // user when there's no device to send to. `devices` is the list already
     // gathered by the render.
     _buildQuickShareBox(devices) {
-        let box = new St.BoxLayout({ style_class: 'nook-share-box', vertical: true, x_expand: true });
+        let box = new St.BoxLayout({ style_class: 'nook-share-box', ...VERTICAL, x_expand: true });
 
-        let head = new St.BoxLayout({ vertical: false, x_expand: true });
+        let head = new St.BoxLayout({ ...HORIZONTAL, x_expand: true });
         head.add_child(new St.Label({ text: 'Quick share', style_class: 'nook-share-title', x_expand: true, y_align: Clutter.ActorAlign.CENTER }));
 
         // Right-hand hint reflects device state at a glance.
@@ -6000,7 +5996,7 @@ export const NotchNux = GObject.registerClass({
     // and whichever image you land on becomes current and restarts the timer.
     // ============================================================
     _renderWallpaperTab() {
-        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-wp-panel', vertical: true, x_expand: true, y_expand: true });
+        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nook-wp-panel', ...VERTICAL, x_expand: true, y_expand: true });
 
         let wpCfg = this._config.wallpaper;
         let items = this._wallpaper.getWallpapers();
@@ -6008,8 +6004,8 @@ export const NotchNux = GObject.registerClass({
         // Header: title + current filename. Rotation is configured from the
         // dashboard's own settings gear (this tab is purely the picker), so we
         // deliberately don't repeat a settings shortcut here.
-        let header = new St.BoxLayout({ style_class: 'nook-wp-header', vertical: false, x_expand: true });
-        let titleBox = new St.BoxLayout({ vertical: true, x_expand: true });
+        let header = new St.BoxLayout({ style_class: 'nook-wp-header', ...HORIZONTAL, x_expand: true });
+        let titleBox = new St.BoxLayout({ ...VERTICAL, x_expand: true });
         titleBox.add_child(new St.Label({ text: 'Wallpaper', style_class: 'nook-wp-title' }));
         let currentItem = items.find(w => w.current);
         this._wpSubtitle = new St.Label({
@@ -6105,7 +6101,7 @@ export const NotchNux = GObject.registerClass({
     }
 
     _buildWallpaperEmpty(icon, title, sub) {
-        let box = new St.BoxLayout({ style_class: 'nook-wp-empty', vertical: true, x_expand: true, y_expand: true,
+        let box = new St.BoxLayout({ style_class: 'nook-wp-empty', ...VERTICAL, x_expand: true, y_expand: true,
             x_align: Clutter.ActorAlign.CENTER, y_align: Clutter.ActorAlign.CENTER });
         box.add_child(new St.Icon({ icon_name: icon, icon_size: 32, style_class: 'nook-wp-empty-icon', x_align: Clutter.ActorAlign.CENTER }));
         box.add_child(new St.Label({ text: title, style_class: 'nook-wp-empty-title', x_align: Clutter.ActorAlign.CENTER }));

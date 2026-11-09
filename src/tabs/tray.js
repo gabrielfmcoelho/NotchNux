@@ -37,6 +37,7 @@ import {
     POWER_PROFILES, parsePowerProfiles,
     fanLevelOf, fanWrites, writeSysfs, fanUsable, fmtRpm,
 } from '../helpers/sensors.js';
+import { VERTICAL } from '../helpers/compat.js';
 
 const NIGHT_LIGHT_SCHEMA = 'org.gnome.settings-daemon.plugins.color';
 const DEV_CAP = 3;
@@ -100,13 +101,13 @@ function onStyle() {
 
 const TrayFeatures = {
     _renderSystemTab() {
-        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nn-cc', vertical: true, x_expand: true });
+        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nn-cc', ...VERTICAL, x_expand: true });
         let ui = { conn: {}, tiles: {}, sliders: {} };
         this._trayUi = ui;
 
         // ---- Row 1: connectivity + quick tiles ----
         let top = new St.BoxLayout({ style_class: 'nn-cc-top', x_expand: true });
-        let conn = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-conn', vertical: true, x_expand: true });
+        let conn = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-conn', ...VERTICAL, x_expand: true });
         ui.conn.wifi = this._ccRow(conn, 'Wi-Fi', () => {
             let on = !this._system.getWifiInfo().enabled;
             this._system.setWifiEnabled(on);
@@ -128,7 +129,7 @@ const TrayFeatures = {
             ui.conn.vpn = this._ccRow(conn, 'VPN', () => this._toggleVpnRow(), () => this._openVpnOverlay());
         top.add_child(conn);
 
-        let grid = new St.BoxLayout({ style_class: 'nn-cc-grid', vertical: true });
+        let grid = new St.BoxLayout({ style_class: 'nn-cc-grid', ...VERTICAL });
         let gridRows = [0, 1].map(() => {
             let r = new St.BoxLayout({ style_class: 'nn-cc-grid-row', y_expand: true });
             grid.add_child(r);
@@ -159,7 +160,7 @@ const TrayFeatures = {
         panel.add_child(top);
 
         // ---- Row 2: sliders ----
-        let sliders = new St.BoxLayout({ style_class: 'nn-cc-sliders', vertical: true, x_expand: true });
+        let sliders = new St.BoxLayout({ style_class: 'nn-cc-sliders', ...VERTICAL, x_expand: true });
         ui.sliders.volume = this._ccSlider(sliders, this._system.volume / 100, v => {
             if (this._system.isMuted && v > 0)
                 this._system.setMuted(false);
@@ -177,13 +178,13 @@ const TrayFeatures = {
 
         // ---- Row 3: devices + system ----
         let lower = new St.BoxLayout({ style_class: 'nn-cc-lower', x_expand: true });
-        let devCard = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-list nn-cc-devcard', vertical: true, x_expand: true });
+        let devCard = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-list nn-cc-devcard', ...VERTICAL, x_expand: true });
         devCard.add_child(label('DEVICES', 'nook-card-eyebrow'));
-        ui.devList = new St.BoxLayout({ style_class: 'nn-cc-devlist', vertical: true, x_expand: true });
+        ui.devList = new St.BoxLayout({ style_class: 'nn-cc-devlist', ...VERTICAL, x_expand: true });
         devCard.add_child(ui.devList);
         lower.add_child(devCard);
 
-        let sysCard = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-list', vertical: true, x_expand: true });
+        let sysCard = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-list', ...VERTICAL, x_expand: true });
         sysCard.add_child(label('SYSTEM', 'nook-card-eyebrow'));
         this._trayMeters = {
             cpu: this._ccMeter(sysCard, 'CPU'),
@@ -207,13 +208,13 @@ const TrayFeatures = {
         panel.add_child(lower);
 
         // ---- Row 3a: power mode, when power-profiles-daemon runs ----
-        let powerSlot = new St.BoxLayout({ vertical: true, x_expand: true });
+        let powerSlot = new St.BoxLayout({ ...VERTICAL, x_expand: true });
         panel.add_child(powerSlot);
         this._addTrayPower(powerSlot, ui);
 
         // ---- Row 3b: fan levels (beta), once the one-time setup ran ----
         if (this._config.fanControl) {
-            let slot = new St.BoxLayout({ vertical: true, x_expand: true });
+            let slot = new St.BoxLayout({ ...VERTICAL, x_expand: true });
             panel.add_child(slot);
             this._addTrayFan(slot, ui);
         }
@@ -246,7 +247,7 @@ const TrayFeatures = {
 
         let textBtn = new St.Button({ style_class: 'nn-cc-rowbtn', x_expand: true, can_focus: !!onOpen });
         let box = new St.BoxLayout({ x_expand: true });
-        let texts = new St.BoxLayout({ vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
+        let texts = new St.BoxLayout({ ...VERTICAL, x_expand: true, y_align: Clutter.ActorAlign.CENTER });
         texts.add_child(label(name, 'nn-cc-name'));
         let sub = label('', 'nn-cc-sub');
         texts.add_child(sub);
@@ -280,7 +281,7 @@ const TrayFeatures = {
     _ccTile(parent, name, onClick) {
         let btn = new St.Button({ style_class: 'nn-cc-card nn-cc-tile', x_expand: true, y_expand: true,
             can_focus: true, accessible_name: name, reactive: !!onClick });
-        let col = new St.BoxLayout({ vertical: true, x_expand: true });
+        let col = new St.BoxLayout({ ...VERTICAL, x_expand: true });
         let circle = new St.Bin({ style_class: 'nn-cc-circle nn-cc-circle-sm', x_align: Clutter.ActorAlign.START });
         let icon = new St.Icon({ icon_size: 15 });
         circle.set_child(icon);
@@ -439,7 +440,7 @@ const TrayFeatures = {
         let st = await this._readPower();
         if (!st || this._destroyed || this._trayUi !== ui)
             return;
-        let card = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-list nn-cc-fan', vertical: true, x_expand: true });
+        let card = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-list nn-cc-fan', ...VERTICAL, x_expand: true });
         card.add_child(label('POWER MODE', 'nook-card-eyebrow'));
         let seg = new St.BoxLayout({ style_class: 'nook-segmented', x_expand: true });
         let btns = {};
@@ -563,7 +564,7 @@ const TrayFeatures = {
         let { fan } = await this._ensureSensors();
         if (!(await fanUsable(fan)) || this._destroyed || this._trayUi !== ui)
             return;
-        let card = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-list nn-cc-fan', vertical: true, x_expand: true });
+        let card = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-list nn-cc-fan', ...VERTICAL, x_expand: true });
         let head = new St.BoxLayout({ x_expand: true });
         head.add_child(label('FAN · BETA', 'nook-card-eyebrow', { x_expand: true }));
         let rpm = label('', 'nook-card-meta');

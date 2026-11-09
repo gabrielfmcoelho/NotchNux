@@ -61,6 +61,7 @@ import { addPressFeedback } from '../helpers/motion.js';
 import { accentHex } from '../helpers/widgets.js';
 import { logError } from '../helpers/log.js';
 import { SYS, statColor, iconBtn } from './ledge.js';
+import { VERTICAL } from '../helpers/compat.js';
 
 const SWEEP_S = 30;
 const DEBOUNCE_MS = 150;
@@ -725,7 +726,7 @@ const ClaudeFeatures = {
     // ================================================================ tab
 
     _renderClaudeTab() {
-        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nn-claude', vertical: true, x_expand: true });
+        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nn-claude', ...VERTICAL, x_expand: true });
 
         let seg = new St.BoxLayout({ style_class: 'nook-segmented', x_align: Clutter.ActorAlign.START });
         let segBtns = {};
@@ -748,23 +749,23 @@ const ClaudeFeatures = {
         panel.add_child(top);
 
         // ---- Sessions ----
-        let sessionsView = new St.BoxLayout({ vertical: true, x_expand: true });
-        let usageCard = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-list', vertical: true, x_expand: true });
+        let sessionsView = new St.BoxLayout({ ...VERTICAL, x_expand: true });
+        let usageCard = new St.BoxLayout({ style_class: 'nn-cc-card nn-cc-list', ...VERTICAL, x_expand: true });
         usageCard.add_child(text('USAGE', 'nook-card-eyebrow'));
         let five = this._ccMeter(usageCard, '5-hour');
         let week = this._ccMeter(usageCard, 'Weekly');
         let resets = text('', 'nook-card-meta nn-claude-resets');
         usageCard.add_child(resets);
         sessionsView.add_child(usageCard);
-        let rcBox = new St.BoxLayout({ style_class: 'nn-cc-list', vertical: true, x_expand: true });
+        let rcBox = new St.BoxLayout({ style_class: 'nn-cc-list', ...VERTICAL, x_expand: true });
         let rc = this._ccRow(rcBox, 'Remote Control for new sessions', () => this._toggleClaudeRemote());
         sessionsView.add_child(rcBox);
-        let list = new St.BoxLayout({ style_class: 'nn-claude-list', vertical: true, x_expand: true });
+        let list = new St.BoxLayout({ style_class: 'nn-claude-list', ...VERTICAL, x_expand: true });
         sessionsView.add_child(scrolled(list));
         panel.add_child(sessionsView);
 
         // ---- MCP ----
-        let mcpView = new St.BoxLayout({ vertical: true, x_expand: true });
+        let mcpView = new St.BoxLayout({ ...VERTICAL, x_expand: true });
         let head = new St.BoxLayout({ style_class: 'nn-claude-head', x_expand: true });
         let meta = text('', 'nook-card-meta', { x_expand: true });
         head.add_child(meta);
@@ -773,12 +774,12 @@ const ClaudeFeatures = {
         checkBtn.connect('clicked', () => this._checkClaudeMcp());
         head.add_child(checkBtn);
         mcpView.add_child(head);
-        let mcpList = new St.BoxLayout({ style_class: 'nn-claude-list', vertical: true, x_expand: true });
+        let mcpList = new St.BoxLayout({ style_class: 'nn-claude-list', ...VERTICAL, x_expand: true });
         mcpView.add_child(scrolled(mcpList));
         panel.add_child(mcpView);
 
         // ---- Rules ----
-        let rulesView = new St.BoxLayout({ vertical: true, x_expand: true });
+        let rulesView = new St.BoxLayout({ ...VERTICAL, x_expand: true });
         let modeRow = new St.BoxLayout({ style_class: 'nn-claude-head', x_expand: true });
         modeRow.add_child(text('Default mode', 'nn-claude-name', { x_expand: true }));
         let modeSeg = new St.BoxLayout({ style_class: 'nook-segmented', y_align: Clutter.ActorAlign.CENTER });
@@ -793,15 +794,15 @@ const ClaudeFeatures = {
         rulesView.add_child(modeRow);
         let modeNote = text('', 'nook-card-meta nn-claude-note');
         rulesView.add_child(modeNote);
-        let rulesList = new St.BoxLayout({ style_class: 'nn-claude-list', vertical: true, x_expand: true });
+        let rulesList = new St.BoxLayout({ style_class: 'nn-claude-list', ...VERTICAL, x_expand: true });
         rulesView.add_child(scrolled(rulesList));
         panel.add_child(rulesView);
 
         // ---- Plugins & skills ----
-        let pluginsView = new St.BoxLayout({ vertical: true, x_expand: true });
+        let pluginsView = new St.BoxLayout({ ...VERTICAL, x_expand: true });
         let extrasNote = text('', 'nook-card-meta nn-claude-note');
         pluginsView.add_child(extrasNote);
-        let extrasList = new St.BoxLayout({ style_class: 'nn-claude-list nn-cc-list', vertical: true, x_expand: true });
+        let extrasList = new St.BoxLayout({ style_class: 'nn-claude-list nn-cc-list', ...VERTICAL, x_expand: true });
         pluginsView.add_child(scrolled(extrasList));
         panel.add_child(pluginsView);
 
@@ -908,7 +909,7 @@ const ClaudeFeatures = {
             ui.ages = [];
             ui.metas = [];
             if (sessions.length === 0) {
-                let empty = new St.BoxLayout({ style_class: 'nook-empty', vertical: true, x_expand: true });
+                let empty = new St.BoxLayout({ style_class: 'nook-empty', ...VERTICAL, x_expand: true });
                 empty.add_child(new St.Icon({ icon_name: 'utilities-terminal-symbolic', icon_size: 22,
                     style_class: 'nook-dim', x_align: Clutter.ActorAlign.CENTER }));
                 empty.add_child(new St.Label({ text: 'No Claude Code sessions running',
@@ -1007,7 +1008,7 @@ const ClaudeFeatures = {
                 ui.list.add_child(this._buildRuleRow(f, rule));
         }
         if (!any) {
-            let empty = new St.BoxLayout({ style_class: 'nook-empty', vertical: true, x_expand: true });
+            let empty = new St.BoxLayout({ style_class: 'nook-empty', ...VERTICAL, x_expand: true });
             empty.add_child(new St.Icon({ icon_name: 'security-high-symbolic', icon_size: 22,
                 style_class: 'nook-dim', x_align: Clutter.ActorAlign.CENTER }));
             empty.add_child(new St.Label({ text: r.loaded ? 'No permission rules' : 'Reading settings…',
@@ -1372,7 +1373,7 @@ const ClaudeFeatures = {
         if (sum.off)
             ui.list.add_child(text(`${sum.off} not configured`, 'nook-card-meta nn-claude-mcp-sum'));
         if (!sum.problems.length && !sum.ok.length && !sum.off) {
-            let empty = new St.BoxLayout({ style_class: 'nook-empty', vertical: true, x_expand: true });
+            let empty = new St.BoxLayout({ style_class: 'nook-empty', ...VERTICAL, x_expand: true });
             empty.add_child(new St.Icon({ icon_name: 'network-server-symbolic', icon_size: 22,
                 style_class: 'nook-dim', x_align: Clutter.ActorAlign.CENTER }));
             empty.add_child(new St.Label({ text: m.check ? 'No MCP servers' : 'No MCP problems known',
@@ -1389,7 +1390,7 @@ const ClaudeFeatures = {
             accessible_name: `${p.name}: ${state}` });
         let row = new St.BoxLayout({ x_expand: true });
         row.add_child(dot(color));
-        let col = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'nn-claude-col' });
+        let col = new St.BoxLayout({ ...VERTICAL, x_expand: true, style_class: 'nn-claude-col' });
         col.add_child(text(p.name, 'nn-claude-name'));
         if (p.detail || hint)
             col.add_child(text(p.detail || hint, 'nook-card-meta'));
@@ -1472,7 +1473,7 @@ const ClaudeFeatures = {
             accessible_name: `${s.name}: ${STATE_TEXT[s.state]}` });
         let row = new St.BoxLayout({ x_expand: true });
         row.add_child(dot(stateColor(s.state)));
-        let col = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'nn-claude-col' });
+        let col = new St.BoxLayout({ ...VERTICAL, x_expand: true, style_class: 'nn-claude-col' });
         col.add_child(text(s.name, 'nn-claude-name'));
         // The folder, or while it works and activity is connected, what it's doing.
         let meta = text('', 'nook-card-meta', { visible: false });

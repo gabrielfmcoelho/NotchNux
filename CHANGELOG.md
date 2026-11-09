@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — runs on GNOME Shell 46 to 51
+- NotchNux now loads on GNOME 46, 47, 48, 49, 50 and 51 (it was 50 only,
+  and showed as "out of date" on 51).
+- GNOME 51 removed the `vertical` widget property and `Shell.GLSLEffect`.
+  Layouts now pick `orientation` or `vertical` for the running shell, and the
+  notch mask, wallpaper deck, wallpaper reveal and rounded camera preview
+  share one shader base that uses `Clutter.ShaderEffect` on 51 and
+  `Shell.GLSLEffect` before it.
+- The wallpaper reveal on GNOME 51 decodes the new image itself, since
+  Mutter no longer loads background files.
+- On GNOME 46–47 the notch stays drawn over maximized windows with *Reclaim
+  panel space* on (the unredirect inhibit only worked on 48+).
+
 ### Fixed — less CPU and heat from the pill and over fullscreen apps
 - A paused track's long title no longer scrolls forever: the title and the
   EQ bars move only while a track plays (each frame of them is a redraw of

@@ -16,17 +16,44 @@
 
 import Clutter from 'gi://Clutter';
 import Cogl from 'gi://Cogl';
+import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
-import Shell from 'gi://Shell';
 import St from 'gi://St';
+
+import { SnippetEffect } from './shader.js';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 export const TRANSITIONS = ['grow', 'wipe', 'fade', 'none'];
 export const TRANSITION_LABELS = ['Grow from notch', 'Slanted wipe', 'Fade', 'None'];
+
+// GNOME 46–50 have Meta.BackgroundImageCache + Meta.Background.set_file();
+// GNOME 51 removed both and only takes textures (set_texture).
+const HAS_IMAGE_CACHE = typeof Meta.BackgroundImageCache?.get_default === 'function';
+
+// Decode an image file off the main thread into a Cogl texture (GNOME 51+).
+async function loadTexture(file) {
+    let stream = await new Promise((resolve, reject) => {
+        file.read_async(GLib.PRIORITY_DEFAULT, null, (f, res) => {
+            try { resolve(f.read_finish(res)); } catch (e) { reject(e); }
+        });
+    });
+    let pixbuf = await new Promise((resolve, reject) => {
+        GdkPixbuf.Pixbuf.new_from_stream_async(stream, null, (s, res) => {
+            try { resolve(GdkPixbuf.Pixbuf.new_from_stream_finish(res)); } catch (e) { reject(e); }
+        });
+    });
+    stream.close_async(GLib.PRIORITY_DEFAULT, null, null);
+    pixbuf = pixbuf.apply_embedded_orientation() ?? pixbuf;
+    let ctx = global.stage.context.get_backend().get_cogl_context();
+    return Cogl.Texture2D.new_from_data(ctx,
+        pixbuf.get_width(), pixbuf.get_height(),
+        pixbuf.get_has_alpha() ? Cogl.PixelFormat.RGBA_8888 : Cogl.PixelFormat.RGB_888,
+        pixbuf.get_rowstride(), pixbuf.get_pixels());
+}
 
 const DURATION = { grow: 1100, wipe: 950, fade: 700 };
 // After picture-uri is written GNOME cross-fades its own actors for 1 s
@@ -73,22 +100,20 @@ cogl_color_out = c * a;
 `;
 
 const RevealMask = GObject.registerClass(
-class RevealMask extends Shell.GLSLEffect {
+class RevealMask extends SnippetEffect {
+    static snippetDeclarations = DECLS;
+    static snippetCode = CODE;
+
     _init(width, height, origin, mode) {
         super._init();
-        this._progLoc = this.get_uniform_location('progress');
-        this.set_uniform_float(this.get_uniform_location('size'), 2, [width, height]);
-        this.set_uniform_float(this.get_uniform_location('origin'), 2, origin);
-        this.set_uniform_float(this.get_uniform_location('mode'), 1, [mode]);
+        this.setUniform('size', 2, [width, height]);
+        this.setUniform('origin', 2, origin);
+        this.setUniform('mode', 1, [mode]);
         this.setProgress(0);
     }
 
-    vfunc_build_pipeline() {
-        this.add_glsl_snippet(Cogl.SnippetHook.FRAGMENT, DECLS, CODE, false);
-    }
-
     setProgress(p) {
-        this.set_uniform_float(this._progLoc, 1, [p]);
+        this.setUniform('progress', 1, [p]);
         this.queue_repaint();
     }
 });
@@ -142,32 +167,57 @@ export class WallpaperTransition {
         let run = {
             commit, committed: false, actors: [], masks: [],
             timeline: null, sources: [], imageSignal: null, image: null,
+            file: null, texture: null,
         };
         this._run = run;
 
+        let start = () => {
+            if (this._run !== run)
+                return;
+            try {
+                this._start(run, run.file, style);
+            } catch (e) {
+                logError(e, 'NotchNux: wallpaper transition');
+                this._finish(true);
+            }
+        };
+        let waitForLoad = () => {
+            // Never hold the change hostage to a slow/broken decode.
+            run.sources.push(GLib.timeout_add(GLib.PRIORITY_DEFAULT, LOAD_TIMEOUT_MS, () => {
+                if (this._run === run)
+                    this._finish(true);
+                return GLib.SOURCE_REMOVE;
+            }));
+        };
+
         try {
-            let file = Gio.File.new_for_path(path);
-            let image = Meta.BackgroundImageCache.get_default().load(file);
-            let start = () => {
-                if (this._run !== run)
-                    return;
-                this._start(run, file, style);
-            };
-            if (image.is_loaded()) {
-                start();
-            } else {
-                run.image = image;
-                run.imageSignal = image.connect('loaded', () => {
-                    image.disconnect(run.imageSignal);
-                    run.imageSignal = null;
+            run.file = Gio.File.new_for_path(path);
+            if (HAS_IMAGE_CACHE) {
+                // GNOME 46–50: Mutter decodes and caches the image itself.
+                let image = Meta.BackgroundImageCache.get_default().load(run.file);
+                if (image.is_loaded()) {
                     start();
-                });
-                // Never hold the change hostage to a slow/broken decode.
-                run.sources.push(GLib.timeout_add(GLib.PRIORITY_DEFAULT, LOAD_TIMEOUT_MS, () => {
+                } else {
+                    run.image = image;
+                    run.imageSignal = image.connect('loaded', () => {
+                        image.disconnect(run.imageSignal);
+                        run.imageSignal = null;
+                        start();
+                    });
+                    waitForLoad();
+                }
+            } else {
+                // GNOME 51+: Mutter no longer loads files, so decode here and
+                // hand Meta.Background a ready texture.
+                waitForLoad();
+                loadTexture(run.file).then(texture => {
+                    run.texture = texture;
+                    start();
+                }).catch(e => {
+                    logError(e, 'NotchNux: wallpaper transition');
                     if (this._run === run)
                         this._finish(true);
-                    return GLib.SOURCE_REMOVE;
-                }));
+                });
             }
         } catch (e) {
             logError(e, 'NotchNux: wallpaper transition');
@@ -185,7 +235,10 @@ export class WallpaperTransition {
         for (let i = 0; i < Main.layoutManager.monitors.length; i++) {
             let m = Main.layoutManager.monitors[i];
             let background = new Meta.Background({ meta_display: global.display });
-            background.set_file(file, bgStyle);
+            if (run.texture)
+                background.set_texture(run.texture, bgStyle, null);
+            else
+                background.set_file(file, bgStyle);
             let actor = new Meta.BackgroundActor({
                 meta_display: global.display, monitor: i,
                 x: m.x, y: m.y, width: m.width, height: m.height,

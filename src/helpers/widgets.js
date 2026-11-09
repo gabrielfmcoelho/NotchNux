@@ -19,6 +19,7 @@ import PangoCairo from 'gi://PangoCairo';
 import St from 'gi://St';
 import GLib from 'gi://GLib';
 import { logError } from './log.js';
+import { SnippetEffect } from './shader.js';
 
 // Shared palette — mirrors the concept's tokens (--acc / --acc2 etc.).
 // ACCENT / ACCENT2 are intentionally mutable arrays, not frozen constants:
@@ -583,35 +584,22 @@ class EqBars extends St.BoxLayout {
 // radius the way CSS border-radius would. `size` is the (square) actor edge in
 // px and `radius` the corner radius in px; both map into 0..1 texture space.
 export const RoundedCornerEffect = GObject.registerClass(
-class RoundedCornerEffect extends Clutter.ShaderEffect {
-    _init(size, radius) {
-        // Clutter.ShaderType was removed in modern Clutter (GNOME 47+, still
-        // gone in Clutter 18 / GNOME 50) even though ShaderEffect itself
-        // survives. The property's default is already the fragment shader, so
-        // only pass shader_type on the older shells that still expose the enum.
-        let params = {};
-        if (Clutter.ShaderType && Clutter.ShaderType.FRAGMENT_SHADER !== undefined)
-            params.shader_type = Clutter.ShaderType.FRAGMENT_SHADER;
-        super._init(params);
-        // Corner radius as a fraction of the edge (uv is 0..1 across the actor).
-        let r = radius / size;
-        this.set_shader_source(`
-            uniform sampler2D tex;
-            void main() {
-                vec2 uv = cogl_tex_coord_in[0].xy;
-                float r = ${r.toFixed(6)};
-                // Distance from uv into the nearest corner's rounded region.
-                vec2 d = max(vec2(r) - min(uv, 1.0 - uv), 0.0);
-                if (length(d) > r)
-                    discard;
-                cogl_color_out = texture2D(tex, uv) * cogl_color_in;
-            }
-        `);
-    }
+class RoundedCornerEffect extends SnippetEffect {
+    // Runs after the texture lookup, so cogl_color_out already holds the
+    // actor's pixel; only the corners outside the rounded rect are dropped.
+    static snippetDeclarations = 'uniform float r;';
+    static snippetCode = `
+        vec2 uv = cogl_tex_coord_in[0].xy;
+        // Distance from uv into the nearest corner's rounded region.
+        vec2 d = max(vec2(r) - min(uv, 1.0 - uv), 0.0);
+        if (length(d) > r)
+            discard;
+    `;
 
-    vfunc_paint_target(node, paint_context) {
-        this.set_uniform_value('tex', 0);
-        super.vfunc_paint_target(node, paint_context);
+    _init(size, radius) {
+        super._init();
+        // Corner radius as a fraction of the edge (uv is 0..1 across the actor).
+        this.setUniform('r', 1, [radius / size]);
     }
 });
 

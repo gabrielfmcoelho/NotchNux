@@ -33,6 +33,7 @@ import { addPressFeedback } from '../helpers/motion.js';
 import { logError } from '../helpers/log.js';
 import { SYS, iconBtn } from './ledge.js';
 import { text, dot, scrolled } from './claude.js';
+import { VERTICAL } from '../helpers/compat.js';
 
 const DEV_VIEWS = [['containers', 'Containers'], ['ports', 'Ports'], ['projects', 'Projects']];
 const RELOAD_S = { containers: 30, ports: 5, projects: 60 };   // re-read an open view at most this often
@@ -142,7 +143,7 @@ const DevFeatures = {
     // ================================================================ tab
 
     _renderDevTab() {
-        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nn-claude nn-dev', vertical: true, x_expand: true });
+        let panel = new St.BoxLayout({ style_class: 'notchnux-panel nn-claude nn-dev', ...VERTICAL, x_expand: true });
         let seg = new St.BoxLayout({ style_class: 'nook-segmented', x_align: Clutter.ActorAlign.START });
         let segBtns = {};
         for (let [id, label] of DEV_VIEWS) {
@@ -156,14 +157,14 @@ const DevFeatures = {
         let views = {};
         let ui = { segBtns, views };
         for (let [id] of DEV_VIEWS) {
-            let view = new St.BoxLayout({ vertical: true, x_expand: true });
+            let view = new St.BoxLayout({ ...VERTICAL, x_expand: true });
             let head = new St.BoxLayout({ style_class: 'nn-claude-head', x_expand: true });
             let meta = text('', 'nook-card-meta', { x_expand: true });
             head.add_child(meta);
             let refresh = iconBtn('view-refresh-symbolic', 'nook-mini-btn', () => this._loadDevView(id, true), 'Refresh');
             head.add_child(refresh);
             view.add_child(head);
-            let list = new St.BoxLayout({ style_class: 'nn-claude-list', vertical: true, x_expand: true });
+            let list = new St.BoxLayout({ style_class: 'nn-claude-list', ...VERTICAL, x_expand: true });
             view.add_child(scrolled(list));
             panel.add_child(view);
             views[id] = view;
@@ -297,7 +298,7 @@ const DevFeatures = {
     },
 
     _devEmpty(icon, message) {
-        let empty = new St.BoxLayout({ style_class: 'nook-empty', vertical: true, x_expand: true });
+        let empty = new St.BoxLayout({ style_class: 'nook-empty', ...VERTICAL, x_expand: true });
         empty.add_child(new St.Icon({ icon_name: icon, icon_size: 22, style_class: 'nook-dim',
             x_align: Clutter.ActorAlign.CENTER }));
         empty.add_child(new St.Label({ text: message, style_class: 'nook-empty-title', x_align: Clutter.ActorAlign.CENTER }));
@@ -317,7 +318,7 @@ const DevFeatures = {
             accessible_name: `Logs of ${c.name}` });
         let row = new St.BoxLayout({ x_expand: true });
         row.add_child(dot(color));
-        let col = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'nn-claude-col' });
+        let col = new St.BoxLayout({ ...VERTICAL, x_expand: true, style_class: 'nn-claude-col' });
         col.add_child(text(c.name, 'nn-claude-name'));
         col.add_child(text(`${c.image} · ${c.status}`, 'nook-card-meta'));
         row.add_child(col);
@@ -422,7 +423,7 @@ const DevFeatures = {
             accessible_name: `Open http://localhost:${r.port}` });
         let row = new St.BoxLayout({ x_expand: true });
         row.add_child(text(`:${r.port}`, 'nn-dev-port'));
-        let col = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'nn-claude-col' });
+        let col = new St.BoxLayout({ ...VERTICAL, x_expand: true, style_class: 'nn-claude-col' });
         col.add_child(text(r.name, 'nn-claude-name'));
         let where = r.container ? 'Docker container' : this._procFolder(r.pid);
         if (where)
@@ -587,7 +588,7 @@ const DevFeatures = {
         let btn = new St.Button({ style_class: 'nn-claude-row', x_expand: true, can_focus: true,
             accessible_name: `Open ${r.name}` });
         let row = new St.BoxLayout({ x_expand: true });
-        let col = new St.BoxLayout({ vertical: true, x_expand: true, style_class: 'nn-claude-col' });
+        let col = new St.BoxLayout({ ...VERTICAL, x_expand: true, style_class: 'nn-claude-col' });
         col.add_child(text(r.name, 'nn-claude-name'));
         let meta = [r.rel, gs && (gs.branch ?? 'detached')].filter(Boolean).join(' · ');
         if (meta)
