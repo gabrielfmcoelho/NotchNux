@@ -34,6 +34,14 @@ act_eq cli-update true "$CLI" update "$id" --progress 0.8
 act_eq cli-end true "$CLI" end "$id"
 act_eq cli-end-again false "$CLI" end "$id"
 act_eq cli-unknown false "$CLI" update zz --title x
+# Quotes and backslashes reach the service unchanged (gdbus parses GVariant text).
+QT="It's \"C:\\new\""
+QJS="['It', String.fromCharCode(39), 's ', String.fromCharCode(34), 'C:', String.fromCharCode(92), 'new', String.fromCharCode(34)].join('')"
+id=$("$CLI" show "$QT" --body "$QT" --timeout 60)
+nnx_check cli-quotes-show "(() => { const a = $NNX._actTable.get('$id'); return [!!a, a?.title === $QJS, a?.body === $QJS]; })()" '[true,true,true]'
+act_eq cli-quotes-update true "$CLI" update "$id" --title "x$QT" --body "'"
+nnx_check cli-quotes-update-applied "(() => { const a = $NNX._actTable.get('$id'); return [a.title === 'x' + $QJS, a.body === String.fromCharCode(39)]; })()" '[true,true]'
+act_eq cli-quotes-end true "$CLI" end "$id"
 
 # A click on the bar ends the activity too.
 id=$("$CLI" show Click --timeout 60)
