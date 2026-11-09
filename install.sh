@@ -98,7 +98,7 @@ offer_cli() {
     local bin="$HOME/.local/bin" cli="$DEST_DIR/src/tools/notchnux-activity" ans=''
     case ":$PATH:" in *":$bin:"*) ;; *) return 0 ;; esac
     [ -t 0 ] || return 0
-    read -r -p "  Link notchnux-activity (live activities CLI) into $bin? [y/N] " ans
+    read -r -p "  Link notchnux-activity (live activities CLI) into $bin? [y/N] " ans || ans=''
     case $ans in
         [yY]|[yY][eE][sS])
             if mkdir -p "$bin" && ln -sf "$cli" "$bin/notchnux-activity"; then

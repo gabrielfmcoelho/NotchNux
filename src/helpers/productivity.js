@@ -392,7 +392,7 @@ export class ProductivityStore {
                 out.push({
                     id,
                     text: this._clipNote(x.text),
-                    color: x.color in NOTE_COLORS ? x.color : 'yellow',
+                    color: Object.hasOwn(NOTE_COLORS, x.color) ? x.color : 'yellow',
                     created: Number(x.created) || Date.now(),
                     updated: Number(x.updated) || Number(x.created) || Date.now(),
                     pinned: !!x.pinned,
@@ -443,7 +443,7 @@ export class ProductivityStore {
         let note = {
             id: GLib.uuid_string_random(),
             text: this._clipNote(text),
-            color: color in NOTE_COLORS ? color : 'yellow',
+            color: Object.hasOwn(NOTE_COLORS, color) ? color : 'yellow',
             created: now, updated: now, pinned: false, pos: null,
         };
         this._notes.push(note);
@@ -463,7 +463,7 @@ export class ProductivityStore {
 
     setNoteColor(id, color) {
         let note = this.getNote(id);
-        if (!note || !(color in NOTE_COLORS) || note.color === color)
+        if (!note || !Object.hasOwn(NOTE_COLORS, color) || note.color === color)
             return;
         note.color = color;
         this._changedNotes();

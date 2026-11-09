@@ -82,6 +82,7 @@ for d in "${DATA[@]+"${DATA[@]}"}"; do
 done
 
 # Private session bus under systemd (dbus-broker refuses to run outside it).
+# ExecStart is systemd-quoted (spaces) with % doubled (specifiers).
 cat > "$UNITDIR/$NAME.socket" <<UNIT
 [Socket]
 ListenStream=%t/$NAME
@@ -90,7 +91,7 @@ cat > "$UNITDIR/$NAME.service" <<UNIT
 [Service]
 Type=notify
 Environment=DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS
-ExecStart=/usr/bin/dbus-broker-launch --scope user --config-file $HERE/headless/session.conf
+ExecStart=/usr/bin/dbus-broker-launch --scope user --config-file "${HERE//%/%%}/headless/session.conf"
 UNIT
 systemctl --user daemon-reload && systemctl --user start "$NAME.socket" || { echo "cannot start private bus" >&2; exit 2; }
 

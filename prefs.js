@@ -100,7 +100,15 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
 
     // ---- Keyboard: notch shortcut ----
     _addKeyboardGroup(page, window) {
-        const settings = this.getSettings();
+        // A manual install that skipped glib-compile-schemas has no schema:
+        // leave the Keyboard group out instead of breaking all of Preferences.
+        let settings;
+        try {
+            settings = this.getSettings();
+        } catch (e) {
+            console.warn(`NotchNux: shortcut settings unavailable (schema not compiled?): ${e.message}`);
+            return;
+        }
         const group = new Adw.PreferencesGroup({
             title: 'Keyboard',
             description: 'Open the notch with a command bar from anywhere.',
