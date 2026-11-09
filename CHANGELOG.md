@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — keyboard shortcut, command bar and keyboard navigation
+- **Super+/** toggles the notch from anywhere and opens it with a command bar
+  (change or disable the shortcut in Preferences → Keyboard). The bar takes
+  `t <task>` (`!` stars it), `25` / `25m` / `1h` for focus, `=` for math, a tab
+  name to open it, and `n <note>` to append to Notes.
+- In the dashboard, Left/Right switch tabs, Ctrl+1…9 open a tab by position,
+  Tab / Shift+Tab move focus (with a focus ring) and Esc closes.
+
 ### Added — runs on GNOME Shell 46 to 51
 - NotchNux now loads on GNOME 46, 47, 48, 49, 50 and 51 (it was 50 only,
   and showed as "out of date" on 51).

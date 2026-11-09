@@ -82,6 +82,7 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         });
         window.add(page);
 
+        this._addKeyboardGroup(page, window);
         this._addAppearanceGroup(page, config);
         this._addBlurGroup(page, config);
         this._addWallpaperGroup(page, config, window);
@@ -95,6 +96,105 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         this._addSystemGroup(page);
 
         window.set_default_size(560, 720);
+    }
+
+    // ---- Keyboard: notch shortcut ----
+    _addKeyboardGroup(page, window) {
+        const settings = this.getSettings();
+        const group = new Adw.PreferencesGroup({
+            title: 'Keyboard',
+            description: 'Open the notch with a command bar from anywhere.',
+        });
+        page.add(group);
+
+        const label = () => {
+            const [accel] = settings.get_strv('toggle-notch');
+            if (!accel)
+                return 'Disabled';
+            const [ok, key, mods] = Gtk.accelerator_parse(accel);
+            return ok ? Gtk.accelerator_get_label(key, mods) : accel;
+        };
+
+        const row = new Adw.ActionRow({
+            title: 'Toggle notch',
+            subtitle: 'Click to change the shortcut',
+            activatable: true,
+        });
+        const valueLabel = new Gtk.Label({ label: label(), css_classes: ['dim-label'], valign: Gtk.Align.CENTER });
+        row.add_suffix(valueLabel);
+
+        const resetBtn = new Gtk.Button({
+            icon_name: 'edit-undo-symbolic',
+            tooltip_text: 'Reset to default (Super+/)',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        resetBtn.connect('clicked', () => settings.reset('toggle-notch'));
+        row.add_suffix(resetBtn);
+        group.add(row);
+
+        const refresh = () => valueLabel.set_label(label());
+        const changedId = settings.connect('changed::toggle-notch', refresh);
+        window.connect('close-request', () => {
+            settings.disconnect(changedId);
+            return false;
+        });
+
+        row.connect('activated', () => this._captureShortcut(window, settings));
+
+        group.add(new Adw.ActionRow({
+            title: 'Command bar',
+            subtitle: 'Type t <task> (! stars it), 25 / 25m / 1h to focus, = for math, ' +
+                'a tab name to open it, n <note> to add to Notes. ' +
+                'In the dashboard: Left/Right switch tabs, Ctrl+1…9 open a tab, Esc closes.',
+            subtitle_lines: 0,
+        }));
+    }
+
+    _captureShortcut(window, settings) {
+        const dialog = new Adw.Dialog({ title: 'Set shortcut', content_width: 360 });
+        const box = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            spacing: 12,
+            margin_top: 24, margin_bottom: 24, margin_start: 24, margin_end: 24,
+        });
+        box.append(new Gtk.Label({ label: 'Press a new shortcut', css_classes: ['title-3'] }));
+        box.append(new Gtk.Label({
+            label: 'Press a shortcut with Super, Ctrl or Alt · Backspace to disable · Esc to cancel',
+            wrap: true,
+            justify: Gtk.Justification.CENTER,
+            css_classes: ['dim-label'],
+        }));
+        dialog.set_child(box);
+
+        const keys = new Gtk.EventControllerKey();
+        keys.connect('key-pressed', (_c, keyval, _keycode, state) => {
+            const mods = state & Gtk.accelerator_get_default_mod_mask();
+            if (keyval === Gdk.KEY_Escape && !mods) {
+                dialog.close();
+                return Gdk.EVENT_STOP;
+            }
+            if (keyval === Gdk.KEY_BackSpace && !mods) {
+                settings.set_strv('toggle-notch', []);
+                dialog.close();
+                return Gdk.EVENT_STOP;
+            }
+            const modifierKeys = [
+                Gdk.KEY_Shift_L, Gdk.KEY_Shift_R, Gdk.KEY_Control_L, Gdk.KEY_Control_R,
+                Gdk.KEY_Alt_L, Gdk.KEY_Alt_R, Gdk.KEY_Super_L, Gdk.KEY_Super_R,
+                Gdk.KEY_Meta_L, Gdk.KEY_Meta_R, Gdk.KEY_ISO_Level3_Shift,
+            ];
+            const needed = Gdk.ModifierType.SUPER_MASK | Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK;
+            if (modifierKeys.includes(keyval) || !(mods & needed))
+                return Gdk.EVENT_STOP;
+            if (!Gtk.accelerator_valid(keyval, mods))
+                return Gdk.EVENT_STOP;
+            settings.set_strv('toggle-notch', [Gtk.accelerator_name(keyval, mods)]);
+            dialog.close();
+            return Gdk.EVENT_STOP;
+        });
+        dialog.add_controller(keys);
+        dialog.present(window);
     }
 
     // ---- Appearance: accent colour ----
