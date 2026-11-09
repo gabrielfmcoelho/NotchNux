@@ -73,6 +73,8 @@ install_files() {
     install -Dm644 "$SRC_DIR/prefs.js"       "$DEST_DIR/prefs.js"
     install -Dm644 "$SRC_DIR/stylesheet.css" "$DEST_DIR/stylesheet.css"
     cp -r "$SRC_DIR/src" "$DEST_DIR/"
+    cp -r "$SRC_DIR/schemas" "$DEST_DIR/"
+    glib-compile-schemas "$DEST_DIR/schemas"
 
     ok "Extension files copied"
 }
@@ -91,11 +93,27 @@ enable_ext() {
     fi
 }
 
+# Offer to link the live-activities CLI into ~/.local/bin (default: no).
+offer_cli() {
+    local bin="$HOME/.local/bin" cli="$DEST_DIR/src/tools/notchnux-activity" ans=''
+    case ":$PATH:" in *":$bin:"*) ;; *) return 0 ;; esac
+    [ -t 0 ] || return 0
+    read -r -p "  Link notchnux-activity (live activities CLI) into $bin? [y/N] " ans || ans=''
+    case $ans in
+        [yY]|[yY][eE][sS])
+            if mkdir -p "$bin" && ln -sf "$cli" "$bin/notchnux-activity"; then
+                ok "Linked $bin/notchnux-activity"
+            fi ;;
+    esac
+    return 0
+}
+
 # ---- go ------------------------------------------------------------------
 banner
 check_env
 install_files
 enable_ext
+offer_cli
 
 step "${GREEN}Done!${RESET}"
 cat <<EOF

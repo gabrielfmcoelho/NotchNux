@@ -166,6 +166,7 @@ export const FEATURE_DEFS = [
     { id: 'showPrivacy',       label: 'Privacy indicators',   description: 'Show mic/camera in-use dots on the collapsed pill.',        default: true },
     { id: 'rabbitCompanion',   label: 'Rabbit companion',     description: 'The Inova Data rabbit at the left of the pill: it reacts to Claude Code, the focus timer, notifications, music and battery.', default: true },
     { id: 'rabbitCalm',        label: 'Calm rabbit',          description: 'Keep the rabbit’s reactions but drop its idle moves (blinks, ear flicks, nibbles).', default: false },
+    { id: 'showScreenShare',   label: 'Screen sharing indicator', description: 'Show a red icon on the pill while the screen is shared or recorded.', default: true },
     { id: 'pillMarquee',       label: 'Scrolling track title', description: 'Scroll long track titles across the pill while playing.',  default: true },
     { id: 'weatherAutoRefresh', label: 'Auto-refresh weather', description: 'Periodically refresh weather in the background.',           default: true },
     { id: 'calendarSync',      label: 'Calendar sync',        description: 'Pull events from GNOME Online Accounts into the Calendar tab.', default: true },
@@ -184,10 +185,31 @@ export const FEATURE_DEFS = [
     { id: 'lyricsOnline',      label: 'Look up lyrics online', description: 'Fetch timed lyrics for the playing song from lrclib.net (sends the song’s title, artist, album and length).', default: true },
     { id: 'pillVpn',           label: 'VPN in the pill',      description: 'Show a VPN icon in the pill while Tailscale or the Forti VPN is connected. Checked every 30 seconds, only while on.', default: true },
     { id: 'claudeMonitor',     label: 'Claude Code in the pill', description: 'Show your Claude Code sessions and 5-hour usage in the pill, with an alert when one finishes or needs you. Reads ~/.claude/sessions on this computer.', default: false },
-    { id: 'topScroll',         label: 'Scroll top edge to switch workspaces', description: 'Restore top-edge scroll-to-switch-workspace when the panel is hidden — scroll anywhere along the top of the screen to move between workspaces.', default: false }
+    { id: 'activityApi',       label: 'Live activities API',  description: 'Let scripts and apps show a progress bar or message in the pill over D-Bus (io.github.notchnux). Text only, at most 8 at once.', default: true },
+    { id: 'topScroll',         label: 'Scroll top edge to switch workspaces', description: 'Restore top-edge scroll-to-switch-workspace when the panel is hidden — scroll anywhere along the top of the screen to move between workspaces.', default: false },
+    // `group: 'google'`: shown in Preferences' Google group, not under Features.
+    { id: 'googleTasks',       label: 'Google Tasks in the Tasks tab', description: 'Use a Google Tasks list (through GNOME Online Accounts) in the Tasks tab instead of the tasks stored on this computer.', default: false, group: 'google' },
+    { id: 'calendarEdit',      label: 'Create and edit calendar events', description: 'Add, change and delete events from the Calendar tab, in your Google calendars (through GNOME Online Accounts) and the ones on this computer. Read-only calendars stay read-only.', default: false, group: 'google' }
 ];
 
 const DEFAULT_ACCENT = '#7aa2ff';
+
+// GNOME 47+ system accent (org.gnome.desktop.interface accent-color), as the
+// libadwaita values.
+export const SYSTEM_ACCENTS = {
+    blue: '#3584e4', teal: '#2190a4', green: '#3a944a', yellow: '#c88800',
+    orange: '#ed5b00', red: '#e62d42', pink: '#d56199', purple: '#9141ac',
+    slate: '#6f8396',
+};
+export const ACCENT_MODES = ['custom', 'system'];
+
+// The hex the UI should use: the system accent in 'system' mode when GNOME
+// reports a known one (null on GNOME 46, which has no such key), else custom.
+export function resolveAccent(mode, customHex, systemName) {
+    if (mode === 'system' && systemName && Object.hasOwn(SYSTEM_ACCENTS, systemName))
+        return SYSTEM_ACCENTS[systemName];
+    return customHex;
+}
 
 // Up to `pinnedMax` tabs (1–MAX_PINNED, set in Preferences) sit beside Home
 // in the dashboard header; everything else is one click away in the grid.
@@ -226,6 +248,11 @@ export function hexToRgb01(hex) {
     let h = normalizeHex(hex) ?? DEFAULT_ACCENT;
     let n = parseInt(h.slice(1), 16);
     return [((n >> 16) & 0xff) / 255, ((n >> 8) & 0xff) / 255, (n & 0xff) / 255];
+}
+
+// 'local' or an EDS source uid (any short non-empty string).
+function cleanTasksSource(v) {
+    return typeof v === 'string' && v.trim() && v.length <= 256 ? v : 'local';
 }
 
 function configDir() {
@@ -292,6 +319,7 @@ export class ConfigStore {
             features[f.id] = f.default;
         return {
             accent: DEFAULT_ACCENT,
+            accentMode: 'custom',
             tabOrder: TAB_DEFS.map(t => t.id),
             tabs,
             features,
@@ -338,7 +366,10 @@ export class ConfigStore {
             devProjectRoots: [],
             // The terminal the Dev tab opens: '' (the system default) or an
             // id from helpers/dev.js TERMINALS ('warp').
-            devTerminal: ''
+            devTerminal: '',
+            // The Tasks tab's list while the googleTasks feature is on:
+            // 'local' (tasks.json) or an EDS task-list source uid.
+            tasksSource: 'local'
         };
     }
 
@@ -387,6 +418,7 @@ export class ConfigStore {
                     ? parsed.trayMirrorItems.filter(it => it && typeof it.id === 'string')
                     : [];
                 data.accent = normalizeHex(parsed.accent) ?? DEFAULT_ACCENT;
+                data.accentMode = ACCENT_MODES.includes(parsed.accentMode) ? parsed.accentMode : 'custom';
                 data.pinnedTabs = this._cleanPinned(parsed.pinnedTabs ?? DEFAULT_PINNED);
                 data.pinnedMax = clampPinnedMax(parsed.pinnedMax);
                 data.pillTemp = PILL_TEMPS.includes(parsed.pillTemp) ? parsed.pillTemp : 'off';
@@ -400,6 +432,7 @@ export class ConfigStore {
                 data.claudeActivity = !!parsed.claudeActivity;
                 data.claudeEditor = typeof parsed.claudeEditor === 'string' ? parsed.claudeEditor : '';
                 data.devTerminal = DEV_TERMINALS.includes(parsed.devTerminal) ? parsed.devTerminal : '';
+                data.tasksSource = cleanTasksSource(parsed.tasksSource);
                 data.devProjectRoots = Array.isArray(parsed.devProjectRoots)
                     ? [...new Set(parsed.devProjectRoots.filter(p => typeof p === 'string' && p.startsWith('/')))] : [];
                 data.tabOrder = this._reconcileOrder(parsed.tabOrder);
@@ -477,6 +510,17 @@ export class ConfigStore {
             return false;
         this._refresh();
         this._data.accent = norm;
+        this._save();
+        return true;
+    }
+    get accentMode() {
+        return this._data.accentMode;
+    }
+    setAccentMode(mode) {
+        if (!ACCENT_MODES.includes(mode))
+            return false;
+        this._refresh();
+        this._data.accentMode = mode;
         this._save();
         return true;
     }
@@ -630,6 +674,15 @@ export class ConfigStore {
     setDevTerminal(id) {
         this._refresh();
         this._data.devTerminal = DEV_TERMINALS.includes(id) ? id : '';
+        this._save();
+    }
+
+    get tasksSource() {
+        return cleanTasksSource(this._data.tasksSource);
+    }
+    setTasksSource(id) {
+        this._refresh();
+        this._data.tasksSource = cleanTasksSource(id);
         this._save();
     }
 

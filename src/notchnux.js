@@ -21,18 +21,23 @@ import { MediaHelper } from './helpers/media.js';
 import { ShelfHelper } from './helpers/shelf.js';
 import { FileDropBridge } from './helpers/filedrop.js';
 import { WallpaperHelper } from './helpers/wallpaper.js';
+import { ScreenShareWatch } from './helpers/screenshare.js';
 import { SlitDeck } from './helpers/slitdeck.js';
 import { Vinyl, AlbumArtDisc, Knob, AnalogClock, EqBars, CameraView, ACCENT, setAccent, accentHex, accentRgbStr } from './helpers/widgets.js';
-import { TAB_DEFS, FEATURE_DEFS, blurPreset } from './helpers/config.js';
+import { TAB_DEFS, FEATURE_DEFS, blurPreset, resolveAccent, hexToRgb01 } from './helpers/config.js';
 import { fmt } from './helpers/format.js';
 import { GlassBackdrop, createShoulder, SHOULDER_SIZE, PILL_HEIGHT } from './helpers/island.js';
 import { springTo, stopSpring, addPressFeedback } from './helpers/motion.js';
 import { RabbitCompanion } from './helpers/companion.js';
+import { DeskNotes } from './helpers/desknotes.js';
 import { installProductivity } from './tabs/productivity.js';
 import { installLedge, swapContent } from './tabs/ledge.js';
 import { installTray } from './tabs/tray.js';
 import { installClaude } from './tabs/claude.js';
 import { installDev } from './tabs/dev.js';
+import { installKeyboard } from './tabs/keyboard.js';
+import { installActivities } from './tabs/activities.js';
+import { installCalendarEdit } from './tabs/calendaredit.js';
 import { logError } from './helpers/log.js';
 import { VERTICAL, HORIZONTAL, disableUnredirect, enableUnredirect } from './helpers/compat.js';
 
@@ -86,7 +91,8 @@ export const NotchNux = GObject.registerClass({
         // Load persisted preferences and apply the accent colour before any
         // Cairo widget draws, so the very first render uses the user's colour.
         this._config = config;
-        setAccent(this._config.accentRgb);
+        this._watchSystemAccent();
+        setAccent(hexToRgb01(this._resolvedAccent()));
         this.isExpanded = false;
         this._isExpanding = false;
         this._pointerInside = false;
@@ -182,6 +188,8 @@ export const NotchNux = GObject.registerClass({
         this._notifBanner.visible = false;
         // Tasks / notes / focus timer (+ the pill's live timer zone).
         this._initProductivity();
+        // Post-its pinned to the desktop (only exist once the user pins one).
+        this._deskNotes = new DeskNotes(this._prod, { onOpen: id => this._openNoteInEditor(id) });
         // Alerts, hide-when-idle, launcher, clipboard, lyrics, keep awake…
         this._initLedge();
         // VPN state for the Tray's VPN row and the pill's VPN icon.
@@ -192,6 +200,12 @@ export const NotchNux = GObject.registerClass({
         this._initClaude();
         // Dev tab: Docker containers (and their crash alerts), ports, projects.
         this._initDev();
+        // Global shortcut that toggles the notch.
+        this._initKeyboard();
+        // D-Bus API for live activities (io.github.notchnux).
+        this._initActivities();
+        // Screen sharing / recording indicator for the pill.
+        this._screenShare = new ScreenShareWatch(() => this._updatePrivacyIndicators());
         // The rabbit companion goes in last, at index 0, so it stays left of the
         // live-activity zones that the inits above inserted by index.
         this._pillRabbit = new RabbitCompanion(() => this._companionState());
@@ -221,6 +235,13 @@ export const NotchNux = GObject.registerClass({
         // Click anywhere else on the stage collapses the dashboard.
         this._stageClickId = global.stage.connect('button-press-event', (s, e) => this._onStageClicked(e));
         this._keyFocusId = global.stage.connect('notify::key-focus', () => this._onStageKeyFocus());
+        // Keys reach the notch through its modal grab. Arrows, Ctrl+N and Tab
+        // are captured, so St widgets can't swallow them first; Esc bubbles,
+        // so a field or overlay that handles it (cancel an edit, close the
+        // Wi-Fi sheet) wins and only an unhandled Esc closes the notch.
+        this.connect('captured-event', (a, e) =>
+            e.type() === Clutter.EventType.KEY_PRESS ? this._onDashboardKey(e) : Clutter.EVENT_PROPAGATE);
+        this.connect('key-press-event', (a, e) => this._onDashboardEscape(e));
 
         // Helper callbacks refresh the live tab
         // MPRIS fires metadata + playback callbacks back to back; coalesce them
@@ -399,7 +420,7 @@ export const NotchNux = GObject.registerClass({
         for (let f of FEATURE_DEFS)
             features[f.id] = this._config.isFeatureEnabled(f.id);
         return {
-            accent: this._config.accent,
+            accent: this._resolvedAccent(),
             tabsKey: JSON.stringify(this._config.visibleTabs),
             features,
             wallpaperKey: JSON.stringify(this._config.wallpaper),
@@ -413,6 +434,7 @@ export const NotchNux = GObject.registerClass({
             trayTemps: this._config.trayTemps,
             fanControl: this._config.fanControl,
             devRootsKey: JSON.stringify(this._config.devProjectRoots),
+            tasksSource: this._config.tasksSource,
         };
     }
 
@@ -461,12 +483,8 @@ export const NotchNux = GObject.registerClass({
         let next = this._configSnapshot();
         this._configState = next;
 
-        if (next.accent !== prev.accent) {
-            setAccent(this._config.accentRgb);
-            this._applyAccentStyles();
-            // Tab content bakes the accent into inline styles.
-            this._invalidateAllTabs();
-        }
+        if (next.accent !== prev.accent)
+            this._applyAccent();
 
         // Blur/glass changed in prefs: re-apply the preset + current-state
         // radius. _applyBlur reads the new config and enables/disables the
@@ -514,6 +532,10 @@ export const NotchNux = GObject.registerClass({
             this._releaseFan();
         if (next.devRootsKey !== prev.devRootsKey)
             this._onDevRootsChanged();
+        // Tasks list picked in prefs (the googleTasks switch goes through
+        // _onFeatureToggled).
+        if (next.tasksSource !== prev.tasksSource)
+            this._syncTaskSource();
         if ((next.trayTemps !== prev.trayTemps || next.fanControl !== prev.fanControl) && this._invalidateTab('system'))
             this._renderActiveTab();
 
@@ -539,6 +561,7 @@ export const NotchNux = GObject.registerClass({
         // The process is exiting, so stop our own sources and skip those.
         let shellGone = !this._disabling;
         this._releaseKeyboard();
+        this._notesClearUndo?.();
         if (!shellGone)
             this._closeScanOverlay();
         this._destroyLedge();
@@ -547,6 +570,15 @@ export const NotchNux = GObject.registerClass({
         this._destroyVpn();
         this._destroyClaude();
         this._destroyDev();
+        this._destroyActivities();
+        if (this._ifaceSettings && this._ifaceAccentId)
+            this._ifaceSettings.disconnect(this._ifaceAccentId);
+        this._ifaceSettings = null;
+        this._screenShare?.destroy();
+        this._screenShare = null;
+        this._destroyKeyboard();
+        this._deskNotes?.destroy();
+        this._deskNotes = null;
         this._destroyProductivity();
         stopSpring(this);
         this._railTimeline?.stop();
@@ -557,6 +589,7 @@ export const NotchNux = GObject.registerClass({
         this._stopPillMarquee();
         if (this._pillEq) this._pillEq.stop();
         this._destroyCalendarServer();
+        this._destroyCalendarEdit();
         this._teardownStudio();
         if (this._media) { this._media.destroy(); this._media = null; }
         // Stop the wallpaper rotator and its pause monitor before tearing down
@@ -915,6 +948,19 @@ export const NotchNux = GObject.registerClass({
             icon_size: 13,
             visible: false,
             y_align: Clutter.ActorAlign.CENTER });
+        this._pillShare = new St.Icon({
+            icon_name: 'screen-shared-symbolic',
+            style_class: 'notchnux-pill-priv priv-red',
+            icon_size: 13,
+            visible: false,
+            reactive: true,
+            y_align: Clutter.ActorAlign.CENTER });
+        // A click here opens the Stop peek, not the dashboard.
+        this._pillShare.connect('button-press-event', (a, e) => {
+            if (e.get_button() === 1) this._showScreenSharePeek();
+            return Clutter.EVENT_STOP;
+        });
+        this._pillPrivBox.add_child(this._pillShare);
         this._pillPrivBox.add_child(this._pillMic);
         this._pillPrivBox.add_child(this._pillCam);
         this._pill.add_child(this._pillPrivBox);
@@ -1181,6 +1227,7 @@ export const NotchNux = GObject.registerClass({
         headerWrap.add_child(this._gridButton);
         headerWrap.add_child(this._moreButton);
         this._dashboard.add_child(headerWrap);
+        this._dashboard.add_child(this._buildCommandBar());
         this._dashboard.add_child(this._contentContainer);
 
         // Keep the current tab across rebuilds; otherwise start on the first.
@@ -1754,6 +1801,34 @@ export const NotchNux = GObject.registerClass({
         this._tabButtons?.[id]?.set_style(active ? `color: ${accentHex()};` : null);
     }
 
+    // GNOME 47+ has an accent-color key; 46 does not, so Auto is unavailable
+    // there and a stored 'system' mode falls back to the custom accent.
+    _watchSystemAccent() {
+        let schema = Gio.SettingsSchemaSource.get_default()
+            ?.lookup('org.gnome.desktop.interface', true);
+        if (!schema?.has_key('accent-color'))
+            return;
+        this._ifaceSettings = new Gio.Settings({ schema_id: 'org.gnome.desktop.interface' });
+        this._ifaceAccentId = this._ifaceSettings.connect('changed::accent-color', () => {
+            if (this._destroyed || this._config.accentMode !== 'system')
+                return;
+            this._applyConfigChange();
+        });
+    }
+
+    _resolvedAccent() {
+        let name = this._ifaceSettings?.get_string('accent-color') ?? null;
+        return resolveAccent(this._config.accentMode, this._config.accent, name);
+    }
+
+    // Recolour everything from the resolved accent (custom or system).
+    _applyAccent() {
+        setAccent(hexToRgb01(this._resolvedAccent()));
+        this._applyAccentStyles();
+        // Tab content bakes the accent into inline styles.
+        this._invalidateAllTabs();
+    }
+
     _applyAccentStyles() {
         let rgb = accentRgbStr();
         // The travelling indicator under the active tab carries the accent.
@@ -2053,11 +2128,17 @@ export const NotchNux = GObject.registerClass({
         }
         if (tab === 'launcher')
             this._launcherEdit = false;
+        if (tab === 'notes')
+            this._leaveNotesTab();
         if (tab === 'claude')
             this._leaveClaudeTab();
         if (tab === 'dev')
             this._leaveDevTab();
-        this._releaseKeyboard?.();
+        if (tab === 'tasks')
+            this._leaveTasksTab();
+        // A keyboard-opened dashboard keeps its grab across tab switches.
+        if (!(this._openedByKeyboard && this.isExpanded))
+            this._releaseKeyboard?.();
     }
 
     // Stop timers/animations owned by `tab`'s content and forget its actor
@@ -2137,6 +2218,10 @@ export const NotchNux = GObject.registerClass({
         } finally {
             this._presenting = false;
         }
+        if (tab === 'tasks')
+            this._tasksTabShown();
+        if (tab === 'calendar')
+            this._calendarTabShown();
         this._presentHost(host, animate, dir);
     }
 
@@ -2265,7 +2350,7 @@ export const NotchNux = GObject.registerClass({
             system: ['_trayMeters', '_trayUi'],
             wallpaper: ['_wpDeck', '_wpItems', '_wpSubtitle', '_wpCounter'],
             calendar: ['_calPanel', '_calAgenda', '_calDateStrip', '_calDateStripRow',
-                '_calSummaryDay', '_calSummaryDate'],
+                '_calSummaryDay', '_calSummaryDate', '_calSheetActor', '_calSheetUi'],
             shelf: ['_shareStatus'],
             media: ['_knobValue', '_mediaUi', '_lyricsUi'],
             home: ['_homeUi'],
@@ -2571,15 +2656,26 @@ export const NotchNux = GObject.registerClass({
     _updatePrivacyIndicators() {
         if (this._destroyed) return;
         if (!this._pillMic) return;
-        let before = this._pillMic.visible + '|' + this._pillCam.visible;
+        let before = this._pillMic.visible + '|' + this._pillCam.visible + '|' + this._pillShare.visible;
 
-        // Feature off: hide both dots and reflow if that changed anything.
+        // Feature off: hide the dots and reflow if that changed anything.
         if (!this._config.isFeatureEnabled('showPrivacy')) {
             this._pillMic.visible = false;
             this._pillCam.visible = false;
-            if (before !== 'false|false' && !this.isExpanded)
+            this._pillShare.visible = false;
+            if (before !== 'false|false|false' && !this.isExpanded)
                 this._applyPillWidth();
             return;
+        }
+
+        // Screen share / recording (red). Also needs its own flag.
+        let share = this._screenShare;
+        if (share?.active && this._config.isFeatureEnabled('showScreenShare')) {
+            this._pillShare.icon_name = share.recording ?
+                'media-record-symbolic' : 'screen-shared-symbolic';
+            this._pillShare.visible = true;
+        } else {
+            this._pillShare.visible = false;
         }
 
         let micMuted = this._system.isMicMuted();
@@ -2608,11 +2704,24 @@ export const NotchNux = GObject.registerClass({
         }
 
         // Reflow the pill if an indicator appeared/disappeared.
-        let after = this._pillMic.visible + '|' + this._pillCam.visible;
+        let after = this._pillMic.visible + '|' + this._pillCam.visible + '|' + this._pillShare.visible;
         if (after !== before && !this.isExpanded)
             this._applyPillWidth();
         if (after !== before)
             this._updateTuck?.();
+    }
+
+    // Peek offered by the pill's share icon: what is going on, and a Stop.
+    _showScreenSharePeek() {
+        let share = this._screenShare;
+        if (!share) return;
+        let recording = share.recording;
+        this._showNotificationPeek(
+            recording ? 'Screen is being recorded' : 'Screen is being shared',
+            '',
+            new Gio.ThemedIcon({ name: recording ? 'media-record-symbolic' : 'screen-shared-symbolic' }),
+            null,
+            [{ label: 'Stop', callback: () => this._screenShare?.stop() }]);
     }
 
     // Even gap (px) the pill keeps between neighbouring zones — the "slot" width
@@ -4387,17 +4496,33 @@ export const NotchNux = GObject.registerClass({
 
         panel.add_child(summary);
         this._calDateStrip = this._buildDateStrip(selected);
-        panel.add_child(this._calDateStrip);
+        // calendarEdit: a "+" for a new event beside the strip.
+        let edit = this._calEditOn();
+        if (edit) {
+            let stripRow = new St.BoxLayout({ style_class: 'nook-calendar-strip-row', ...HORIZONTAL, x_expand: true });
+            stripRow.add_child(this._calDateStrip);
+            stripRow.add_child(this._buildCalendarAddButton());
+            panel.add_child(stripRow);
+        } else {
+            panel.add_child(this._calDateStrip);
+        }
         // Keep the panel + agenda so a date scroll can rebuild ONLY the agenda
         // (see _refreshCalendarAgenda) instead of tearing down the whole tab.
         this._calPanel = panel;
-        this._calAgenda = this._buildCalendarAgenda({
-            title: this._dayKey(selected) === this._dayKey(new Date()) ? 'Today' : 'Events',
-            days: 45,
-            selectedDate: selected,
-            fullHeight: true
-        });
-        panel.add_child(this._calAgenda);
+        if (edit && this._calSheet) {
+            // An event's detail or the editor takes the agenda's place.
+            this._calSheetActor = this._buildCalendarSheet();
+            panel.add_child(this._calSheetActor);
+        } else {
+            this._calAgenda = this._buildCalendarAgenda({
+                title: this._dayKey(selected) === this._dayKey(new Date()) ? 'Today' : 'Events',
+                days: 45,
+                selectedDate: selected,
+                fullHeight: true,
+                onEvent: edit ? ev => this._openCalendarEvent(ev) : null
+            });
+            panel.add_child(this._calAgenda);
+        }
 
         this._mount(panel);
     }
@@ -4409,6 +4534,9 @@ export const NotchNux = GObject.registerClass({
     // caller can fall back to a full render.
     _refreshCalendarAgenda() {
         let panel = this._calPanel;
+        // A sheet (event detail / editor) is up: the agenda waits for it.
+        if (this._calSheet && this._calSheetActor?.get_parent() === panel && panel)
+            return this._calendarSheetEventsChanged();
         let old = this._calAgenda;
         if (!panel || panel.is_finalized?.() || !old || old.get_parent() !== panel)
             return false;
@@ -4417,7 +4545,8 @@ export const NotchNux = GObject.registerClass({
             title: this._dayKey(selected) === this._dayKey(new Date()) ? 'Today' : 'Events',
             days: 45,
             selectedDate: selected,
-            fullHeight: true
+            fullHeight: true,
+            onEvent: this._calEditOn() ? ev => this._openCalendarEvent(ev) : null
         });
         panel.replace_child(old, fresh);
         this._calAgenda = fresh;
@@ -4453,6 +4582,9 @@ export const NotchNux = GObject.registerClass({
             case 'rabbitCalm':
                 this._pillRabbit.update();
                 break;
+            case 'showScreenShare':
+                this._updatePrivacyIndicators();
+                break;
             case 'pillMarquee':
                 // Re-run the live refresh so the marquee starts/stops.
                 this._stopPillMarquee();
@@ -4479,8 +4611,17 @@ export const NotchNux = GObject.registerClass({
             case 'pillVpn':
                 this._syncVpnPoll();
                 break;
+            case 'activityApi':
+                this._syncActivityApi();
+                break;
             case 'claudeMonitor':
                 this._onClaudeFeatureToggled();
+                break;
+            case 'googleTasks':
+                this._syncTaskSource();
+                break;
+            case 'calendarEdit':
+                this._onCalendarEditToggled(on);
                 break;
             default:
                 this._onLedgeFeatureToggled(id, on);
@@ -4854,7 +4995,16 @@ export const NotchNux = GObject.registerClass({
                     if (ev.location)
                         text.add_child(new St.Label({ text: this._ellipsize(ev.location, 56), style_class: 'nook-calendar-event-location' }));
                     row.add_child(text);
-                    list.add_child(row);
+                    if (options.onEvent) {
+                        // calendarEdit: tap an event for its detail.
+                        let btn = new St.Button({ style_class: 'nook-calendar-event-btn', x_expand: true,
+                            can_focus: true, reactive: true, x_align: Clutter.ActorAlign.FILL });
+                        btn.set_child(row);
+                        btn.connect('clicked', () => options.onEvent(ev));
+                        list.add_child(btn);
+                    } else {
+                        list.add_child(row);
+                    }
                 }
             }
         }
@@ -6215,6 +6365,8 @@ export const NotchNux = GObject.registerClass({
     // Key focus moved somewhere on the stage: grab when it lands in one of our
     // text fields, release once it has left them all.
     _onStageKeyFocus() {
+        if (this._releasingKeyboard)
+            return;
         let focus = global.stage.get_key_focus();
         if (focus && this._typables?.has(focus))
             this._grabKeyboard(focus);
@@ -6223,7 +6375,8 @@ export const NotchNux = GObject.registerClass({
     }
 
     _grabKeyboard(focusTarget = null) {
-        if (this._destroyed)
+        // Never hold a modal grab for a closed notch.
+        if (this._destroyed || !this.isExpanded)
             return;
         if (!this._kbGrab) {
             this._grabbingKeyboard = true;
@@ -6246,6 +6399,10 @@ export const NotchNux = GObject.registerClass({
         this._kbReleaseId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
             this._kbReleaseId = 0;
             let focus = global.stage.get_key_focus();
+            // Keyboard-opened dashboards keep the grab while focus stays in
+            // the notch, so Tab out of the command bar still delivers keys.
+            if (this._openedByKeyboard && this.isExpanded && (!focus || this._isDescendant(focus)))
+                return GLib.SOURCE_REMOVE;
             if (!focus || !this._typables?.has(focus))
                 this._releaseKeyboard();
             return GLib.SOURCE_REMOVE;
@@ -6261,12 +6418,20 @@ export const NotchNux = GObject.registerClass({
             return;
         let grab = this._kbGrab;
         this._kbGrab = null;
+        // popModal restores the old key focus (possibly a text field), which
+        // would re-grab through _onStageKeyFocus; ignore focus while releasing.
+        this._releasingKeyboard = true;
         try {
             Main.popModal(grab);
         } catch (e) {
             logError('failed to release keyboard', e);
+        } finally {
+            try {
+                global.stage.set_key_focus(null);
+            } finally {
+                this._releasingKeyboard = false;
+            }
         }
-        global.stage.set_key_focus(null);
     }
 
     // ============================================================
@@ -6499,6 +6664,7 @@ export const NotchNux = GObject.registerClass({
             throw e;
         }
         this._isExpanding = false;
+        this._syncCommandBar();
 
         // Keep the Tray tab's meters/devices/battery live while open.
         this._startSystemRefresh();
@@ -6548,9 +6714,15 @@ export const NotchNux = GObject.registerClass({
     collapse() {
         if (!this.isExpanded) return;
         this.isExpanded = false;
+        this._openedByKeyboard = false;
+        this._commandBarWanted = false;
         this._closeScanOverlay();
         this._pauseMediaAnimations();
         this._leaveTab(this._activeTab);
+        // Release the keyboard grab before hiding the command bar: hiding the
+        // focused entry first left the modal grab stranded (smoke-test verified).
+        this._releaseKeyboard();
+        if (this._commandBar) this._commandBar.visible = false;
         this._stopSystemRefresh();
         this._surface.remove_style_class_name('notchnux-island-expanded');
 
@@ -6718,3 +6890,6 @@ installLedge(NotchNux.prototype);
 installTray(NotchNux.prototype);
 installClaude(NotchNux.prototype);
 installDev(NotchNux.prototype);
+installKeyboard(NotchNux.prototype);
+installActivities(NotchNux.prototype);
+installCalendarEdit(NotchNux.prototype);

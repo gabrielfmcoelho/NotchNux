@@ -1,0 +1,4 @@
+[
+  {"id": "fx-pinned", "text": "Pinned since last session", "color": "pink", "created": 1794000000000, "updated": 1794200000000, "pinned": true, "pos": {"x": 300, "y": 200}},
+  {"id": "fx-loose", "text": "Not pinned", "color": "yellow", "created": 1793900000000, "updated": 1794100000000, "pinned": false, "pos": null}
+]

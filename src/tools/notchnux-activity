@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# notchnux-activity: show a live activity in the NotchNux pill (D-Bus).
+#
+#   notchnux-activity show TITLE [--body B] [--progress P] [--icon I] [--timeout S]
+#       prints the new activity id. P is 0..1 (-1 = no bar); S is seconds (0 = 8 s).
+#   notchnux-activity update ID [--title T] [--body B] [--progress P]
+#       prints true/false. Anything left out keeps its old value
+#       (the service reads an empty title/body, or progress -2, as "keep").
+#   notchnux-activity end ID
+#       prints true/false.
+#
+# An activity stays until `end`, its timeout, or a click on the bar.
+set -u
+
+DEST=io.github.notchnux
+OBJ=/io/github/notchnux/Activities
+IFACE=io.github.notchnux.Activities
+
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+call() { gdbus call --session --dest "$DEST" --object-path "$OBJ" --method "$IFACE.$1" -- "${@:2}"; }
+# gdbus parses every argument as GVariant text first, so pass strings as
+# GVariant string literals: \ -> \\, ' -> \', wrapped in '…'.
+gv() { local s=${1//\\/\\\\}; s=${s//\'/\\\'}; printf "'%s'" "$s"; }
+# Strip the gdbus tuple: ('a1',) -> a1, (true,) -> true.
+clean() { sed -E "s/^\(//; s/,\)\$//; s/^'//; s/'\$//"; }
+need() { [ $# -ge 2 ] || { echo "notchnux-activity: $1 needs a value" >&2; exit 2; }; }
+isnum() { [[ $1 =~ ^-?[0-9]+(\.[0-9]+)?$ ]] || { echo "notchnux-activity: not a number: $1" >&2; exit 2; }; }
+
+[ $# -ge 1 ] || usage
+cmd=$1; shift
+case $cmd in
+show)
+    [ $# -ge 1 ] || usage
+    title=$1; shift
+    body=''; progress=-1; icon=dialog-information-symbolic; timeout=0
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --body) need "$@"; body=$2; shift 2 ;;
+            --progress) need "$@"; isnum "$2"; progress=$2; shift 2 ;;
+            --icon) need "$@"; icon=$2; shift 2 ;;
+            --timeout) need "$@"; [[ $2 =~ ^[0-9]+$ ]] || { echo "notchnux-activity: --timeout is whole seconds" >&2; exit 2; }; timeout=$2; shift 2 ;;
+            *) usage ;;
+        esac
+    done
+    out=$(call Show "$(gv "$title")" "$(gv "$body")" "$(gv "$icon")" "$progress" "$timeout") || exit 1
+    printf '%s\n' "$out" | clean ;;
+update)
+    [ $# -ge 1 ] || usage
+    id=$1; shift
+    title=''; body=''; progress=-2
+    while [ $# -gt 0 ]; do
+        case $1 in
+            --title) need "$@"; title=$2; shift 2 ;;
+            --body) need "$@"; body=$2; shift 2 ;;
+            --progress) need "$@"; isnum "$2"; progress=$2; shift 2 ;;
+            *) usage ;;
+        esac
+    done
+    out=$(call Update "$(gv "$id")" "$(gv "$title")" "$(gv "$body")" "$progress") || exit 1
+    printf '%s\n' "$out" | clean ;;
+end)
+    [ $# -eq 1 ] || usage
+    out=$(call End "$(gv "$1")") || exit 1
+    printf '%s\n' "$out" | clean ;;
+*) usage ;;
+esac

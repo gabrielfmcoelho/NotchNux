@@ -1,6 +1,7 @@
 // Run: gjs -m tests/config-check.js  (exit 1 on the first failure)
 // Header shortcut limit in helpers/config.js. Read-only: never saves.
-import { ConfigStore, TAB_DEFS, clampPinnedMax } from '../src/helpers/config.js';
+import GLib from 'gi://GLib';
+import { ConfigStore, TAB_DEFS, FEATURE_DEFS, clampPinnedMax, resolveAccent, SYSTEM_ACCENTS } from '../src/helpers/config.js';
 
 let n = 0;
 function ok(cond, what) {
@@ -11,6 +12,9 @@ function ok(cond, what) {
     }
 }
 const eq = (a, b, what) => ok(JSON.stringify(a) === JSON.stringify(b), `${what}: ${JSON.stringify(a)} !== ${JSON.stringify(b)}`);
+// Setters save: point the config dir at a scratch dir so the real one is untouched.
+const tmpCfg = GLib.dir_make_tmp('nnx-cfg-XXXXXX');
+GLib.setenv('XDG_CONFIG_HOME', tmpCfg, true);
 const cfg = obj => new ConfigStore({ contents: new TextEncoder().encode(JSON.stringify(obj)) });
 
 eq([cfg({}).pinnedMax, cfg({ pinnedMax: 0 }).pinnedMax, cfg({ pinnedMax: 99 }).pinnedMax, cfg({ pinnedMax: null }).pinnedMax,
@@ -23,5 +27,41 @@ eq(cfg({ pinnedTabs: eight, pinnedMax: 3 }).pinnedTabs, eight.slice(0, 3), 'limi
 eq(cfg({ pinnedTabs: eight, pinnedMax: 8 }).pinnedTabs, eight, 'limit 8 shows all eight (the stored list kept them)');
 eq(cfg({ pinnedTabs: [...eight, 'home', 'nope'] }).pinnedTabs, eight.slice(0, 5), 'home and unknown ids dropped, default limit');
 eq(cfg({}).pinnedTabs, ['media', 'tasks', 'calendar', 'weather', 'system'], 'default shortcuts unchanged');
+
+// ---- system accent ----
+eq(resolveAccent('system', '#7aa2ff', 'teal'), '#2190a4', 'system accent resolves teal');
+eq(resolveAccent('system', '#7aa2ff', null), '#7aa2ff', 'system with no name falls back to custom');
+eq(resolveAccent('custom', '#7aa2ff', 'teal'), '#7aa2ff', 'custom ignores system accent');
+eq(resolveAccent('system', '#7aa2ff', 'chartreuse'), '#7aa2ff', 'unknown system name falls back to custom');
+eq(Object.keys(SYSTEM_ACCENTS).length, 9, 'nine system accents');
+eq(cfg({}).accentMode, 'custom', 'accentMode defaults to custom');
+eq(cfg({ accentMode: 'bogus' }).accentMode, 'custom', 'bogus accentMode falls back to custom');
+eq(cfg({ accentMode: 'system' }).accentMode, 'system', 'stored system accentMode kept');
+{
+    const c = new ConfigStore({ readFile: p => { try { return GLib.file_get_contents(p)[1]; } catch (e) { return null; } } });
+    ok(GLib.get_user_config_dir() === tmpCfg, 'config dir redirected to scratch');
+    ok(c.setAccentMode('system'), 'setAccentMode accepts system');
+    ok(!c.setAccentMode('bogus'), 'setAccentMode rejects bogus');
+    eq(c.accentMode, 'system', 'mode kept after rejected value');
+    const again = new ConfigStore({ readFile: p => { try { return GLib.file_get_contents(p)[1]; } catch (e) { return null; } } });
+    eq(again.accentMode, 'system', 'accentMode round-trips through the file');
+}
+
+// Google Tasks: off by default; the Tasks list is Local unless picked.
+eq([cfg({}).isFeatureEnabled('googleTasks'), cfg({}).tasksSource], [false, 'local'], 'googleTasks off, Local list by default');
+eq([cfg({ tasksSource: 'abc-uid' }).tasksSource, cfg({ tasksSource: '' }).tasksSource, cfg({ tasksSource: 7 }).tasksSource],
+    ['abc-uid', 'local', 'local'], 'tasksSource: a uid, else Local');
+{
+    const store = new ConfigStore({ readFile: p => { try { return GLib.file_get_contents(p)[1]; } catch (e) { return null; } } });
+    store.setTasksSource('list-uid');
+    store.setFeatureEnabled('googleTasks', true);
+    const again = new ConfigStore({ readFile: p => { try { return GLib.file_get_contents(p)[1]; } catch (e) { return null; } } });
+    eq([again.tasksSource, again.isFeatureEnabled('googleTasks')], ['list-uid', true], 'tasksSource + flag round-trip');
+}
+
+// Calendar editing: off by default, in Preferences' Google group.
+eq([cfg({}).isFeatureEnabled('calendarEdit'), FEATURE_DEFS.find(f => f.id === 'calendarEdit')?.label,
+    FEATURE_DEFS.find(f => f.id === 'calendarEdit')?.group], [false, 'Create and edit calendar events', 'google'],
+'calendarEdit off by default');
 
 print(`config-check: ${n} checks passed`);

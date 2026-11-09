@@ -229,6 +229,16 @@
     background-color: rgba(255, 255, 255, 0.06);
 }
 
+/* Keyboard focus ring: fixed neutral (St CSS can't read the runtime accent). */
+.notchnux-tab-btn:focus,
+.nook-transport-btn:focus,
+.nook-round-btn:focus,
+.nook-pill-btn:focus,
+.nook-add-btn:focus,
+.nook-knob-btn:focus {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.55);
+}
+
 .notchnux-tab-btn-active,
 .notchnux-tab-btn-active:hover {
     color: #ffffff;
@@ -1116,6 +1126,56 @@
     color: rgba(255, 255, 255, 0.48);
 }
 
+/* calendarEdit: "+" beside the date strip, tappable events, and the sheet
+ * (event detail / editor) that takes the agenda's place. */
+.nook-calendar-strip-row {
+    spacing: 6px;
+}
+.nook-calendar-add {
+    padding: 7px;
+    border-radius: 999px;
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.08);
+    transition: background-color 150ms ease-out;
+}
+.nook-calendar-add:hover,
+.nook-calendar-add:focus {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+.nook-calendar-event-btn {
+    border-radius: 10px;
+}
+.nook-calendar-event-btn:hover .nook-calendar-event,
+.nook-calendar-event-btn:focus .nook-calendar-event {
+    background-color: rgba(255, 255, 255, 0.10);
+}
+.nook-calendar-sheet {
+    spacing: 8px;
+}
+.nook-calendar-sheet-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #f4f4f6;
+}
+.nook-calendar-sheet-when {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.8);
+}
+.nook-calendar-sheet-meta {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.52);
+}
+.nook-calendar-sheet-row,
+.nook-calendar-sheet-actions {
+    spacing: 6px;
+}
+.nook-calendar-sheet-actions {
+    padding-top: 4px;
+}
+.nook-calendar-allday-on {
+    background-color: rgba(255, 255, 255, 0.14);
+}
+
 /* ============================================================
  * ALERTS — grouped notification tray
  * ============================================================ */
@@ -1939,6 +1999,41 @@
 .nook-task-footer {
     padding: 0 4px;
 }
+/* Google Tasks: list picker, sync button, inline error. */
+.nook-task-source {
+    max-width: 220px;
+}
+.nook-task-source-label {
+    margin-right: 4px;
+}
+.nook-task-picker {
+    padding: 4px;
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.06);
+    spacing: 2px;
+}
+.nook-task-picker-item {
+    padding: 5px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.75);
+}
+.nook-task-picker-item:hover {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+.nook-task-picker-item-active {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.14);
+}
+.nook-task-picker-note {
+    padding: 4px 10px;
+}
+.nook-task-error {
+    padding: 0 4px;
+    font-size: 11px;
+    color: #ff453a;
+}
 
 /* ---------- Focus ---------- */
 .nook-focus {
@@ -2019,6 +2114,52 @@
 .nook-notes-entry StLabel.hint-text {
     color: rgba(255, 255, 255, 0.32);
 }
+
+/* Post-it board */
+.nook-postit-scroll { height: 250px; }
+.nook-postit-edit {
+    height: 232px;
+    border-radius: 14px;
+    background-color: rgba(255, 255, 255, 0.063);
+}
+
+
+.nook-postit {
+    border-radius: 12px;
+    border-left: 3px solid rgba(255, 255, 255, 0.3);
+    background-color: rgba(255, 255, 255, 0.08);
+    padding: 10px 12px;
+    text-align: left;
+}
+.nook-postit:hover, .nook-postit:focus { background-color: rgba(255, 255, 255, 0.14); }
+.nook-postit-yellow { background-color: rgba(255, 214, 10, 0.22); border-left-color: #ffd60a; }
+.nook-postit-green { background-color: rgba(48, 209, 88, 0.22); border-left-color: #30d158; }
+.nook-postit-blue { background-color: rgba(100, 210, 255, 0.22); border-left-color: #64d2ff; }
+.nook-postit-pink { background-color: rgba(255, 100, 130, 0.22); border-left-color: #ff6482; }
+.nook-postit-purple { background-color: rgba(191, 90, 242, 0.22); border-left-color: #bf5af2; }
+.nook-postit-yellow:hover, .nook-postit-yellow:focus { background-color: rgba(255, 214, 10, 0.32); }
+.nook-postit-green:hover, .nook-postit-green:focus { background-color: rgba(48, 209, 88, 0.32); }
+.nook-postit-blue:hover, .nook-postit-blue:focus { background-color: rgba(100, 210, 255, 0.32); }
+.nook-postit-pink:hover, .nook-postit-pink:focus { background-color: rgba(255, 100, 130, 0.32); }
+.nook-postit-purple:hover, .nook-postit-purple:focus { background-color: rgba(191, 90, 242, 0.32); }
+.nook-postit-add {
+    border: 1px dashed rgba(255, 255, 255, 0.25);
+    background-color: transparent;
+}
+.nook-postit-plus { font-size: 30px; color: rgba(255, 255, 255, 0.5); }
+.nook-postit-text { font-size: 12px; color: #f0f0f3; }
+.nook-postit-empty { color: rgba(255, 255, 255, 0.4); font-style: italic; }
+.nook-postit-age { font-size: 10px; }
+.nook-postit-bar { spacing: 6px; }
+.nook-postit-undo { spacing: 8px; padding: 2px 4px 6px 4px; }
+.nook-postit-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    border: 2px solid transparent;
+}
+.nook-postit-dot-on { border-color: #ffffff; }
+.nook-postit-pin:checked { background-color: rgba(255, 255, 255, 0.22); }
 
 /* ---------- Weather: next hours ---------- */
 .nook-wx-hourly {
@@ -2641,4 +2782,25 @@
     color: rgba(255, 255, 255, 0.5);
     text-align: right;
     font-feature-settings: "tnum";
+}
+
+/* ---------- Command bar (keyboard-opened notch) ---------- */
+.nook-command-bar {
+    spacing: 4px;
+    margin-bottom: 12px;
+}
+.nook-command-entry {
+    padding: 8px 12px;
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: white;
+    font-size: 14px;
+}
+.nook-command-entry:focus {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+.nook-command-hint {
+    padding: 0 12px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.55);
 }

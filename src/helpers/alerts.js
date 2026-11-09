@@ -81,6 +81,19 @@ export class AlertQueue {
         this._pending = this._pending.filter(a => !a.instant);
     }
 
+    // Drop the visible alert and any waiting one of `kind`. Returns whether
+    // anything was dropped. (The caller repaints if the visible one went.)
+    dropKind(kind) {
+        let hit = false;
+        if (this.current?.kind === kind) {
+            this.current = null;
+            hit = true;
+        }
+        let n = this._pending.length;
+        this._pending = this._pending.filter(a => a.kind !== kind);
+        return hit || this._pending.length !== n;
+    }
+
     clear() {
         this.current = null;
         this._pending = [];

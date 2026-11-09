@@ -22,6 +22,11 @@ import { ExtensionPreferences } from 'resource:///org/gnome/Shell/Extensions/js/
 import { ConfigStore, TAB_DEFS, FEATURE_DEFS, WALLPAPER_DEFAULTS, ENHANCE_AUTO, ENHANCE_RANGE, normalizeHex, BLUR_PRESETS, BLUR_RADIUS_RANGE, BLUR_DEFAULTS, MAX_PINNED } from './src/helpers/config.js';
 import { discoverHwmon, pickSensors, pickFan, fanUsable, SENSOR_KINDS, FAN_GUARD_C } from './src/helpers/sensors.js';
 import { TERMINALS } from './src/helpers/dev.js';
+import { EdsClient } from './src/helpers/eds.js';
+import { taskListChoices, LIST_GONE } from './src/helpers/tasksources.js';
+
+// Evolution Data Server's GObject bindings (Google Tasks, calendar editing).
+const EDS_INSTALL_APT = 'sudo apt install gir1.2-ecal-2.0 gir1.2-edataserver-1.2';
 import {
     SETTINGS_PATH, isConnected, connectStatusLine, disconnectStatusLine, statusLineOutdated, updateStatusLine,
     isApproveConnected, connectApproveHook, disconnectApproveHook,
@@ -82,11 +87,13 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         });
         window.add(page);
 
+        this._addKeyboardGroup(page, window);
         this._addAppearanceGroup(page, config);
         this._addBlurGroup(page, config);
         this._addWallpaperGroup(page, config, window);
         this._addTabsGroup(page, config);
         this._addFeaturesGroup(page, config);
+        this._addGoogleGroup(page, config);
         this._addSensorsGroup(page, config);
         this._addClaudeGroup(page, config);
         this._addDevGroup(page, config, window);
@@ -97,6 +104,115 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         window.set_default_size(560, 720);
     }
 
+    // ---- Keyboard: notch shortcut ----
+    _addKeyboardGroup(page, window) {
+        // A manual install that skipped glib-compile-schemas has no schema:
+        // leave the Keyboard group out instead of breaking all of Preferences.
+        let settings;
+        try {
+            settings = this.getSettings();
+        } catch (e) {
+            console.warn(`NotchNux: shortcut settings unavailable (schema not compiled?): ${e.message}`);
+            return;
+        }
+        const group = new Adw.PreferencesGroup({
+            title: 'Keyboard',
+            description: 'Open the notch with a command bar from anywhere.',
+        });
+        page.add(group);
+
+        const label = () => {
+            const [accel] = settings.get_strv('toggle-notch');
+            if (!accel)
+                return 'Disabled';
+            const [ok, key, mods] = Gtk.accelerator_parse(accel);
+            return ok ? Gtk.accelerator_get_label(key, mods) : accel;
+        };
+
+        const row = new Adw.ActionRow({
+            title: 'Toggle notch',
+            subtitle: 'Click to change the shortcut',
+            activatable: true,
+        });
+        const valueLabel = new Gtk.Label({ label: label(), css_classes: ['dim-label'], valign: Gtk.Align.CENTER });
+        row.add_suffix(valueLabel);
+
+        const resetBtn = new Gtk.Button({
+            icon_name: 'edit-undo-symbolic',
+            tooltip_text: 'Reset to default (Super+/)',
+            valign: Gtk.Align.CENTER,
+            css_classes: ['flat'],
+        });
+        resetBtn.connect('clicked', () => settings.reset('toggle-notch'));
+        row.add_suffix(resetBtn);
+        group.add(row);
+
+        const refresh = () => valueLabel.set_label(label());
+        const changedId = settings.connect('changed::toggle-notch', refresh);
+        window.connect('close-request', () => {
+            settings.disconnect(changedId);
+            return false;
+        });
+
+        row.connect('activated', () => this._captureShortcut(window, settings));
+
+        group.add(new Adw.ActionRow({
+            title: 'Command bar',
+            subtitle: 'Type t <task> (! stars it), 25 / 25m / 1h to focus, = for math, ' +
+                'a tab name to open it, n <note> to add to Notes. ' +
+                'In the dashboard: Left/Right switch tabs, Ctrl+1…9 open a tab, Esc closes.',
+            subtitle_lines: 0,
+            use_markup: false,
+        }));
+    }
+
+    _captureShortcut(window, settings) {
+        const dialog = new Adw.Dialog({ title: 'Set shortcut', content_width: 360 });
+        const box = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            spacing: 12,
+            margin_top: 24, margin_bottom: 24, margin_start: 24, margin_end: 24,
+        });
+        box.append(new Gtk.Label({ label: 'Press a new shortcut', css_classes: ['title-3'] }));
+        box.append(new Gtk.Label({
+            label: 'Press a shortcut with Super, Ctrl or Alt · Backspace to disable · Esc to cancel',
+            wrap: true,
+            justify: Gtk.Justification.CENTER,
+            css_classes: ['dim-label'],
+        }));
+        dialog.set_child(box);
+
+        const keys = new Gtk.EventControllerKey();
+        keys.connect('key-pressed', (_c, keyval, _keycode, state) => {
+            const mods = state & Gtk.accelerator_get_default_mod_mask();
+            if (keyval === Gdk.KEY_Escape && !mods) {
+                dialog.close();
+                return Gdk.EVENT_STOP;
+            }
+            if (keyval === Gdk.KEY_BackSpace && !mods) {
+                settings.set_strv('toggle-notch', []);
+                dialog.close();
+                return Gdk.EVENT_STOP;
+            }
+            const modifierKeys = [
+                Gdk.KEY_Shift_L, Gdk.KEY_Shift_R, Gdk.KEY_Control_L, Gdk.KEY_Control_R,
+                Gdk.KEY_Alt_L, Gdk.KEY_Alt_R, Gdk.KEY_Super_L, Gdk.KEY_Super_R,
+                Gdk.KEY_Meta_L, Gdk.KEY_Meta_R, Gdk.KEY_ISO_Level3_Shift,
+            ];
+            const needed = Gdk.ModifierType.SUPER_MASK | Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK;
+            if (modifierKeys.includes(keyval) || !(mods & needed))
+                return Gdk.EVENT_STOP;
+            const lower = Gdk.keyval_to_lower(keyval);
+            if (!Gtk.accelerator_valid(lower, mods))
+                return Gdk.EVENT_STOP;
+            settings.set_strv('toggle-notch', [Gtk.accelerator_name(lower, mods)]);
+            dialog.close();
+            return Gdk.EVENT_STOP;
+        });
+        dialog.add_controller(keys);
+        dialog.present(window);
+    }
+
     // ---- Appearance: accent colour ----
     _addAppearanceGroup(page, config) {
         const group = new Adw.PreferencesGroup({
@@ -104,6 +220,21 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
             description: 'Accent colour applied across the dashboard. Changes take effect instantly.',
         });
         page.add(group);
+
+        // GNOME 47+ exposes the system accent; 46 has no such key, so the
+        // Auto option is hidden there.
+        const hasSystemAccent = !!Gio.SettingsSchemaSource.get_default()
+            ?.lookup('org.gnome.desktop.interface', true)?.has_key('accent-color');
+        let modeRow = null;
+        if (hasSystemAccent) {
+            modeRow = new Adw.ComboRow({
+                title: 'Accent',
+                subtitle: 'Custom, or follow the system accent (Settings → Appearance)',
+                model: Gtk.StringList.new(['Custom', 'System']),
+                selected: config.accentMode === 'system' ? 1 : 0,
+            });
+            group.add(modeRow);
+        }
 
         // Preset swatches. Clicking one commits it and syncs the picker/entry.
         const swatchRow = new Adw.ActionRow({ title: 'Presets' });
@@ -208,6 +339,20 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         hexEntry.add_controller(focusCtl);
         hexRow.add_suffix(hexEntry);
         group.add(hexRow);
+
+        // The custom controls are inert while the system accent is in charge.
+        if (modeRow) {
+            const syncSensitive = () => {
+                const custom = modeRow.selected !== 1;
+                for (const w of [swatchRow, pickerRow, hexRow])
+                    w.sensitive = custom;
+            };
+            modeRow.connect('notify::selected', () => {
+                config.setAccentMode(modeRow.selected === 1 ? 'system' : 'custom');
+                syncSensitive();
+            });
+            syncSensitive();
+        }
     }
 
     // ---- Glass & Blur ----
@@ -711,6 +856,8 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         page.add(group);
 
         for (const f of FEATURE_DEFS) {
+            if (f.group)
+                continue; // in its own group (Google)
             // Plain text: labels like "Charging & low battery alerts" aren't
             // markup. Subtitle after construction, or it's parsed before
             // use_markup applies.
@@ -725,6 +872,135 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
             });
             group.add(row);
         }
+    }
+
+    // ---- Google: Tasks and calendar events through GNOME Online Accounts
+    // (helpers/eds.js). Off by default. Nothing is started until a switch is
+    // on; then one check (the EDS worker's hello + its sources) runs once per
+    // dialog, its Status row covering both features.
+    _addGoogleGroup(page, config) {
+        const group = new Adw.PreferencesGroup({
+            title: 'Google',
+            description: 'Uses the Google account added in Settings → Online Accounts, through Evolution Data Server. NotchNux never signs in to Google itself.',
+        });
+        page.add(group);
+
+        const status = new Adw.ActionRow({ title: 'Status', use_markup: false });
+        group.add(status);
+
+        const def = FEATURE_DEFS.find(f => f.id === 'googleTasks');
+        const enable = new Adw.SwitchRow({ title: def.label, use_markup: false, active: config.isFeatureEnabled(def.id) });
+        enable.subtitle = def.description;
+        group.add(enable);
+
+        const model = Gtk.StringList.new(['Local']);
+        const listRow = new Adw.ComboRow({ title: 'Tasks list', use_markup: false, model, sensitive: false });
+        listRow.subtitle = 'What the Tasks tab and Home show. Local is the list stored on this computer.';
+        group.add(listRow);
+
+        let choices = taskListChoices(null);
+        let filling = false;
+        let checked = null; // the check's promise, kept for the dialog's lifetime
+
+        listRow.connect('notify::selected', () => {
+            if (!filling && choices[listRow.selected])
+                config.setTasksSource(choices[listRow.selected].id);
+        });
+
+        const showChoices = list => {
+            filling = true;
+            const saved = config.tasksSource;
+            choices = taskListChoices(list);
+            if (!choices.some(c => c.id === saved))
+                choices.push({ id: saved, label: LIST_GONE });
+            model.splice(0, model.get_n_items(), choices.map(c => c.label));
+            listRow.selected = Math.max(0, choices.findIndex(c => c.id === saved));
+            filling = false;
+        };
+
+        // Calendar events: the same worker and bindings as Google Tasks, so
+        // the Status row checks them when either switch is on.
+        const calDef = FEATURE_DEFS.find(f => f.id === 'calendarEdit');
+        const calRow = new Adw.SwitchRow({ title: calDef.label, use_markup: false, active: config.isFeatureEnabled(calDef.id) });
+        calRow.subtitle = calDef.description;
+        group.add(calRow);
+
+        // Shown with the install command when the bindings are missing.
+        const copy = new Gtk.Button({ icon_name: 'edit-copy-symbolic', valign: Gtk.Align.CENTER, visible: false,
+            tooltip_text: 'Copy the install command (Ubuntu/Debian)' });
+        copy.add_css_class('flat');
+        copy.connect('clicked', () => Gdk.Display.get_default().get_clipboard().set(EDS_INSTALL_APT));
+        status.add_suffix(copy);
+
+        const check = async () => {
+            const probe = await EdsClient.probe();
+            if (!probe.available) {
+                return {
+                    missing: true,
+                    error: `Not available — ${probe.reason}. Google Tasks and calendar editing need Evolution Data Server’s GObject bindings. On Ubuntu/Debian run: ${EDS_INSTALL_APT} (on Fedora they come with the evolution-data-server package). Then log out and back in.`,
+                };
+            }
+            const client = new EdsClient();
+            try {
+                const res = await client.call('sources');
+                return { lists: res?.tasks ?? [], calendars: res?.calendars ?? [] };
+            } catch (e) {
+                return { error: `Couldn’t list your task lists and calendars — ${e.message}` };
+            } finally {
+                client.destroy();
+            }
+        };
+
+        const refresh = () => {
+            const tasksOn = enable.active, calOn = calRow.active;
+            copy.visible = false;
+            if (!tasksOn)
+                listRow.sensitive = false;
+            if (!tasksOn && !calOn) {
+                status.subtitle = 'Off. The Tasks tab uses the tasks stored on this computer; calendar events are read-only.';
+                return;
+            }
+            status.subtitle = 'Checking…';
+            checked ??= check();
+            checked.then(r => {
+                const tasks = enable.active, cal = calRow.active;
+                if (!tasks && !cal)
+                    return;
+                if (r.error) {
+                    status.subtitle = r.error;
+                    copy.visible = !!r.missing;
+                    listRow.sensitive = false;
+                    return;
+                }
+                const parts = [];
+                if (tasks) {
+                    const google = r.lists.filter(l => l.backend === 'gtasks').length;
+                    parts.push(google
+                        ? `${google} Google Tasks ${google === 1 ? 'list' : 'lists'} found.`
+                        : 'No Google Tasks lists found. Add a Google account in Settings → Online Accounts.');
+                    showChoices(r.lists);
+                    listRow.sensitive = true;
+                    if (choices.find(c => c.id === config.tasksSource)?.label === LIST_GONE)
+                        parts.push(`The saved Tasks list: ${LIST_GONE}.`);
+                } else {
+                    parts.push('Google Tasks is off: the Tasks tab uses the tasks stored on this computer.');
+                }
+                parts.push(cal
+                    ? 'Calendar editing is on: calendars you can write to get + and Edit in the Calendar tab.'
+                    : 'Calendar editing is off.');
+                status.subtitle = parts.join(' ');
+            });
+        };
+
+        enable.connect('notify::active', () => {
+            config.setFeatureEnabled(def.id, enable.active);
+            refresh();
+        });
+        calRow.connect('notify::active', () => {
+            config.setFeatureEnabled(calDef.id, calRow.active);
+            refresh();
+        });
+        refresh();
     }
 
     // ---- Temperatures & fan (helpers/sensors.js) ----
