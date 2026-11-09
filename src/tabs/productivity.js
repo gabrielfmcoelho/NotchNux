@@ -537,16 +537,17 @@ export const ProductivityTabs = {
         if (!task.done) {
             text.connect('button-release-event', () => {
                 let edit = new St.Entry({ style_class: 'nook-input nook-task-edit', text: task.text, x_expand: true, can_focus: true });
-                this._makeTypable(edit);
                 let done = save => {
                     if (save) this._prod.renameTask(task.id, edit.get_text());
                     else this._tasksUi?.fill();
                 };
                 edit.clutter_text.connect('activate', () => done(true));
+                // Connected before _makeTypable's handler, which stops Esc.
                 edit.clutter_text.connect('key-press-event', (a, ev) => {
                     if (ev.get_key_symbol() === Clutter.KEY_Escape) { done(false); return Clutter.EVENT_STOP; }
                     return Clutter.EVENT_PROPAGATE;
                 });
+                this._makeTypable(edit);
                 row.replace_child(text, edit);
                 edit.clutter_text.grab_key_focus();
                 this._grabKeyboard(edit.clutter_text);

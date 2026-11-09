@@ -95,16 +95,12 @@ const KeyboardFeatures = {
         return !!f && (f instanceof St.Entry || f instanceof Clutter.Text || !!this._typables?.has(f));
     },
 
+    // Captured phase: arrows, Ctrl+N and Tab only (see _onDashboardEscape).
     _onDashboardKey(event) {
+        if (!this.isExpanded)
+            return Clutter.EVENT_PROPAGATE;
         let sym = event.get_key_symbol();
         let state = event.get_state();
-        if (sym === Clutter.KEY_Escape) {
-            // Esc in the notes editor goes back to the board, not out.
-            if (this._notesEscape())
-                return Clutter.EVENT_STOP;
-            this.collapse();
-            return Clutter.EVENT_STOP;
-        }
         if ((state & Clutter.ModifierType.CONTROL_MASK) && sym >= Clutter.KEY_1 && sym <= Clutter.KEY_9) {
             let id = this._tabOrder[sym - Clutter.KEY_1];
             if (id)
@@ -125,6 +121,17 @@ const KeyboardFeatures = {
             return Clutter.EVENT_STOP;
         }
         return Clutter.EVENT_PROPAGATE;
+    },
+
+    // Bubble phase: an Esc no field or overlay handled. In an open note it
+    // goes back to the board; anywhere else it closes the notch.
+    _onDashboardEscape(event) {
+        if (!this.isExpanded || event.get_key_symbol() !== Clutter.KEY_Escape)
+            return Clutter.EVENT_PROPAGATE;
+        if (this._notesEscape())
+            return Clutter.EVENT_STOP;
+        this.collapse();
+        return Clutter.EVENT_STOP;
     },
 
     // ---- Command bar ----------------------------------------------------

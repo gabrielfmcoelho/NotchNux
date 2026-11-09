@@ -66,3 +66,55 @@ nnx_check ctrl3 "(() => { const n = $NNX; return n._activeTab === n._tabOrder[2]
 nnx_check focus-tab-btn "(() => { const n = $NNX; n._tabButtons[n._activeTab].grab_key_focus(); return n._isDescendant(global.stage.get_key_focus()); })()" true
 nnx_keys KEY_Escape
 nnx_check esc-on-button "(() => { const n = $NNX; return [n.isExpanded, n._kbGrab === null]; })()" '[false,true]'
+
+# ---- Super+/ and Esc with real keys ----
+# nnx_super_slash: press Super_L, slash, release both.
+nnx_super_slash() {
+    nnx_eval "(() => { const C = imports.gi.Clutter; const d = global.stage.context.get_backend().get_default_seat().create_virtual_device(C.InputDeviceType.KEYBOARD_DEVICE); const t = global.get_current_time() * 1000; d.notify_keyval(t + 1000, 0xffeb, C.KeyState.PRESSED); d.notify_keyval(t + 2000, C.KEY_slash, C.KeyState.PRESSED); d.notify_keyval(t + 3000, C.KEY_slash, C.KeyState.RELEASED); d.notify_keyval(t + 4000, 0xffeb, C.KeyState.RELEASED); return true; })()" >/dev/null
+    sleep 0.8
+}
+nnx_check super-open "(() => { const n = $NNX; n.collapse(); n._toggleFromKeyboard(); return [n.isExpanded, n._kbGrab !== null, global.stage.get_key_focus() === n._commandEntry.clutter_text]; })()" '[true,true,true]'
+sleep 1
+nnx_super_slash
+nnx_check super-closes-from-bar "(() => { const n = $NNX; return [n.isExpanded, n._kbGrab === null, n._commandEntry.get_text().includes('/')]; })()" '[false,true,false]'
+# Super+/ opens a closed notch again (NORMAL mode).
+nnx_super_slash
+nnx_check super-opens "(() => { const n = $NNX; const r = [n.isExpanded, n._kbGrab !== null]; n.collapse(); return r; })()" '[true,true]'
+sleep 0.7
+# Another modal on top: Super+/ must not open the notch over it.
+nnx_eval "(() => { globalThis.__nnxModalActor = new imports.gi.St.Widget({ reactive: true }); Main.uiGroup.add_child(globalThis.__nnxModalActor); globalThis.__nnxModal = Main.pushModal(globalThis.__nnxModalActor, { actionMode: imports.gi.Shell.ActionMode.POPUP }); return true; })()" >/dev/null
+nnx_super_slash
+nnx_check super-ignored-over-modal "$NNX.isExpanded" false
+nnx_eval "(() => { Main.popModal(globalThis.__nnxModal); globalThis.__nnxModalActor.destroy(); return true; })()" >/dev/null; sleep 0.5
+
+# Esc in a Tasks in-place edit cancels the edit and leaves the notch open.
+nnx_eval "(() => { const n = $NNX; n.collapse(); n._prod.addTask('esc edit task'); n.expand(); n._switchTab('tasks'); return true; })()" >/dev/null; sleep 1.5
+FIND="const find = (x, f) => { if (f(x)) return x; for (const c of x.get_children()) { const r = find(c, f); if (r) return r; } return null; };"
+TASKLABEL="find(n._tabHosts.get('tasks'), a => a instanceof imports.gi.St.Label && a.has_style_class_name('nook-task-text') && a.get_text() === 'esc edit task')"
+EDIT="find(n._tabHosts.get('tasks'), a => a.has_style_class_name && a.has_style_class_name('nook-task-edit'))"
+POS=$(nnx_eval "(() => { const n = $NNX; $FIND const l = $TASKLABEL; if (!l) return [-1, -1]; const [x, y] = l.get_transformed_position(); return [Math.round(x + 20), Math.round(y + l.height / 2)]; })()")
+PX=$(echo "$POS" | tr -d '[]' | cut -d, -f1); PY=$(echo "$POS" | tr -d '[]' | cut -d, -f2)
+nnx_eval "(() => { const C = imports.gi.Clutter; const d = global.stage.context.get_backend().get_default_seat().create_virtual_device(C.InputDeviceType.POINTER_DEVICE); const t = global.get_current_time() * 1000; d.notify_absolute_motion(t, $PX, $PY); d.notify_button(t + 20000, C.BUTTON_PRIMARY, C.ButtonState.PRESSED); d.notify_button(t + 40000, C.BUTTON_PRIMARY, C.ButtonState.RELEASED); return true; })()" >/dev/null; sleep 0.8
+nnx_check task-edit-open "(() => { const n = $NNX; $FIND const e = $EDIT; return [!!e, !!e && global.stage.get_key_focus() === e.clutter_text, n._kbGrab !== null]; })()" '[true,true,true]'
+nnx_keys KEY_x
+nnx_check task-edit-typed "(() => { const n = $NNX; $FIND const e = $EDIT; return !!e && e.get_text() === 'esc edit taskx'; })()" true
+nnx_keys KEY_Escape
+nnx_check task-edit-esc-cancels "(() => { const n = $NNX; $FIND return [n.isExpanded, !$EDIT, n._prod.openTasks.some(t => t.text === 'esc edit task'), !!$TASKLABEL]; })()" '[true,true,true,true]'
+
+# Esc in a field of a mouse-opened dashboard only releases the grab.
+nnx_check field-grab "(() => { const n = $NNX; $FIND const e = find(n._tabHosts.get('tasks'), a => a instanceof imports.gi.St.Entry && a.has_style_class_name('nook-input')); e.clutter_text.grab_key_focus(); return [n._openedByKeyboard, n._kbGrab !== null]; })()" '[false,true]'
+nnx_keys KEY_Escape
+nnx_check field-esc-releases "(() => { const n = $NNX; return [n.isExpanded, n._kbGrab === null]; })()" '[true,true]'
+# Esc on the scan sheet (Wi-Fi/Bluetooth overlay) closes just the sheet.
+nnx_check sheet-open "(() => { const n = $NNX; n.collapse(); n._toggleFromKeyboard(); n._openScanOverlay({ title: 'Test' }); return [!!n._scanOverlay, n._kbGrab !== null, n._isDescendant(global.stage.get_key_focus())]; })()" '[true,true,true]'
+sleep 0.5
+nnx_keys KEY_Escape
+nnx_check sheet-esc-closes-sheet "(() => { const n = $NNX; return [n._scanOverlay === null, n.isExpanded]; })()" '[true,true]'
+# A throw while releasing never leaves focus-driven grabs switched off.
+# The deliberate throw gets logged, so report earlier errors now and mark after.
+pre=$(nnx_errors); [ -z "$pre" ] || { nnx_fail errors-before-release-throw 'NotchNux errors in the shell log:'; printf '%s\n' "$pre"; }
+nnx_check release-throw-resets "(() => { const n = $NNX; n.collapse(); n.expand(); n._grabKeyboard(null); const had = n._kbGrab !== null; const s = global.stage; s.set_key_focus = () => { throw new Error('test'); }; let threw = false; try { n._releaseKeyboard(); } catch (e) { threw = true; } delete s.set_key_focus; return [had, threw, n._releasingKeyboard, n._kbGrab === null]; })()" '[true,true,false,true]'
+nnx_eval "$NNX.collapse(), true" >/dev/null
+nnx_mark
+# A collapsed notch never takes a grab.
+nnx_check no-grab-collapsed "(() => { const n = $NNX; n.collapse(); n._grabKeyboard(null); return n._kbGrab === null; })()" true

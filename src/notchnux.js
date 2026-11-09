@@ -228,10 +228,13 @@ export const NotchNux = GObject.registerClass({
         // Click anywhere else on the stage collapses the dashboard.
         this._stageClickId = global.stage.connect('button-press-event', (s, e) => this._onStageClicked(e));
         this._keyFocusId = global.stage.connect('notify::key-focus', () => this._onStageKeyFocus());
-        // Keys reach the notch through the modal grab (keyboard-opened only).
-        // Captured, so St widgets can't swallow the arrows first.
+        // Keys reach the notch through its modal grab. Arrows, Ctrl+N and Tab
+        // are captured, so St widgets can't swallow them first; Esc bubbles,
+        // so a field or overlay that handles it (cancel an edit, close the
+        // Wi-Fi sheet) wins and only an unhandled Esc closes the notch.
         this.connect('captured-event', (a, e) =>
             e.type() === Clutter.EventType.KEY_PRESS ? this._onDashboardKey(e) : Clutter.EVENT_PROPAGATE);
+        this.connect('key-press-event', (a, e) => this._onDashboardEscape(e));
 
         // Helper callbacks refresh the live tab
         // MPRIS fires metadata + playback callbacks back to back; coalesce them
@@ -6292,7 +6295,8 @@ export const NotchNux = GObject.registerClass({
     }
 
     _grabKeyboard(focusTarget = null) {
-        if (this._destroyed)
+        // Never hold a modal grab for a closed notch.
+        if (this._destroyed || !this.isExpanded)
             return;
         if (!this._kbGrab) {
             this._grabbingKeyboard = true;
