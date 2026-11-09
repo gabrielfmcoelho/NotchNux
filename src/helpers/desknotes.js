@@ -40,8 +40,11 @@ export class DeskNotes {
         this._lastPress = { id: null, time: 0 };
         this._destroyed = false;
 
+        // Built while the store is still empty (its files are read async):
+        // the saved notes arrive with 'loaded' (notes.md migration ends in
+        // the same 'loaded'), later edits with 'notes'.
         this._unsub = store.subscribe(kind => {
-            if (kind === 'notes')
+            if (kind === 'notes' || kind === 'loaded')
                 this.sync();
         });
         this._monitorsId = Main.layoutManager.connect('monitors-changed', () => this.sync());
