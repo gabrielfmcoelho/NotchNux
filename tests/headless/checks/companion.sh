@@ -105,6 +105,8 @@ nnx_eval "$NNX._switchTab('companion'), true" >/dev/null; sleep 1.5
 nnx_check pet-tab-open "$NNX._activeTab === 'companion' && !!$NNX._petUi" true
 nnx_check pet-store "(() => { let st = $NNX._petStore; return [st.state.pantry.food >= 1, Object.keys(st.state.needs).length]; })()" '[true,5]'
 nnx_check pet-yard-mirrors "(() => { let r = $R; let y = r._mirrors[0]; return [!!y, y && y._k === 2, y && y.species === r.species, y && y._houseBack.visible]; })()" '[true,true,true,true]'
+# the yard's sky moves while the tab is open: its world tick runs (the pill's does not, idle by day)
+nnx_check pet-sky-tick "$R._mirrors[0]._worldId > 0" true
 nnx_check pet-yard-follows "(() => { let r = $R; let y = r._mirrors[0]; r._play('hop'); return [r._act?.name, y._act?.name]; })()" '["hop","hop"]'
 sleep 1.2
 nnx_shot pet-tab 560 40 800 420
@@ -149,7 +151,8 @@ nnx_pointer "$(echo "$POS" | tr -d '[]' | cut -d, -f1)" "$(echo "$POS" | tr -d '
 nnx_check pet-locked-tooltip-gone "Main.layoutManager.uiGroup.get_children().some(a => a.has_style_class_name?.('nook-tray-tooltip'))" false
 # asleep: the z's tick with the world timer, the yard's animal is inside its house
 nnx_check pet-sleep "(() => { let r = $R; r._away = true; r.update(); return r._worldId > 0; })()" true
-sleep 4   # a mirrored act in flight finishes first, then the yard hops to its door and lies down inside
+# a mirrored act in flight finishes first, then the yard hops to its door and lies down inside (slower under load)
+nnx_wait "(() => { let y = $R._mirrors[0]; return y._act === null && y._inHouse; })()" 10
 nnx_check pet-in-house "(() => { let y = $R._mirrors[0]; return [y._act === null, y._inHouse, y._sprite.opacity, y._houseLight.opacity, Math.abs(y._sprite.translation_x - y._doorX) <= 1]; })()" '[true,true,255,255,true]'
 nnx_shot pet-in-house 560 40 800 200
 nnx_shot pet-asleep 560 40 800 420

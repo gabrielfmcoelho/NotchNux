@@ -9,6 +9,7 @@
 // live; the pill follows. Rain, snow and night repaint the grass at most once
 // a second, and only while idle and on screen.
 
+import Cairo from 'gi://cairo';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -17,7 +18,7 @@ import St from 'gi://St';
 
 import {
     diffEvents, strongest, restAct, ambient, breathing, rank, REACTION_ACT, meadow, wantsMushroom, sheltering, facing,
-    isIdle, cleanSpecies, napLength, NAPS, waitTick, splitHops, HOUSE_DEFAULT,
+    isIdle, cleanSpecies, napLength, NAPS, waitTick, splitHops, HOUSE_DEFAULT, skyBody,
 } from './companion-brain.js';
 import { CACHE_ROOT, ensureOutfit, outfitKey } from './companion-outfit.js';
 import { accentHex } from './widgets.js';
@@ -958,7 +959,7 @@ class Companion extends St.Widget {
         let st = this._state;
         let lying = st?.nap && st.nap !== 'doze';
         let asleep = !!st && ['sleep', 'doze'].includes(restAct(st));
-        let want = !!st && this.mapped && this.visible && (asleep || (isIdle(st) && (st.rain || st.snow || st.night || lying)));
+        let want = !!st && this.mapped && this.visible && (asleep || this._k > 1 || (isIdle(st) && (st.rain || st.snow || st.night || lying)));   // (the yard: its sky moves)
         if (want && !this._worldId) {
             this._worldId = GLib.timeout_add(GLib.PRIORITY_LOW, WORLD_MS, () => {
                 this._tickWorld();
@@ -1019,6 +1020,55 @@ class Companion extends St.Widget {
         });
     }
 
+    // The yard's scenery, behind everything else: the sun or the moon crossing
+    // now and then (skyBody), and three trees in the grass's dim tone. Kept
+    // right of the house and, at the top of its arc, under the tab row (Z_TOP).
+    _drawSky(cr, st, dim) {
+        let k = this._k, w = this._mw, g = this._g, x0 = this._minX;
+        let body = skyBody(Date.now(), !!st.night);
+        if (body) {
+            let sx = x0 + 8 * k + body.t * (w - x0 - 16 * k);
+            let sy = 6 * k - 14 * k * Math.sin(Math.PI * body.t);   // low at both ends, highest midway
+            if (body.kind === 'sun') {
+                let [r, gr, b] = rgb(accentHex());
+                cr.setSourceRGBA(r, gr, b, 0.85);
+                cr.arc(sx, sy, 3.5 * k, 0, 2 * Math.PI);
+                cr.fill();
+                cr.setLineWidth(k);
+                for (let i = 0; i < 8; i++) {
+                    let a = i * Math.PI / 4;
+                    cr.moveTo(sx + 4.8 * k * Math.cos(a), sy + 4.8 * k * Math.sin(a));
+                    cr.lineTo(sx + 6 * k * Math.cos(a), sy + 6 * k * Math.sin(a));
+                }
+                cr.stroke();
+            } else {   // a crescent: a disc with a disc bitten out (cleared: the sky is drawn first, nothing else is under it)
+                cr.setSourceRGBA(0.75, 0.74, 0.8, 0.75);
+                cr.arc(sx, sy, 4.5 * k, 0, 2 * Math.PI);
+                cr.fill();
+                cr.setOperator(Cairo.Operator.CLEAR);
+                cr.arc(sx + 2.6 * k, sy - 1.6 * k, 4 * k, 0, 2 * Math.PI);
+                cr.fill();
+                cr.setOperator(Cairo.Operator.OVER);
+            }
+        }
+        // trees at fixed spots right of the house: round, tall round, a pine
+        cr.setSourceRGBA(0.75, 0.74, 0.8, 0.18 * dim);
+        let tree = (f, h) => {
+            let x = Math.round(x0 + f * (w - x0));
+            cr.rectangle(x - k, g - 6 * h * k, 2 * k, 6 * h * k);
+            for (let [dx, dy, r] of [[0, -11, 5], [-3.5, -8, 4], [3.5, -8, 4]])
+                cr.arc(x + dx * h * k, g + dy * h * k, r * h * k, 0, 2 * Math.PI), cr.newSubPath();
+            cr.fill();
+        };
+        tree(0.32, 0.8);
+        tree(0.66, 1.15);
+        let px = Math.round(x0 + 0.9 * (w - x0));
+        cr.rectangle(px - k, g - 4 * k, 2 * k, 4 * k);
+        for (let [y, hw] of [[-4, 5], [-9, 4], [-14, 3]])   // three tiers, the top one narrowest
+            cr.moveTo(px - hw * k, g + y * k), cr.lineTo(px + hw * k, g + y * k), cr.lineTo(px, g + (y - 7) * k), cr.closePath();
+        cr.fill();
+    }
+
     // Dot grass in the wallpaper's style, with short blades; night dims it,
     // wind and landings lean it, rain and snow fall through it.
     _drawGrass(area) {
@@ -1029,8 +1079,10 @@ class Companion extends St.Widget {
         let feet = this._sprite.translation_x + this._s / 2;
         let wind = (st.wind ?? 0) > 20 ? 1 : 0;
         let k = this._k;
-        if (k > 1)
+        if (k > 1) {
             cr.translate(0, Z_ROOM * k);   // (the yard's grass starts above the zone)
+            this._drawSky(cr, st, dim);
+        }
         for (let x = 1; x < w; x += 3 * k) {
             let xx = x - (s % 3);
             let y = this._g + 0.5 + 0.8 * k * Math.sin(xx / (5 * k) + s / 4);

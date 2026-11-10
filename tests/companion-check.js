@@ -6,6 +6,7 @@ import {
     diffEvents, strongest, restAct, ambient, breathing, rank, REACTION_ACT, meadow, wantsLunch, wantsMushroom,
     sheltering, facing, weatherKind, isNight, cleanSpecies, SPECIES, isIdle, napLength, NAPS,
     ROUTINES, WANDER_STYLES, period, pickRoutine, wantsRoutine, splitHops, WEARABLES, HOUSE_STYLES,
+    skyBody, SKY_CYCLE_MS, SKY_SHOW_MS,
 } from '../src/helpers/companion-brain.js';
 
 let n = 0;
@@ -34,6 +35,14 @@ const s = o => ({ ...base, ...o });
     trip.forEach(i => i.onStart?.());
     eq(started, 1, 'the trip\'s onStart runs once, with its first hop');
 }
+
+// the yard's sky: the sun by day, the moon at night, crossing now and then
+ok(SKY_SHOW_MS > 0 && SKY_SHOW_MS < SKY_CYCLE_MS, 'the sky is empty part of the time');
+eq(skyBody(0, false), { kind: 'sun', t: 0 }, 'a crossing starts at the left');
+eq(skyBody(SKY_SHOW_MS / 2, true), { kind: 'moon', t: 0.5 }, 'the moon at night, halfway');
+eq(skyBody(SKY_SHOW_MS, false), null, 'then the sky is empty');
+eq(skyBody(SKY_CYCLE_MS - 1, true), null, 'until the next cycle');
+eq(skyBody(3 * SKY_CYCLE_MS + SKY_SHOW_MS / 4, false), { kind: 'sun', t: 0.25 }, 'every cycle');
 
 // events
 eq(diffEvents(base, base), [], 'no change, no events');

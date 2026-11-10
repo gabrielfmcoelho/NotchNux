@@ -287,6 +287,17 @@ export function isNight(nowMs, sunriseMs, sunsetMs, hour) {
     return hour >= 23 || hour < 6;
 }
 
+// The yard's sky: the sun by day or the moon at night crosses it now and then,
+// for SKY_SHOW_MS of every SKY_CYCLE_MS. t runs 0..1, left to right; null while
+// the sky is empty. From the clock alone, so it needs no state or timer of its own.
+export const SKY_CYCLE_MS = 10 * 60 * 1000;
+export const SKY_SHOW_MS = 4 * 60 * 1000;
+
+export function skyBody(nowMs, night) {
+    let p = nowMs % SKY_CYCLE_MS;
+    return p < SKY_SHOW_MS ? { kind: night ? 'moon' : 'sun', t: p / SKY_SHOW_MS } : null;
+}
+
 export const SPECIES = ['rabbit', 'cat', 'fox'];
 
 export function cleanSpecies(v) {
