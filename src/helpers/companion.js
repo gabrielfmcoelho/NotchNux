@@ -39,7 +39,7 @@ const FLOWERS_MAX = 12;                                // planted flowers drawn 
 const HOP_MAX = BASE.wide - BASE.sprite;               // the pill's longest hop; longer trips take several
 const FADE_MS = 250;                                   // leaving the pill, arriving in the yard
 const SWAP_POLL_MS = 20;                               // a new outfit's frames: are they loaded yet?
-const SWAP_MAX_MS = 500;                               // swap anyway after this
+const SWAP_MAX_MS = 5000;                              // frames that never load: give up on them
 
 function rgb(hex) {
     let m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex) ?? ['', 'aa', 'aa', 'ff'];
@@ -53,7 +53,8 @@ class Companion extends St.Widget {
     // scale 2 is the Pet tab's yard; mirror: the pill's Companion to follow (one
     // brain, one life: the yard replays its acts and never starts its own).
     // onEvent(name): something it did (meal, snack, pet, groom, dig, play, napEnd).
-    _init(getState, { species = 'rabbit', onWidth = null, onMemory = null, onEvent = null, scale = 1, mirror = null } = {}) {
+    // worn: the outfit it starts in (a mirror starts in its pill's).
+    _init(getState, { species = 'rabbit', worn = null, onWidth = null, onMemory = null, onEvent = null, scale = 1, mirror = null } = {}) {
         super._init({ style_class: 'nn-pill-rabbit-zone', width: BASE.compact * scale, height: BASE.h * scale,
             y_align: Clutter.ActorAlign.CENTER, reactive: true });
         this._k = scale;
@@ -71,8 +72,9 @@ class Companion extends St.Widget {
         this._mirrors = [];
         this._playing = null;      // the composite or routine being played, for onEvent
         this._zPhase = 0;
-        // the yard starts in the pill's clothes, so its first frames are never the bare animal
-        this._worn = { ...(mirror?._worn ?? { head: null, neck: null, back: null }) };
+        // starts dressed, so its first frames are never the bare animal
+        let w = mirror?._worn ?? worn;
+        this._worn = { head: w?.head ?? null, neck: w?.neck ?? null, back: w?.back ?? null };
         this._minX = 0;            // the yard's house takes the left end
         this._claude = { mood: 'idle', fresh: 0, color: null };
         this._away = false;
@@ -226,7 +228,7 @@ class Companion extends St.Widget {
         this._wantKey = outfitKey(name, this._worn, this._lib?.version);
         this._outfitDir = this._ensureOutfit();
         this._frames = this._frameSet(this._outfitDir);
-        this._shown = null;
+        this._shown = this._shownIcon = null;
         for (let p of this._propIcons.values())
             p.destroy();
         this._propIcons.clear();
@@ -264,13 +266,17 @@ class Companion extends St.Widget {
         return (this._state?.music && this._spec.acts[`${name}@music`]) || this._spec.acts[name];
     }
 
+    // While a new outfit loads, a frame shows from it once loaded, else from the old set.
     _show(name) {
-        if (this._shown === name)
-            return;
-        if (this._shown)
-            this._frames.get(this._shown).opacity = 0;
-        this._frames.get(name).opacity = 255;
+        let next = this._next?.get(name);
+        let icon = next?.get_first_child()?.get_content() ? next : this._frames.get(name);
         this._shown = name;
+        if (icon === this._shownIcon)
+            return;
+        if (this._shownIcon)
+            this._shownIcon.opacity = 0;
+        icon.opacity = 255;
+        this._shownIcon = icon;
     }
 
     // The species' frames, or an outfit folder composed from them (the folder path).
@@ -294,9 +300,12 @@ class Companion extends St.Widget {
         if (this._swapId)
             GLib.source_remove(this._swapId);
         this._swapId = 0;
-        for (let f of this._next?.values() ?? [])
-            f.destroy();
+        let next = this._next;
         this._next = null;
+        if (next && this._shown)
+            this._show(this._shown);   // back on the old set before the new one goes
+        for (let f of next?.values() ?? [])
+            f.destroy();
     }
 
     // How many planted flowers the yard shows.
@@ -384,24 +393,29 @@ class Companion extends St.Widget {
 
     // Measured headless (Step 1 of the wardrobe plan): an icon's texture child gets
     // its content in the same main-loop turn its picture becomes paintable (painted
-    // cells matched loaded ones exactly), so the swap waits for every frame's content.
-    // 144 fresh frames took ~450 ms; past SWAP_MAX_MS it swaps anyway.
+    // cells matched loaded ones exactly). 144 fresh frames took ~450 ms, twice that
+    // with the yard open, so the old set stays under the new one until every new
+    // frame has content (_show picks per frame); SWAP_MAX_MS only for files that never load.
     _swapTo(dir) {
         let next = this._frameSet(dir);
         let t0 = GLib.get_monotonic_time();
         this._next = next;
         this._swapId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SWAP_POLL_MS, () => {
             let ready = [...next.values()].every(f => f.get_first_child()?.get_content());
-            if (!ready && GLib.get_monotonic_time() - t0 < SWAP_MAX_MS * 1000)
+            if (!ready && GLib.get_monotonic_time() - t0 < SWAP_MAX_MS * 1000) {
+                if (this._shown)
+                    this._show(this._shown);   // the frame on show, once its new icon loaded
                 return GLib.SOURCE_CONTINUE;
+            }
             this._swapId = 0;
-            this._next = null;
-            if (this._shown)
-                next.get(this._shown).opacity = 255;
-            for (let f of this._frames.values())
-                f.destroy();
+            let old = this._frames;
             this._frames = next;
+            this._next = null;
             this._outfitDir = dir;
+            if (this._shown)
+                this._show(this._shown);
+            for (let f of old.values())
+                f.destroy();
             return GLib.SOURCE_REMOVE;
         });
     }

@@ -208,16 +208,18 @@ export const NotchNux = GObject.registerClass({
         this._initActivities();
         // Screen sharing / recording indicator for the pill.
         this._screenShare = new ScreenShareWatch(() => this._updatePrivacyIndicators());
+        // The Pet tab's store: needs, pantry, finds, diary (reads the pill companion).
+        // Made first so the pill starts in the saved outfit (no bare set loaded first).
+        this._initCompanionTab();
         // The rabbit companion goes in last, at index 0, so it stays left of the
         // live-activity zones that the inits above inserted by index.
         this._pillRabbit = new Companion(() => this._companionState(), {
             species: this._config.companion.species,
+            worn: this._petStore.state.worn,
             onWidth: () => { if (!this.isExpanded && !this._alertShowing) this._applyPillWidth(); },
             onMemory: (key, value) => this._config.setCompanion({ [key]: value }),
             onEvent: name => this._onCompanionEvent(name),
         });
-        // The Pet tab's store: needs, pantry, finds, diary (reads the pill companion).
-        this._initCompanionTab();
         this._pillRabbit.visible = this._config.isFeatureEnabled('rabbitCompanion');
         this._pill.insert_child_at_index(this._pillRabbit, 0);
         this._applyPillOrder();
