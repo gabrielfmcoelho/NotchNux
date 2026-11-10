@@ -9,6 +9,7 @@
 // helpers/companion-store.js and helpers/companion-brain.js.
 
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
@@ -22,6 +23,7 @@ import { VERTICAL, HORIZONTAL } from '../helpers/compat.js';
 
 // The rows of the Needs card, in order (the ones with two actions first).
 const NEEDS = [['hunger', 'Food'], ['mood', 'Mood'], ['clean', 'Clean'], ['energy', 'Energy']];
+const ITEMS_ROOT = Gio.File.new_for_uri(import.meta.url).get_parent().get_parent().get_child('companions');
 const SLOTS = [['head', 'Head'], ['neck', 'Neck'], ['back', 'Back']];
 const cap = s => s[0].toUpperCase() + s.slice(1);
 const BACK_MS = 5 * 60 * 1000;   // how long "happy you're back" stays after you return
@@ -285,20 +287,29 @@ export function installCompanion(proto) {
                 }
 
                 wardrobe.destroy_all_children();
+                let dir = ITEMS_ROOT.get_child(pill.species);
                 for (let [slot, name] of SLOTS) {
-                    let owned = s.items.filter(id => WEARABLES[id]?.slot === slot);
-                    if (!owned.length)
-                        continue;
                     let row = new St.BoxLayout({ style_class: 'nn-pet-wear', x_expand: true });
                     row.add_child(label(name, 'nn-pet-need-label'));
-                    let chips = new St.BoxLayout({ style_class: 'nook-chip-row' });
-                    for (let id of owned)
-                        chip(chips, cap(WEARABLES[id].name.replace(/^a (tiny )?/, '')), () => st.wear(id), s.worn[slot] === id);
-                    row.add_child(chips);
+                    let tiles = new St.BoxLayout({ style_class: 'nook-chip-row' });
+                    for (let [id, w] of Object.entries(WEARABLES).filter(([, w]) => w.slot === slot)) {
+                        let have = s.items.includes(id);
+                        let t = new St.Button({ style_class: `nn-pet-item ${have ? (s.worn[slot] === id ? 'nn-pet-item-on' : '') : 'nn-pet-item-locked'}`,
+                            can_focus: have, reactive: have });
+                        t.set_style(`success-color: ${accentHex()};`);   // the item's accent part, as on the pill
+                        t.opacity = have ? 255 : 110;
+                        t.set_child(new St.Icon({ gicon: new Gio.FileIcon({ file: dir.get_child(`item-${id}-symbolic.svg`) }), icon_size: 32 }));
+                        if (have) {
+                            t.connect('clicked', () => st.wear(id));
+                            addPressFeedback(t);
+                        } else {
+                            this._attachTrayTooltip(t, w.how);
+                        }
+                        tiles.add_child(t);
+                    }
+                    row.add_child(tiles);
                     wardrobe.add_child(row);
                 }
-                if (!wardrobe.get_n_children())
-                    wardrobe.add_child(label('Hats and collars turn up by digging and by keeping a meal streak.', 'nook-card-meta'));
 
                 pockets.destroy_all_children();
                 if (s.pantry.seed)

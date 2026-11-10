@@ -133,6 +133,8 @@ nnx_eval "$R.setSpecies('rabbit'), true" >/dev/null; sleep 2.5
 nnx_check pet-outfit-off "(() => { let st = $NNX._petStore, r = $R; st.wear('straw'); st.wear('scarf'); return [st.state.worn.head, st.state.worn.neck]; })()" '[null,null]'
 sleep 0.8
 nnx_check pet-outfit-bare "$R._outfitDir.endsWith('/src/companions/rabbit')" true
+nnx_check pet-wardrobe "(() => { let st = $NNX._petStore; let find = (a, f, out = []) => { if (f(a)) out.push(a); a.get_children().forEach(c => find(c, f, out)); return out; }; let tiles = find($NNX, a => a.has_style_class_name?.('nn-pet-item')); return [tiles.length, tiles.filter(t => t.has_style_class_name('nn-pet-item-locked')).every(t => !t.reactive), tiles.filter(t => t.has_style_class_name('nn-pet-item-on')).length]; })()" '[9,true,0]'
+nnx_shot pet-wardrobe 560 40 800 700
 # asleep: the z's tick with the world timer, the yard's animal is inside its house
 nnx_check pet-sleep "(() => { let r = $R; r._away = true; r.update(); return r._worldId > 0; })()" true
 sleep 1.6   # a mirrored act in flight finishes first, then the yard settles into the house
