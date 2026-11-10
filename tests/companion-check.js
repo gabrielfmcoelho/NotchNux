@@ -401,3 +401,45 @@ print(`companion-check: ${n} checks passed`);
     GLib.spawn_command_line_sync(`rm -rf ${odir}`);
     print('companion-check (store): ok');
 }
+
+
+// ---- outfit: compose an outfit's frames into the cache
+{
+    const GLib = (await import('gi://GLib')).default;
+    const { outfitKey, outfitLayers, composeFrame, ensureOutfit, OUTFIT_KEEP } = await import('../src/helpers/companion-outfit.js');
+    const T = '<svg><g>B<!--back-->A<!--neck--><g><!--head0--><g data-ear="far" transform="rotate(0 58 46)">F</g>S<!--head1--><g data-ear="near" transform="rotate(0 66 45)">N</g><!--head2--></g></g></svg>';
+    const LIB = { version: 3, items: {
+        scarf: { slot: 'neck', rest: { neck: '<path id="r"/>' }, stream: { neck: '<path id="s"/>' } },
+        beanie: { slot: 'head', rest: { head1: '<path id="d"/>', head2: '<path id="c"/>' }, ears: [-12, 8] } } };
+    eq(outfitKey('cat', { head: 'beanie', neck: null, back: 'cape' }, 3), 'cat-beanie-none-cape-v3', 'the key names animal, slots and art version');
+    eq(outfitKey('cat', { head: null, neck: null, back: null }, 3), null, 'nothing worn: no key');
+    let o = outfitLayers(LIB, { head: 'beanie', neck: 'scarf', back: 'ghost' }, false);
+    eq(o, { layers: { back: '', neck: '<path id="r"/>', head0: '', head1: '<path id="d"/>', head2: '<path id="c"/>' }, ears: [-12, 8] }, 'layers; an unknown item draws nothing');
+    eq(outfitLayers(LIB, { neck: 'scarf' }, true).layers.neck, '<path id="s"/>', 'a streaming frame takes the streaming shapes');
+    eq(outfitLayers(LIB, { head: 'beanie' }, true).layers.head1, '<path id="d"/>', 'no streaming variant: the rest shapes');
+    eq(outfitLayers(LIB, { head: 'scarf' }, false).layers.neck, '', 'an item in the wrong slot draws nothing');
+    let out = composeFrame(T, o.layers, o.ears);
+    ok(out.includes('rotate(-12 58 46)') && out.includes('rotate(8 66 45)') && out.includes('A<path id="r"/>') && !out.includes('<!--'), 'slots filled, ears turned');
+    eq(composeFrame(T, outfitLayers(LIB, {}, false).layers, [0, 0]), T.replace(/<!--\w+-->/g, ''), 'bare: only the slot comments go');
+
+    let src = GLib.Dir.make_tmp('nnx-src-XXXXXX'), cache = `${GLib.Dir.make_tmp('nnx-cache-XXXXXX')}/companion`;
+    let spec = { acts: { sit: { frames: ['a-symbolic.svg', 'b-symbolic.svg', 'a-symbolic.svg'] } }, stream: ['b-symbolic.svg'] };
+    for (let f of ['a-symbolic.svg', 'b-symbolic.svg']) GLib.file_set_contents(`${src}/${f}`, T);
+    let read = p => new TextDecoder().decode(GLib.file_get_contents(p)[1]);
+    let args = { srcDir: src, cacheRoot: cache, species: 'cat', worn: { neck: 'scarf' }, spec, lib: LIB };
+    let d = ensureOutfit(args);
+    eq(d, `${cache}/cat-none-scarf-none-v3`, 'composed into its own folder');
+    ok(read(`${d}/a-symbolic.svg`).includes('id="r"') && read(`${d}/b-symbolic.svg`).includes('id="s"'), 'rest and streaming frames');
+    eq(ensureOutfit({ ...args, worn: {} }), src, 'nothing worn: the shipped frames');
+    eq(ensureOutfit({ ...args, lib: null }), src, 'no library: the shipped frames');
+    GLib.file_set_contents(`${src}/a-symbolic.svg`, 'CHANGED');
+    ok(ensureOutfit(args) === d && read(`${d}/a-symbolic.svg`).includes('id="r"'), 'an existing folder is never rewritten');
+    GLib.mkdir_with_parents(`${cache}/cat-none-scarf-none-v9.tmp`, 0o700);
+    for (let v = 10; v < 10 + OUTFIT_KEEP + 2; v++) ensureOutfit({ ...args, lib: { ...LIB, version: v } });
+    let left = []; let en = Gio.File.new_for_path(cache).enumerate_children('standard::name', 0, null), fi;
+    while ((fi = en.next_file(null))) left.push(fi.get_name());
+    ok(left.length === OUTFIT_KEEP && !left.some(n => n.endsWith('.tmp')) && left.includes(`cat-none-scarf-none-v${10 + OUTFIT_KEEP + 1}`), `keeps ${OUTFIT_KEEP}, the latest among them, no leftovers (${left})`);
+    let file = `${GLib.Dir.make_tmp('nnx-ro-XXXXXX')}/not-a-folder`; GLib.file_set_contents(file, 'x');
+    eq(ensureOutfit({ ...args, cacheRoot: file }), src, 'a cache that cannot be written: the shipped frames, no throw');
+    print('companion-check (outfit): ok');
+}
