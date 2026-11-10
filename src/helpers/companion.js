@@ -19,6 +19,7 @@ import {
     diffEvents, strongest, restAct, ambient, breathing, rank, REACTION_ACT, meadow, wantsMushroom, sheltering, facing,
     isIdle, cleanSpecies, napLength, NAPS, waitTick, splitHops,
 } from './companion-brain.js';
+import { CACHE_ROOT, ensureOutfit, outfitKey } from './companion-outfit.js';
 import { accentHex } from './widgets.js';
 
 const ROOT = Gio.File.new_for_uri(import.meta.url).get_parent().get_parent().get_child('companions');
@@ -37,6 +38,8 @@ const FOODS = ['whole', 'half', 'stub'];
 const FLOWERS_MAX = 12;                                // planted flowers drawn in the yard
 const HOP_MAX = BASE.wide - BASE.sprite;               // the pill's longest hop; longer trips take several
 const FADE_MS = 250;                                   // leaving the pill, arriving in the yard
+const SWAP_POLL_MS = 20;                               // a new outfit's frames: are they loaded yet?
+const SWAP_MAX_MS = 500;                               // swap anyway after this
 
 function rgb(hex) {
     let m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex) ?? ['', 'aa', 'aa', 'ff'];
@@ -68,7 +71,8 @@ class Companion extends St.Widget {
         this._mirrors = [];
         this._playing = null;      // the composite or routine being played, for onEvent
         this._zPhase = 0;
-        this._worn = { head: null, neck: null };
+        // the yard starts in the pill's clothes, so its first frames are never the bare animal
+        this._worn = { ...(mirror?._worn ?? { head: null, neck: null, back: null }) };
         this._minX = 0;            // the yard's house takes the left end
         this._claude = { mood: 'idle', fresh: 0, color: null };
         this._away = false;
@@ -96,6 +100,8 @@ class Companion extends St.Widget {
         this._waitSince = 0;       // a Claude wait being timed (see waitTick)
         this._nap = false;         // a lively short sleep
         this._napId = 0;
+        this._swapId = 0;          // a new outfit's frames loading behind the shown ones
+        this._next = null;         // those frames (a Map like _frames)
 
         this._grass = new St.DrawingArea({ width: this._cw, height: this._h });
         this._grass.connect('repaint', area => this._drawGrass(area));
@@ -122,14 +128,6 @@ class Companion extends St.Widget {
         this.add_child(this._sprite);
         this._frames = new Map();
         this._propIcons = new Map();
-        // what it wears rides the sprite (so it flips with it), placed per frame from the rig's anchors
-        this._wearIcons = { neck: new St.Icon({ icon_size: this._p, visible: false }) };
-        this._hatFrames = new Map();   // hat frame name -> icon, loaded when a hat is put on
-        this._hatMap = null;           // base frame -> hat frame, for the hat worn
-        for (let w of Object.values(this._wearIcons)) {
-            w.set_pivot_point(0.5, 1);
-            this._sprite.add_child(w);
-        }
         // in the yard the house takes the left end: the animal lives (and lands) to its right
         this._minX = scale > 1 ? this._houseSize + 6 * scale : 0;
         if (scale > 1)
@@ -168,10 +166,10 @@ class Companion extends St.Widget {
             this._gone = true;
             this._cut();
             this._clearAmbient();
-            for (let id of [this._narrowId, this._worldId, this._napId])
+            for (let id of [this._narrowId, this._worldId, this._napId, this._swapId])
                 if (id)
                     GLib.source_remove(id);
-            this._narrowId = this._worldId = this._napId = 0;
+            this._narrowId = this._worldId = this._napId = this._swapId = 0;
             for (let id of [this._idleWatch, this._activeWatch])
                 if (id)
                     this._idleMon.remove_watch(id);
@@ -182,7 +180,6 @@ class Companion extends St.Widget {
             mirror._mirrors.push(this);
             this._away = mirror._away;
             this._claude = mirror._claude;
-            this._worn = mirror._worn;
         }
         this.update();
         this._settle();
@@ -210,32 +207,31 @@ class Companion extends St.Widget {
     // front; showing a frame flips opacity. Swapping one icon's gicon (or
     // un-hiding a hidden one) loads asynchronously and played blank frames.
     // Clutter skips painting fully transparent actors.
+    // The frames come from the species folder, or with clothes on from an
+    // outfit folder composed from them (companion-outfit.js).
     _loadSpecies(name) {
         this._species = name;
         let dir = ROOT.get_child(name);
-        this._spec = JSON.parse(new TextDecoder().decode(dir.get_child('acts.json').load_contents(null)[1]));
+        let read = f => JSON.parse(new TextDecoder().decode(dir.get_child(f).load_contents(null)[1]));
+        this._spec = read('acts.json');
+        try {
+            this._lib = read('wear.json');
+        } catch (e) {
+            this._lib = null;   // no clothes for this animal: it goes bare
+        }
         this._frameMs = Math.round(1000 / this._spec.fps);
+        this._dropNext();
         for (let f of this._frames.values())
             f.destroy();
-        this._frames.clear();
+        this._wantKey = outfitKey(name, this._worn, this._lib?.version);
+        this._outfitDir = this._ensureOutfit();
+        this._frames = this._frameSet(this._outfitDir);
         this._shown = null;
-        for (let n of new Set(Object.values(this._spec.acts).flatMap(a => a.frames))) {
-            let icon = new St.Icon({ gicon: new Gio.FileIcon({ file: dir.get_child(n) }), icon_size: this._s, opacity: 0 });
-            this._frames.set(n, icon);
-            this._sprite.add_child(icon);
-        }
         for (let p of this._propIcons.values())
             p.destroy();
         this._propIcons.clear();
         this._propShown = null;
-        this._anchors = this._spec.anchors ?? {};
-        for (let f of this._hatFrames.values())
-            f.destroy();
-        this._hatFrames.clear();
-        this._hatMap = null;
-        this._box = this._spec.box ?? [-20, -31, 135, 135];
         this._house.gicon = new Gio.FileIcon({ file: dir.get_child('prop-house-symbolic.svg') });
-        this.setWear(this._worn);
         for (let n of [...PROPS.map(p => `prop-${p}`), ...FOODS.map(f => `food-${f}`)]) {
             let icon = new St.Icon({ gicon: new Gio.FileIcon({ file: dir.get_child(`${n}-symbolic.svg`) }), icon_size: this._p, opacity: 0 });
             this._propIcons.set(n, icon);
@@ -268,17 +264,39 @@ class Companion extends St.Widget {
         return (this._state?.music && this._spec.acts[`${name}@music`]) || this._spec.acts[name];
     }
 
-    // Show a base frame; with a hat on, its hatted twin (ears and all) is shown instead.
     _show(name) {
-        let real = this._hatMap?.[name] ?? name;
-        if (this._shown === real)
+        if (this._shown === name)
             return;
         if (this._shown)
-            (this._frames.get(this._shown) ?? this._hatFrames.get(this._shown)).opacity = 0;
-        (this._frames.get(real) ?? this._hatFrames.get(real)).opacity = 255;
-        this._shown = real;
-        this._base = name;
-        this._placeWear();
+            this._frames.get(this._shown).opacity = 0;
+        this._frames.get(name).opacity = 255;
+        this._shown = name;
+    }
+
+    // The species' frames, or an outfit folder composed from them (the folder path).
+    _ensureOutfit() {
+        return ensureOutfit({ srcDir: ROOT.get_child(this._species).get_path(), cacheRoot: CACHE_ROOT,
+            species: this._species, worn: this._worn, spec: this._spec, lib: this._lib });
+    }
+
+    // One icon per frame from a folder, under the sprite at opacity 0.
+    _frameSet(path) {
+        let frames = new Map();
+        for (let n of new Set(Object.values(this._spec.acts).flatMap(a => a.frames))) {
+            let icon = new St.Icon({ gicon: new Gio.FileIcon({ file: Gio.File.new_for_path(`${path}/${n}`) }), icon_size: this._s, opacity: 0 });
+            frames.set(n, icon);
+            this._sprite.add_child(icon);
+        }
+        return frames;
+    }
+
+    _dropNext() {
+        if (this._swapId)
+            GLib.source_remove(this._swapId);
+        this._swapId = 0;
+        for (let f of this._next?.values() ?? [])
+            f.destroy();
+        this._next = null;
     }
 
     // How many planted flowers the yard shows.
@@ -347,49 +365,45 @@ class Companion extends St.Widget {
         this._props.opacity = this._out && !this._propShown?.startsWith('prop-flower') ? 0 : 255;
     }
 
-    // What it wears: { head, neck } item ids (or null). Icons come from the species folder.
+    // What it wears: { head, neck, back } item ids (or null). Called on every
+    // store change, so it does nothing unless the outfit itself changed. The new
+    // outfit's frames load behind the shown ones and take over once loaded.
     setWear(worn) {
-        this._worn = { head: worn?.head ?? null, neck: worn?.neck ?? null };
-        let dir = ROOT.get_child(this._species);
-        // the hat is a frame set drawn by the rig (the ears react to it); load it on first wear
-        let hat = this._worn.head && this._spec.hats?.[this._worn.head] ? this._worn.head : null;
-        this._hatMap = hat ? this._spec.hats[hat] : null;
-        if (hat) {
-            for (let n of new Set(Object.values(this._hatMap))) {
-                if (this._hatFrames.has(n))
-                    continue;
-                let icon = new St.Icon({ gicon: new Gio.FileIcon({ file: dir.get_child(n) }), icon_size: this._s, opacity: 0 });
-                this._hatFrames.set(n, icon);
-                this._sprite.add_child(icon);
-            }
+        this._worn = { head: worn?.head ?? null, neck: worn?.neck ?? null, back: worn?.back ?? null };
+        let key = outfitKey(this._species, this._worn, this._lib?.version);
+        if (key !== this._wantKey) {
+            this._wantKey = key;
+            this._dropNext();   // a newer outfit wins over one still loading
+            let dir = this._ensureOutfit();
+            if (dir !== this._outfitDir)
+                this._swapTo(dir);
         }
-        let neck = this._wearIcons.neck;
-        neck.visible = !!this._worn.neck;
-        if (this._worn.neck)
-            neck.gicon = new Gio.FileIcon({ file: dir.get_child(`wear-${this._worn.neck}-symbolic.svg`) });
-        if (this._base) {   // re-show the current pose with or without the hat
-            let b = this._base;
-            this._shown = null;
-            for (let f of [...this._frames.values(), ...this._hatFrames.values()])
-                f.opacity = 0;
-            this._show(b);
-        }
-        this._placeWear();
-        for (let m of this._mirrors)
-            m.setWear(worn);
+        for (let m of this._mirrors)   // after composing: the yard finds the folder made
+            m.setWear(this._worn);
     }
 
-    // Put the hat on the head and the collar on the neck of the frame on show.
-    _placeWear() {
-        let a = this._base && this._anchors[this._base];
-        let icon = this._wearIcons.neck;
-        if (!a || !icon.visible || !a.neck)
-            return;
-        let [fx, fy, fw] = this._box;
-        let px = this._s / fw;
-        let [ax, ay] = a.neck;
-        icon.set_position(Math.round((ax - fx) * px - this._p / 2), Math.round((ay - fy) * px - this._p * 0.55));
-        icon.rotation_angle_z = a.rot;
+    // Measured headless (Step 1 of the wardrobe plan): an icon's texture child gets
+    // its content in the same main-loop turn its picture becomes paintable (painted
+    // cells matched loaded ones exactly), so the swap waits for every frame's content.
+    // 144 fresh frames took ~450 ms; past SWAP_MAX_MS it swaps anyway.
+    _swapTo(dir) {
+        let next = this._frameSet(dir);
+        let t0 = GLib.get_monotonic_time();
+        this._next = next;
+        this._swapId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SWAP_POLL_MS, () => {
+            let ready = [...next.values()].every(f => f.get_first_child()?.get_content());
+            if (!ready && GLib.get_monotonic_time() - t0 < SWAP_MAX_MS * 1000)
+                return GLib.SOURCE_CONTINUE;
+            this._swapId = 0;
+            this._next = null;
+            if (this._shown)
+                next.get(this._shown).opacity = 255;
+            for (let f of this._frames.values())
+                f.destroy();
+            this._frames = next;
+            this._outfitDir = dir;
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     // Show one prop (or food state) on the grass at x, or hide them all.

@@ -115,11 +115,22 @@ nnx_check pet-fed "(() => { let st = $NNX._petStore; return [st.state.pantry.foo
 nnx_check pet-pet "(() => { let st = $NNX._petStore; let m0 = st.state.needs.mood; $R._lastPet = 0; $R._onPress(1); return m0; })()" "$(nnx_eval "$NNX._petStore.state.needs.mood")"
 sleep 1.4
 nnx_check pet-mood-up "(() => { let st = $NNX._petStore; return st.state.diary.at(-1)?.what === 'got a pet' && st.state.needs.mood > 0; })()" true
-# a hat: owned, worn, drawn on the sprite at the frame's anchor, on the pill and in the yard
-nnx_check pet-hat "(() => { let st = $NNX._petStore; st.gain('straw', 'test hat'); st.wear('straw'); let r = $R; let y = r._mirrors[0]; return [st.state.worn.head, r._shown.startsWith('hat-straw-'), r._hatFrames.size > 100, y._shown.startsWith('hat-straw-')]; })()" '["straw",true,true,true]'
-sleep 0.5; nnx_shot pet-hat 560 40 800 420
-nnx_check pet-hat-off "(() => { let st = $NNX._petStore; st.wear('straw'); return [st.state.worn.head, $R._shown.startsWith('rabbit-'), $R._hatMap]; })()" '[null,true,null]'
-nnx_check pet-collar "(() => { let st = $NNX._petStore; st.gain('bell', 'test collar'); st.wear('bell'); let r = $R; let w = r._wearIcons.neck; let out = [st.state.worn.neck, w.visible, w.y > 0]; st.wear('bell'); return out; })()" '["bell",true,true]'
+# an outfit: one frame set, composed in the cache, the same on the pill and in the yard, never a blank
+nnx_check pet-outfit "(() => { let st = $NNX._petStore, r = $R; st.gain('scarf', 't'); st.wear('scarf'); return [st.state.worn.neck, r._frames.get(r._shown).opacity]; })()" '["scarf",255]'
+sleep 0.8
+nnx_check pet-outfit-set "(() => { let r = $R, y = r._mirrors[0]; return [r._outfitDir.endsWith('/rabbit-none-scarf-none-v' + r._lib.version), y._outfitDir === r._outfitDir, r._frames.size, r._sprite.get_n_children(), r._frames.get(r._shown).opacity]; })()" '[true,true,144,144,255]'
+nnx_shot pet-outfit 560 40 800 420
+# two changes at once end on the last one and leave nothing behind
+nnx_check pet-outfit-twice "(() => { let st = $NNX._petStore; st.gain('straw', 't'); st.wear('straw'); st.wear('straw'); st.wear('straw'); return st.state.worn.head; })()" '"straw"'
+sleep 0.8
+nnx_check pet-outfit-last "(() => { let r = $R; return [r._outfitDir.endsWith('/rabbit-straw-scarf-none-v' + r._lib.version), r._sprite.get_n_children()]; })()" '[true,144]'
+# another animal, same clothes, its own drawing
+nnx_eval "$R.setSpecies('cat'), true" >/dev/null; sleep 2.5
+nnx_check pet-outfit-cat "$R._outfitDir.includes('/cat-straw-scarf-none-v')" true
+nnx_eval "$R.setSpecies('rabbit'), true" >/dev/null; sleep 2.5
+nnx_check pet-outfit-off "(() => { let st = $NNX._petStore, r = $R; st.wear('straw'); st.wear('scarf'); return [st.state.worn.head, st.state.worn.neck]; })()" '[null,null]'
+sleep 0.8
+nnx_check pet-outfit-bare "$R._outfitDir.endsWith('/src/companions/rabbit')" true
 # asleep: the z's tick with the world timer, the yard's animal is inside its house
 nnx_check pet-sleep "(() => { let r = $R; r._away = true; r.update(); return r._worldId > 0; })()" true
 sleep 1.6   # a mirrored act in flight finishes first, then the yard settles into the house
@@ -129,3 +140,8 @@ nnx_check pet-wake "(() => { let r = $R; r._away = false; r.update(); let y = r.
 sleep 1.2
 nnx_eval "$NNX.collapse(), true" >/dev/null; sleep 1
 nnx_check pet-yard-gone "$R._mirrors.length <= 1" true
+# the first frames of a fresh yard with clothes on: no animal yet, or the animal in its scarf
+nnx_eval "(() => { let st = $NNX._petStore; st.wear('scarf'); return true; })()" >/dev/null; sleep 0.8
+nnx_eval "$NNX.expand(), $NNX._switchTab('companion'), true" >/dev/null
+sleep 0.15; nnx_shot pet-first-open 560 40 800 200
+sleep 1; nnx_eval "(() => { $NNX._petStore.wear('scarf'); $NNX.collapse(); return true; })()" >/dev/null; sleep 1

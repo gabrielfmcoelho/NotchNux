@@ -227,19 +227,9 @@ for (let sp of SPECIES) {
         for (let f of a.frames)
             ok(dir.get_child(f).query_exists(null), `${sp}/${act}: ${f} exists`);
     }
-    for (let f of ['food-whole', 'food-half', 'food-stub', 'prop-mushroom', 'prop-bit', 'prop-flower-bud', 'prop-flower', 'prop-leaf', 'prop-drop', 'prop-flake', 'prop-house',
-        'wear-bell', 'wear-ribbon', 'wear-scarf'])
+    for (let f of ['food-whole', 'food-half', 'food-stub', 'prop-mushroom', 'prop-bit', 'prop-flower-bud', 'prop-flower', 'prop-leaf', 'prop-drop', 'prop-flake', 'prop-house'])
         ok(dir.get_child(`${f}-symbolic.svg`).query_exists(null), `${sp}: ${f} shipped`);
-    // hats are frame sets: every base frame has a hatted twin that exists on disk
     let bases = new Set(Object.values(spec.acts).flatMap(a => a.frames));
-    for (let hat of ['straw', 'beanie', 'crown']) {
-        let m = spec.hats?.[hat];
-        ok(m && Object.keys(m).length === bases.size, `${sp}: ${hat} covers every frame`);
-        for (let f of new Set(Object.values(m ?? {})))
-            ok(dir.get_child(f).query_exists(null), `${sp}: ${hat} frame ${f} exists`);
-    }
-    for (let f of bases)
-        ok(spec.anchors?.[f]?.neck, `${sp}: ${f} has a neck anchor`);
     // frames carry empty slots and ear wrappers; wear.json is the item library that fills them
     const SLOT_NAMES = ['back', 'neck', 'head0', 'head1', 'head2'];
     let lib = JSON.parse(new TextDecoder().decode(dir.get_child('wear.json').load_contents(null)[1]));
