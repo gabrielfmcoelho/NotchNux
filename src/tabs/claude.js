@@ -370,7 +370,8 @@ const ClaudeFeatures = {
 
     // Keeps the hide-when-idle notch out while a session waits for you.
     _claudeNeedsYou() {
-        if (!this._config.isFeatureEnabled('claudeMonitor'))
+        // (the island's start-up tuck asks before _initClaude has run: nobody is waiting yet)
+        if (!this._claude || !this._config.isFeatureEnabled('claudeMonitor'))
             return false;
         for (let s of this._claude.sessions.values()) {
             if (s.state === 'approval' || s.state === 'question')
