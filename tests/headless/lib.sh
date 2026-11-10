@@ -24,6 +24,16 @@ nnx_eval() {
 }
 
 # nnx_check <name> <js> <expected>: PASS when nnx_eval's output equals <expected>.
+# nnx_wait '<js boolean>' <seconds>: poll every 0.1 s until true; non-zero on timeout
+nnx_wait() {
+    local i
+    for ((i = 0; i < $2 * 10; i++)); do
+        [ "$(nnx_eval "$1")" = true ] && return 0
+        sleep 0.1
+    done
+    return 1
+}
+
 nnx_check() {
     local got
     got=$(nnx_eval "$2") || got='<no answer>'

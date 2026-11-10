@@ -117,14 +117,14 @@ sleep 1.4
 nnx_check pet-mood-up "(() => { let st = $NNX._petStore; return st.state.diary.at(-1)?.what === 'got a pet' && st.state.needs.mood > 0; })()" true
 # an outfit: one frame set, composed in the cache, the same on the pill and in the yard, never a blank
 nnx_check pet-outfit "(() => { let st = $NNX._petStore, r = $R; st.gain('scarf', 't'); st.wear('scarf'); return [st.state.worn.neck, r._frames.get(r._shown).opacity]; })()" '["scarf",255]'
-sleep 0.8
+nnx_wait "(() => { let r = $R; return !r._next && !r._mirrors[0]._next; })()" 6
 nnx_check pet-outfit-set "(() => { let r = $R, y = r._mirrors[0], loaded = c => c._frames.get(c._shown).get_first_child()?.get_content() !== null; return [r._outfitDir.endsWith('/rabbit-none-scarf-none-v' + r._lib.version), y._outfitDir === r._outfitDir, r._frames.size, r._sprite.get_n_children(), r._frames.get(r._shown).opacity, loaded(r), loaded(y)]; })()" '[true,true,144,144,255,true,true]'
 nnx_shot pet-outfit 560 40 800 420
 # two changes at once end on the last one and leave nothing behind
 nnx_check pet-outfit-twice "(() => { let st = $NNX._petStore; st.gain('straw', 't'); st.wear('straw'); st.wear('straw'); st.wear('straw'); return st.state.worn.head; })()" '"straw"'
 # right after the change, while the new frames load: what is on show has a picture
 nnx_check pet-outfit-now "(() => { let r = $R, i = r._shownIcon; return [i.opacity, !!i.get_first_child()?.get_content()]; })()" '[255,true]'
-sleep 0.8
+nnx_wait "(() => { let r = $R; return !r._next && !r._mirrors[0]._next; })()" 6
 nnx_check pet-outfit-last "(() => { let r = $R; return [r._outfitDir.endsWith('/rabbit-straw-scarf-none-v' + r._lib.version), r._sprite.get_n_children(), r._mirrors[0]._sprite.get_n_children()]; })()" '[true,144,144]'
 # another animal, same clothes, its own drawing
 nnx_eval "$R.setSpecies('cat'), true" >/dev/null; sleep 2.5
