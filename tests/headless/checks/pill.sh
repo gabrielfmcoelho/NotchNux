@@ -13,8 +13,8 @@ nnx_check pill-hide-music "(() => { let n = $NNX; n._config.setPillZoneShown('mu
 nnx_check pill-show-music "(() => { let n = $NNX; n._config.setPillZoneShown('music', true); n._pillMusicBox.visible = true; n._pillWidth(); return n._pillMusicBox.visible; })()" true
 nnx_check pill-title-off "(() => { let n = $NNX; n._config.setFeatureEnabled('pillTrackTitle', false); n._refreshLive(); return [n._pillTitleClip.visible, n._pillWidth() < 340 || !n._pillMusicBox.visible]; })()" '[false,true]'
 nnx_check pill-title-on "(() => { let n = $NNX; n._config.setFeatureEnabled('pillTrackTitle', true); n._refreshLive(); return n._pillTitleClip.visible; })()" true
-# hiding the clock: the width no longer reserves it
-nnx_check pill-hide-clock "(() => { let n = $NNX; let w0 = n._pillWidth(); n._config.setPillZoneShown('clock', false); n._applyPillOrder(); let w1 = n._pillWidth(); n._config.setPillZoneShown('clock', true); n._pillClock.visible = true; n._applyPillOrder(); return [n._pillClock.visible, w1 <= w0]; })()" '[true,true]'
+# hiding the clock: the width no longer reserves it; switched back on, it shows again (it has no sync of its own)
+nnx_check pill-hide-clock "(() => { let n = $NNX; let w0 = n._pillWidth(); n._config.setPillZoneShown('clock', false); n._applyPillOrder(); let w1 = n._pillWidth(); n._config.setPillZoneShown('clock', true); n._applyPillOrder(); return [n._pillClock.visible, w1 <= w0]; })()" '[true,true]'
 # back to defaults
 nnx_eval "$NNX._config.setPillOrder([]), $NNX._applyPillOrder(), true" >/dev/null
 nnx_check pill-restored "$ORDER" '["companion","focus","stopwatch","stats","music","<","clock",">","claude","battery","alerts","privacy"]'

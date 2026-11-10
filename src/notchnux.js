@@ -418,6 +418,8 @@ export const NotchNux = GObject.registerClass({
             if (!this._config.isPillZoneShown(z.id) && actors[z.id])
                 actors[z.id].visible = false;
         }
+        // The clock has no sync of its own that would show it again once switched back on.
+        this._pillClock.visible = this._config.isPillZoneShown('clock');
     }
 
     // What the pill rabbit reacts to besides Claude (see helpers/companion-brain.js).
