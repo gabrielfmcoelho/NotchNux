@@ -118,7 +118,7 @@ nnx_check pet-mood-up "(() => { let st = $NNX._petStore; return st.state.diary.a
 # an outfit: one frame set, composed in the cache, the same on the pill and in the yard, never a blank
 nnx_check pet-outfit "(() => { let st = $NNX._petStore, r = $R; st.gain('scarf', 't'); st.wear('scarf'); return [st.state.worn.neck, r._frames.get(r._shown).opacity]; })()" '["scarf",255]'
 nnx_wait "(() => { let r = $R; return !r._next && !r._mirrors[0]._next; })()" 6
-nnx_check pet-outfit-set "(() => { let r = $R, y = r._mirrors[0], loaded = c => c._frames.get(c._shown).get_first_child()?.get_content() !== null; return [r._outfitDir.endsWith('/rabbit-none-scarf-none-v' + r._lib.version), y._outfitDir === r._outfitDir, r._frames.size, r._sprite.get_n_children(), r._frames.get(r._shown).opacity, loaded(r), loaded(y)]; })()" '[true,true,144,144,255,true,true]'
+nnx_check pet-outfit-set "(() => { let r = $R, y = r._mirrors[0], loaded = c => !!c._frames.get(c._shown).get_first_child()?.get_content(); return [r._outfitDir.endsWith('/rabbit-none-scarf-none-v' + r._lib.version), y._outfitDir === r._outfitDir, r._frames.size, r._sprite.get_n_children(), r._frames.get(r._shown).opacity, loaded(r), loaded(y)]; })()" '[true,true,144,144,255,true,true]'
 nnx_shot pet-outfit 560 40 800 420
 # two changes at once end on the last one and leave nothing behind
 nnx_check pet-outfit-twice "(() => { let st = $NNX._petStore; st.gain('straw', 't'); st.wear('straw'); st.wear('straw'); st.wear('straw'); return st.state.worn.head; })()" '"straw"'
@@ -133,8 +133,20 @@ nnx_eval "$R.setSpecies('rabbit'), true" >/dev/null; sleep 2.5
 nnx_check pet-outfit-off "(() => { let st = $NNX._petStore, r = $R; st.wear('straw'); st.wear('scarf'); return [st.state.worn.head, st.state.worn.neck]; })()" '[null,null]'
 sleep 0.8
 nnx_check pet-outfit-bare "$R._outfitDir.endsWith('/src/companions/rabbit')" true
-nnx_check pet-wardrobe "(() => { let st = $NNX._petStore; let find = (a, f, out = []) => { if (f(a)) out.push(a); a.get_children().forEach(c => find(c, f, out)); return out; }; let tiles = find($NNX, a => a.has_style_class_name?.('nn-pet-item')); return [tiles.length, tiles.filter(t => t.has_style_class_name('nn-pet-item-locked')).every(t => !t.reactive), tiles.filter(t => t.has_style_class_name('nn-pet-item-on')).length]; })()" '[9,true,0]'
+# a locked tile: dim, not focusable, but hoverable for its tooltip; every tile has a name, a locked one says how to earn it
+TILES="(() => { let find = (a, f, out = []) => { if (f(a)) out.push(a); a.get_children().forEach(c => find(c, f, out)); return out; }; return find($NNX, a => a.has_style_class_name?.('nn-pet-item')); })()"
+nnx_check pet-wardrobe "(() => { let tiles = $TILES, locked = tiles.filter(t => t.has_style_class_name('nn-pet-item-locked')); return [tiles.length, locked.length > 0 && locked.every(t => t.reactive && !t.can_focus && t.opacity < 255), tiles.filter(t => t.has_style_class_name('nn-pet-item-on')).length, tiles.every(t => /^[A-Z]/.test(t.accessible_name ?? '') && locked.includes(t) === t.accessible_name.includes(': '))]; })()" '[9,true,0,true]'
 nnx_shot pet-wardrobe 560 40 800 700
+# the pointer moves onto a locked tile and clicks it: nothing is worn, and after the hover delay its tooltip says how to earn it
+POS=$(nnx_eval "(() => { let t = $TILES.find(t => t.has_style_class_name('nn-pet-item-locked')); globalThis.__locked = t; globalThis.__worn0 = JSON.stringify($NNX._petStore.state.worn); let [x, y] = t.get_transformed_position(); return [Math.round(x + t.width / 2), Math.round(y + t.height / 2)]; })()")
+PX=$(echo "$POS" | tr -d '[]' | cut -d, -f1); PY=$(echo "$POS" | tr -d '[]' | cut -d, -f2)
+nnx_pointer "$PX" "$PY" click; sleep 0.9
+nnx_check pet-locked-tooltip "(() => { let tip = Main.layoutManager.uiGroup.get_children().find(a => a.has_style_class_name?.('nook-tray-tooltip')); return [!!tip && tip.visible && tip.opacity > 0, !!tip && __locked.accessible_name.endsWith(': ' + tip.text), JSON.stringify($NNX._petStore.state.worn) === __worn0]; })()" '[true,true,true]'
+nnx_shot pet-locked-tooltip $((PX - 150)) $((PY - 30)) 300 90
+# off the tile onto its row's label (still inside the notch, so it stays open): the tooltip goes
+POS=$(nnx_eval "(() => { let l = __locked.get_parent().get_parent().get_first_child(); let [x, y] = l.get_transformed_position(); return [Math.round(x + 4), Math.round(y + l.height / 2)]; })()")
+nnx_pointer "$(echo "$POS" | tr -d '[]' | cut -d, -f1)" "$(echo "$POS" | tr -d '[]' | cut -d, -f2)"; sleep 0.3
+nnx_check pet-locked-tooltip-gone "Main.layoutManager.uiGroup.get_children().some(a => a.has_style_class_name?.('nook-tray-tooltip'))" false
 # asleep: the z's tick with the world timer, the yard's animal is inside its house
 nnx_check pet-sleep "(() => { let r = $R; r._away = true; r.update(); return r._worldId > 0; })()" true
 sleep 4   # a mirrored act in flight finishes first, then the yard hops to its door and lies down inside

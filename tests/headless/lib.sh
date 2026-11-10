@@ -64,6 +64,13 @@ nnx_shot() {
     [ -s "$f" ] || { nnx_fail "shot-$1" 'no screenshot written'; return 1; }
 }
 
+# nnx_pointer <x> <y> [click]: move a virtual pointer there (a real hover), and click if asked.
+nnx_pointer() {
+    local click=''
+    [ "${3:-}" = click ] && click='d.notify_button(t + 20000, C.BUTTON_PRIMARY, C.ButtonState.PRESSED); d.notify_button(t + 40000, C.BUTTON_PRIMARY, C.ButtonState.RELEASED);'
+    nnx_eval "(() => { const C = imports.gi.Clutter; const d = global.stage.context.get_backend().get_default_seat().create_virtual_device(C.InputDeviceType.POINTER_DEVICE); const t = global.get_current_time() * 1000; d.notify_absolute_motion(t, $1, $2); $click return true; })()" >/dev/null
+}
+
 # nnx_mark: forget log lines so far; nnx_errors only reports what comes after.
 nnx_mark() { NNX_MARK=$(wc -l < "$NNX_LOG"); }
 

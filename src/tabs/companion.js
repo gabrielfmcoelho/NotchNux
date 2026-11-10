@@ -297,9 +297,10 @@ export function installCompanion(proto) {
                     row.add_child(label(name, 'nn-pet-need-label'));
                     let tiles = new St.BoxLayout({ style_class: 'nook-chip-row' });
                     for (let [id, w] of Object.entries(WEARABLES).filter(([, w]) => w.slot === slot)) {
-                        let have = s.items.includes(id);
+                        let have = s.items.includes(id), title = cap(w.name.replace(/^a (tiny )?/, ''));
+                        // a locked tile stays reactive so its tooltip can show; it has no click
                         let t = new St.Button({ style_class: `nn-pet-item ${have ? (s.worn[slot] === id ? 'nn-pet-item-on' : '') : 'nn-pet-item-locked'}`,
-                            can_focus: have, reactive: have });
+                            can_focus: have, accessible_name: have ? title : `${title}: ${w.how}` });
                         t.set_style(`success-color: ${accentHex()};${have && s.worn[slot] === id ? ` border-color: ${accentHex()};` : ''}`);   // the item's accent part, as on the pill
                         t.opacity = have ? 255 : 110;
                         t.set_child(new St.Icon({ gicon: new Gio.FileIcon({ file: dir.get_child(`item-${id}-symbolic.svg`) }), icon_size: 32 }));
