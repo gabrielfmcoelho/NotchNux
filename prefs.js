@@ -922,7 +922,7 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         }
     }
 
-    // ---- Companion: the animal on the pill and its two switches ----
+    // ---- Companion: the animal on the pill, its switch and how active it is ----
     _addCompanionGroup(page, config) {
         const group = new Adw.PreferencesGroup({
             title: 'Companion',
@@ -937,12 +937,24 @@ export default class NotchNuxPreferences extends ExtensionPreferences {
         });
         speciesRow.connect('notify::selected', () => config.setCompanion({ species: COMPANION_SPECIES[speciesRow.selected]?.[0] ?? 'rabbit' }));
         group.add(speciesRow);
-        for (const f of FEATURE_DEFS.filter(f => f.group === 'companion')) {
+        for (const f of FEATURE_DEFS.filter(f => f.group === 'companion' && !['rabbitCalm', 'rabbitLively'].includes(f.id))) {
             const row = new Adw.SwitchRow({ title: f.label, use_markup: false, active: config.isFeatureEnabled(f.id) });
             row.subtitle = f.description;
             row.connect('notify::active', () => config.setFeatureEnabled(f.id, row.get_active()));
             group.add(row);
         }
+        // Calm and Lively are one choice here (still two stored flags; Calm wins if both were on).
+        const activity = new Adw.ComboRow({
+            title: 'Activity',
+            subtitle: 'Calm: reactions only. Normal: its habits at their times of day. Lively: its whole life every few seconds.',
+            model: Gtk.StringList.new(['Calm', 'Normal', 'Lively']),
+            selected: config.isFeatureEnabled('rabbitCalm') ? 0 : config.isFeatureEnabled('rabbitLively') ? 2 : 1,
+        });
+        activity.connect('notify::selected', () => {
+            config.setFeatureEnabled('rabbitCalm', activity.selected === 0);
+            config.setFeatureEnabled('rabbitLively', activity.selected === 2);
+        });
+        group.add(activity);
     }
 
     // ---- Google: Tasks and calendar events through GNOME Online Accounts

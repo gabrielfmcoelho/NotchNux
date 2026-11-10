@@ -5,7 +5,7 @@ import Gio from 'gi://Gio';
 import {
     diffEvents, strongest, restAct, ambient, breathing, rank, REACTION_ACT, meadow, wantsLunch, wantsMushroom,
     sheltering, facing, weatherKind, isNight, cleanSpecies, SPECIES, isIdle, napLength, NAPS,
-    ROUTINES, WANDER_STYLES, period, pickRoutine, wantsRoutine,
+    ROUTINES, WANDER_STYLES, period, pickRoutine, wantsRoutine, splitHops,
 } from '../src/helpers/companion-brain.js';
 
 let n = 0;
@@ -22,6 +22,18 @@ const base = { mood: 'idle', fresh: 0, focus: 'idle', music: false, track: null,
     night: false, rain: false, snow: false, wind: 0, unread: 0, calm: false, lively: false, nap: false, minutes: 14 * 60, dayKey: '2026-11-09',
     mem: { lastFed: null, lastMushroom: null } };
 const s = o => ({ ...base, ...o });
+
+// long trips become several hops
+{
+    let look = { act: 'look' }, near = { act: 'hop', to: 80 };
+    eq(splitHops([look, near], 10, 0, 88, 88), [look, near], 'a pill-sized hop is left alone');
+    let started = 0, far = { act: 'hop', to: 400, onStart: () => started++ };
+    let trip = splitHops([far, { act: 'sniff' }, { act: 'hop', to: 10 }], 100, 84, 464, 176);
+    eq(trip.map(i => [i.act, i.to]), [['hop', 250], ['hop', 400], ['sniff', undefined], ['hop', 242], ['hop', 84]],
+        'split evenly, each hop within the limit, the next trip from where the last ended, clamped');
+    trip.forEach(i => i.onStart?.());
+    eq(started, 1, 'the trip\'s onStart runs once, with its first hop');
+}
 
 // events
 eq(diffEvents(base, base), [], 'no change, no events');
@@ -234,7 +246,7 @@ print(`companion-check: ${n} checks passed`);
 
 // ---- needs
 {
-    const { freshNeeds, progressNeeds, applyNeed, thought, needAct, digFind, earned, FINDS, WEARABLES, NEED_KEYS } =
+    const { freshNeeds, progressNeeds, applyNeed, thought, needAct, digFind, earned, FINDS, WEARABLES, NEED_KEYS, waitTick, MISSED_MS } =
         await import('../src/helpers/companion-brain.js');
     let t0 = 1_000_000_000_000;
     let f = freshNeeds(t0);
@@ -254,6 +266,14 @@ print(`companion-check: ${n} checks passed`);
     eq(thought({ energy: 80, hunger: 90, mood: 80, clean: 80 }), 'hungry', 'then hungry');
     eq(thought({ energy: 80, hunger: 20, mood: 95, clean: 80 }), 'full of beans', 'high mood');
     eq(thought(f), 'doing fine', 'default');
+    eq(thought(f, { away: false, justBack: true }), 'happy you\'re back', 'greets you back');
+    eq(waitTick(0, false, 5), [0, false], 'not waiting');
+    eq(waitTick(0, true, 5), [5, false], 'a wait starts');
+    eq(waitTick(5, true, 4 + MISSED_MS), [5, false], 'not minded yet');
+    eq(waitTick(5, true, 5 + MISSED_MS), [-1, true], 'minded after ten minutes');
+    eq(waitTick(-1, true, 5 + 2 * MISSED_MS), [-1, false], 'only once per wait');
+    eq(waitTick(-1, false, 0), [0, false], 'answered: starts over');
+    eq(applyNeed(f, 'missed').mood, 65, 'a missed wait costs 5 mood');
     eq(needAct(s({ needs: { ...f, energy: 10 } }), 0.9).act, 'nap:nap', 'exhausted: naps by itself');
     eq(needAct(s({ needs: { ...f, hunger: 80 } }), 0.1).act, 'seek', 'hungry: looks for food');
     eq(needAct(s({ needs: { ...f, hunger: 80 } }), 0.4).act, 'sigh', 'hungry: sighs');
@@ -269,13 +289,13 @@ print(`companion-check: ${n} checks passed`);
     let found = {};
     for (let i = 0; i < 1000; i++) { let r = digFind(i / 1000); if (r) found[r] = (found[r] || 0) + 1; }
     ok(Math.abs(Object.values(found).reduce((a, b) => a + b, 0) - 200) <= 2, 'one dig in five finds something');
-    ok(found.treat > found.beanie && found.ribbon > 0, 'treats are common, wearables rare');
+    ok(found.treat > found.beanie && found.ribbon > 0 && found.scarf > 0, 'treats are common, wearables rare');
     for (let id of Object.keys(found))
         ok(FINDS[id], `${id} is a find`);
     eq(earned('focusdone'), 'treat', 'a finished focus earns a treat');
     eq(earned('finished'), 'seed', 'a closed Claude session earns a seed');
-    eq([earned('streak', 5), earned('streak', 7), earned('streak', 6)], ['straw', 'bell', null], 'streak hats');
-    for (let w of ['straw', 'bell', 'beanie', 'ribbon'])
+    eq([earned('streak', 5), earned('streak', 7), earned('streak', 6), earned('streak', 14)], ['straw', 'bell', null, 'crown'], 'streak hats');
+    for (let w of ['straw', 'bell', 'beanie', 'ribbon', 'crown', 'scarf'])
         ok(WEARABLES[w], `${w} is wearable`);
     print(`companion-check (needs): ok`);
 }
@@ -283,13 +303,24 @@ print(`companion-check: ${n} checks passed`);
 // ---- store: its own file, atomic, once-a-day restock, streak gifts, diary cap
 {
     const GLib = (await import('gi://GLib')).default;
-    const { CompanionStore, dayKeyOf, FOOD_PER_DAY } = await import('../src/helpers/companion-store.js');
+    const { CompanionStore, dayKeyOf, FOOD_PER_DAY, diaryDays } = await import('../src/helpers/companion-store.js');
+    {
+        let noon = new Date(2026, 10, 9, 12, 0).getTime(), h = 3600 * 1000;
+        let lines = [{ t: noon - 40 * h, what: 'old' }, { t: noon - 20 * h, what: 'ate a meal' }, { t: noon - 3 * h, what: 'dug a little hole' },
+            { t: noon - 2 * h, what: 'dug a little hole' }, { t: noon - h, what: 'ate a meal' }, { t: noon, what: 'dug a little hole' }];
+        let days = diaryDays(lines, noon);
+        eq(days.map(d => d.label), ['Today', 'Yesterday', '2026-11-07'], 'the diary by day, newest first');
+        eq(days[0].lines.map(l => [l.what, l.n]), [['dug a little hole', 1], ['ate a meal', 1], ['dug a little hole', 2]], 'only a run of the same line folds');
+        eq(days[0].lines[2].t, noon - 2 * h, 'a folded run keeps its latest time');
+        eq(diaryDays([], noon), [], 'an empty diary');
+    }
     let dir = GLib.Dir.make_tmp('nnx-companion-XXXXXX');
     let clock = new Date(2026, 10, 9, 9, 0).getTime();
     let now = () => clock;
     let st = new CompanionStore({ dataDir: dir, now });
     eq(st.state.pantry.food, FOOD_PER_DAY, 'dawn restock on first run');
     eq(st.state.restocked, '2026-11-09', 'restock remembered by day');
+    ok(st.state.pantry.bath === 1 && st.bath() && st.state.pantry.bath === 0 && !st.bath(), 'one bath a day, used once');
     ok(!st.restock(), 'no second restock the same day');
     st.state.pantry.food = 1; clock += 24 * 3600 * 1000;
     ok(st.restock() && st.state.pantry.food === FOOD_PER_DAY, 'next day tops the pantry up');
@@ -301,7 +332,10 @@ print(`companion-check: ${n} checks passed`);
     eq(st.state.streak.days, 7, 'a week of meals');
     ok(st.state.items.includes('straw') && st.state.items.includes('bell'), 'the straw hat at 5 days and the bell at 7');
     ok(st.state.diary.some(e => e.what.includes('straw hat')), 'the gift is in the diary');
-    clock += 2 * 24 * 3600 * 1000; st.meal('meal');
+    eq(st.streakDays(), 7, 'the streak stands while meals keep coming');
+    clock += 2 * 24 * 3600 * 1000;
+    eq(st.streakDays(), 0, 'a day without a meal: no streak to show');
+    st.meal('meal');
     eq(st.state.streak.days, 1, 'a missed day resets the streak');
     ok(st.wear('straw') && st.state.worn.head === 'straw', 'wearing an owned hat');
     ok(st.wear('straw') && st.state.worn.head === null, 'again takes it off');
@@ -311,6 +345,8 @@ print(`companion-check: ${n} checks passed`);
     eq(st.earn('focusdone'), 'treat', 'a finished focus: a treat');
     eq(st.earn('finished'), 'seed', 'a Claude session: a seed');
     ok(st.plant() && st.state.flowers === 1 && st.state.pantry.seed === 0, 'planting a seed');
+    st.state.needs.clean = 50;   // (days of test clock have floored it)
+    ok(st.rain() && !st.rain() && st.needs().clean === 45, `rain soaks it once a day (${st.needs().clean})`);
     for (let i = 0; i < 20; i++) st.record(`line ${i}`);
     eq(st.state.diary.length, 12, 'the diary keeps 12 lines');
     st.state.needs.energy = 80; let before = st.needs().energy; clock += 60 * 60000;

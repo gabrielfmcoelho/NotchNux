@@ -213,6 +213,7 @@ function cleanCompanion(c) {
         lastFed: day(c.lastFed),
         lastMushroom: day(c.lastMushroom),
         pets: Number.isInteger(c.pets) && c.pets >= 0 ? c.pets : 0,
+        name: typeof c.name === 'string' ? c.name.trim().slice(0, 20) : '',
     };
 }
 
@@ -431,7 +432,7 @@ export class ConfigStore {
             tasksSource: 'local',
             // The pill companion: which animal, and what it remembers (day keys
             // for its once-a-day habits, how often it was petted).
-            companion: { species: 'rabbit', lastFed: null, lastMushroom: null, pets: 0 },
+            companion: { species: 'rabbit', lastFed: null, lastMushroom: null, pets: 0, name: '' },
             // The collapsed pill's zones: order (see PILL_ZONES) and which are hidden.
             pillOrder: PILL_ZONES.map(z => z.id),
             pillZones: {}

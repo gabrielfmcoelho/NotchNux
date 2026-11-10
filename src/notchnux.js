@@ -6947,6 +6947,8 @@ export const NotchNux = GObject.registerClass({
         this._checkEventHeadsUp?.();
         this._pillClock.set_text(pillClockText(date));
         this._pillRabbit?.update();   // hour (night sleep) and battery
+        if (this._musicPlaying)
+            this._petStore?.event('music');   // each minute of music lifts its mood a little
 
         let showBattery = this._config.isFeatureEnabled('showBattery');
         this._pillBatteryBox.visible = showBattery;

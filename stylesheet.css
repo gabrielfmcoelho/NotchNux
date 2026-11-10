@@ -2827,15 +2827,23 @@
 }
 
 /* ---- Pet tab: the companion up close ---- */
-.nn-pet-yard-card { padding: 10px 12px 8px; }
-.nn-pet-thought { margin-top: 4px; }
+.nn-pet-yard { padding: 8px 0 2px; spacing: 4px; }
+/* the house is scenery, in the grass's tone, not a white shape */
+.nn-pet-house { color: rgba(191, 189, 204, 0.34); }
+.nn-pet-name-row { spacing: 4px; }
+.nn-pet-name { padding: 1px 4px; border-radius: 6px; font-size: 13px; font-weight: bold; color: #ffffff; }
+.nn-pet-name:hover, .nn-pet-name:focus { background-color: rgba(255, 255, 255, 0.10); }
+.nn-pet-name-edit { width: 170px; }
+.nn-pet-thought { font-size: 13px; color: rgba(255, 255, 255, 0.75); }
+.nn-pet-acts { width: 176px; spacing: 6px; }
+.nn-pet-hint { margin-left: 64px; font-size: 11px; color: rgba(255, 255, 255, 0.40); }
+.nn-pet-wear { spacing: 10px; padding: 2px 0; }
+.nn-pet-day { margin-top: 4px; }
 .nn-pet-need { spacing: 10px; padding: 3px 0; }
 .nn-pet-need-label { width: 54px; font-size: 12px; color: rgba(255, 255, 255, 0.75); }
 .nn-pet-need-pct { width: 36px; font-size: 11px; color: rgba(255, 255, 255, 0.55); text-align: right; }
 .nn-pet-bar { height: 6px; border-radius: 3px; background-color: rgba(255, 255, 255, 0.10); }
 .nn-pet-bar-fill { height: 6px; border-radius: 3px; }
-.nn-pet-actions { padding: 2px 0 6px; spacing: 6px; }
-.nn-pet-actions .nook-chip StBoxLayout { spacing: 5px; }
 .nn-pet-chips { padding-top: 4px; }
 .nook-chip-active { background-color: rgba(255, 255, 255, 0.22); }
 .nn-pet-diary-time { width: 44px; font-size: 11px; color: rgba(255, 255, 255, 0.45); font-feature-settings: "tnum"; }

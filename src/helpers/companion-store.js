@@ -17,6 +17,25 @@ export function dayKeyOf(ms) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// The diary for the tab: newest first, a group per day, a run of the same
+// line folded into one (n = how many; the time is the latest of the run).
+export function diaryDays(diary, nowMs) {
+    let today = dayKeyOf(nowMs), yesterday = dayKeyOf(nowMs - 24 * 3600 * 1000);
+    let days = [];
+    for (let e of diary.slice().reverse()) {
+        let key = dayKeyOf(e.t);
+        let label = key === today ? 'Today' : key === yesterday ? 'Yesterday' : key;
+        if (days.at(-1)?.label !== label)
+            days.push({ label, lines: [] });
+        let lines = days.at(-1).lines;
+        if (lines.at(-1)?.what === e.what)
+            lines.at(-1).n++;
+        else
+            lines.push({ t: e.t, what: e.what, n: 1 });
+    }
+    return days;
+}
+
 function cleanState(raw, nowMs) {
     raw = raw && typeof raw === 'object' ? raw : {};
     let needs = raw.needs && typeof raw.needs === 'object' ? raw.needs : freshNeeds(nowMs);
@@ -39,6 +58,7 @@ function cleanState(raw, nowMs) {
         streak: { days: n(raw.streak?.days), lastMeal: typeof raw.streak?.lastMeal === 'string' ? raw.streak.lastMeal : null },
         restocked: typeof raw.restocked === 'string' ? raw.restocked : null,
         flowers: n(raw.flowers),
+        rained: typeof raw.rained === 'string' ? raw.rained : null,
     };
 }
 
@@ -109,15 +129,22 @@ export class CompanionStore {
             this.state.diary.splice(0, this.state.diary.length - DIARY_MAX);
     }
 
-    // Three portions of food appear at dawn (the first time the day is seen).
+    // Three portions of food and one bath appear at dawn (the first time the day is seen).
     restock() {
         let day = dayKeyOf(this._now());
         if (this.state.restocked === day)
             return false;
         this.state.restocked = day;
         this.state.pantry.food = Math.max(this.state.pantry.food, FOOD_PER_DAY);
+        this.state.pantry.bath = Math.max(this.state.pantry.bath, 1);
         this.save(true);
         return true;
+    }
+
+    // The meal streak as it stands today: gone once a whole day passed without a meal.
+    streakDays() {
+        let now = this._now();
+        return [dayKeyOf(now), dayKeyOf(now - 24 * 3600 * 1000)].includes(this.state.streak.lastMeal) ? this.state.streak.days : 0;
     }
 
     // A meal was eaten (its own lunch or one you gave): pantry, streak, earned hats.
@@ -190,6 +217,16 @@ export class CompanionStore {
         this.record('planted a seed');
         this.save(true);
         this.onChanged?.();
+        return true;
+    }
+
+    // Caught in the rain: once a day, however often the forecast flips.
+    rain() {
+        let day = dayKeyOf(this._now());
+        if (this.state.rained === day)
+            return false;
+        this.state.rained = day;
+        this.event('rain', 'got caught in the rain');
         return true;
     }
 

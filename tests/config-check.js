@@ -20,6 +20,8 @@ const cfg = obj => new ConfigStore({ contents: new TextEncoder().encode(JSON.str
 eq([cfg({}).pinnedMax, cfg({ pinnedMax: 0 }).pinnedMax, cfg({ pinnedMax: 99 }).pinnedMax, cfg({ pinnedMax: null }).pinnedMax,
     cfg({ pinnedMax: '3' }).pinnedMax, cfg({ pinnedMax: 'x' }).pinnedMax, cfg({ pinnedMax: 6.6 }).pinnedMax],
 [5, 1, 8, 5, 3, 5, 7], 'shortcut limit: default 5, clamped to 1–8');
+eq([cfg({}).companion.name, cfg({ companion: { name: '  Miso  ' } }).companion.name, cfg({ companion: { name: 7 } }).companion.name,
+    cfg({ companion: { name: 'x'.repeat(40) } }).companion.name.length], ['', 'Miso', '', 20], 'the companion name: trimmed, 20 chars, text only');
 eq([clampPinnedMax(undefined), clampPinnedMax(''), clampPinnedMax(true), clampPinnedMax(8)], [5, 5, 5, 8], 'clamp edge cases');
 const eight = TAB_DEFS.map(t => t.id).filter(id => id !== 'home').slice(0, 8);
 ok(eight.length === 8, 'eight tabs to pin');

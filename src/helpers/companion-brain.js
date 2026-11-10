@@ -185,6 +185,26 @@ export function wantsRoutine(s, rand) {
     return s.lively ? rand < 0.5 : rand < 0.25;
 }
 
+// No hop is longer than `maxHop`: a longer trip (the Pet tab's wide yard allows
+// them) becomes several hops, and the trip's onStart goes with the first.
+// `x` is where it stands; targets are clamped to [min, max] as the player does.
+export function splitHops(items, x, min, max, maxHop) {
+    let out = [];
+    for (let item of items) {
+        if (item.to === undefined) {
+            out.push(item);
+            continue;
+        }
+        let to = Math.max(min, Math.min(max, Math.round(item.to)));
+        let n = Math.ceil(Math.abs(to - x) / maxHop);
+        for (let i = 1; i < n; i++)
+            out.push({ act: item.act, to: Math.round(x + (to - x) * i / n), onStart: i === 1 ? item.onStart : undefined });
+        out.push(n > 1 ? { ...item, to, onStart: undefined } : item);
+        x = to;
+    }
+    return out;
+}
+
 // Naps: how long each kind lasts (ms). A doze is sitting with eyes shut, a nap
 // and a deep sleep lie down (deep breathes slower). It stretches awake after.
 export const NAPS = { doze: [4000, 7000], nap: [8000, 15000], deep: [20000, 40000] };
@@ -328,6 +348,21 @@ export function applyNeed(needs, event) {
     return out;
 }
 
+// A Claude wait left this long costs a little mood ('missed'), once per wait.
+export const MISSED_MS = 10 * 60 * 1000;
+
+// Follow a wait from update to update: returns [since, missed]. `since` is 0
+// while not waiting, the start time while waiting, -1 once it has minded.
+export function waitTick(since, waiting, nowMs) {
+    if (!waiting)
+        return [0, false];
+    if (!since)
+        return [nowMs, false];
+    if (since > 0 && nowMs - since >= MISSED_MS)
+        return [-1, true];
+    return [since, false];
+}
+
 // One line for the tab, from the lowest need first.
 export function thought(n, s = {}) {
     if (s.away === false && s.justBack)
@@ -369,6 +404,7 @@ export const FINDS = {
     seed:   { kind: 'seed', name: 'a seed', weight: 3 },
     ribbon: { kind: 'wear', slot: 'neck', name: 'a ribbon', weight: 1 },
     beanie: { kind: 'wear', slot: 'head', name: 'a beanie', weight: 1 },
+    scarf:  { kind: 'wear', slot: 'neck', name: 'a scarf', weight: 1 },
 };
 export const WEARABLES = {
     straw:  { slot: 'head', name: 'a straw hat' },
@@ -394,7 +430,7 @@ export function digFind(rand) {
 }
 
 // Earned finds from living: a treat per finished focus, a seed per closed
-// Claude session, a straw hat at a 5-day meal streak, the bell at 7.
+// Claude session, a straw hat at a 5-day meal streak, the bell at 7, the crown at 14.
 export function earned(event, streakDays) {
     if (event === 'focusdone')
         return 'treat';
@@ -404,5 +440,7 @@ export function earned(event, streakDays) {
         return 'straw';
     if (event === 'streak' && streakDays === 7)
         return 'bell';
+    if (event === 'streak' && streakDays === 14)
+        return 'crown';
     return null;
 }
