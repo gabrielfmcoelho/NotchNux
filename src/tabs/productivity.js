@@ -370,6 +370,8 @@ export const ProductivityTabs = {
     },
 
     _onFocusPhaseDone(kind) {
+        if (kind === 'focus-done')
+            this._petStore?.focusDone();
         this._syncPillFocus();
         this._syncFocusDnd();
         try {

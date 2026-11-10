@@ -5,7 +5,7 @@
 
 import GLib from 'gi://GLib';
 
-import { freshNeeds, progressNeeds, applyNeed, digFind, earned, FINDS, WEARABLES, NEED_KEYS } from './companion-brain.js';
+import { freshNeeds, progressNeeds, applyNeed, digFind, earned, cleanHouse, FINDS, WEARABLES, SLOTS, NEED_KEYS } from './companion-brain.js';
 
 export const DATA_DIR = GLib.build_filenamev([GLib.get_user_data_dir(), 'notchnux']);
 const DIARY_MAX = 12;
@@ -47,13 +47,16 @@ function cleanState(raw, nowMs) {
     let pantry = raw.pantry && typeof raw.pantry === 'object' ? raw.pantry : {};
     let n = v => (Number.isInteger(v) && v >= 0 ? v : 0);
     let worn = raw.worn && typeof raw.worn === 'object' ? raw.worn : {};
-    let items = Array.isArray(raw.items) ? raw.items.filter(i => typeof i === 'string') : [];
+    let fix = id => (id === 'ribbon' ? 'bandana' : id);   // the ribbon became the bandana
+    let items = Array.isArray(raw.items) ? raw.items.filter(i => typeof i === 'string').map(fix) : [];
+    worn = Object.fromEntries(SLOTS.map(s => [s, fix(worn[s])]));
     return {
         needs,
         pantry: { food: n(pantry.food), treat: n(pantry.treat), bath: n(pantry.bath), seed: n(pantry.seed) },
         items,
-        worn: { head: WEARABLES[worn.head]?.slot === 'head' && items.includes(worn.head) ? worn.head : null,
-            neck: WEARABLES[worn.neck]?.slot === 'neck' && items.includes(worn.neck) ? worn.neck : null },
+        worn: Object.fromEntries(SLOTS.map(s => [s, WEARABLES[worn[s]]?.slot === s && items.includes(worn[s]) ? worn[s] : null])),
+        focusDone: n(raw.focusDone),
+        house: cleanHouse(raw.house),
         diary: Array.isArray(raw.diary) ? raw.diary.filter(e => e && typeof e.t === 'number' && typeof e.what === 'string').slice(-DIARY_MAX) : [],
         streak: { days: n(raw.streak?.days), lastMeal: typeof raw.streak?.lastMeal === 'string' ? raw.streak.lastMeal : null },
         restocked: typeof raw.restocked === 'string' ? raw.restocked : null,
@@ -194,6 +197,39 @@ export class CompanionStore {
             this.record(line);
         this.save(true);
         this.onChanged?.();
+    }
+
+    // First time only: the item and its diary line, false if already owned.
+    earnOnce(id, line) {
+        if (this.state.items.includes(id))
+            return false;
+        this.gain(id, line);
+        return true;
+    }
+
+    // A focus session ran out: counts toward the cape.
+    focusDone() {
+        this.state.focusDone++;
+        let id = earned('focuscount', this.state.focusDone);
+        if (id)
+            this.earnOnce(id, `earned ${WEARABLES[id].name} for 10 focus sessions`);
+        this.save(true);
+    }
+
+    // The pet count (from config) reached `count`: the party hat at 100.
+    petted(count) {
+        let id = earned('pets', count);
+        if (id)
+            this.earnOnce(id, `earned ${WEARABLES[id].name} for 100 pets`);
+    }
+
+    setHouse(style) {
+        if (style !== null && cleanHouse(style) === null)
+            return false;
+        this.state.house = style;
+        this.save(true);
+        this.onChanged?.();
+        return true;
     }
 
     // Wear or take off; only owned items, one per slot.

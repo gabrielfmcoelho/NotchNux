@@ -402,18 +402,28 @@ export const FINDS = {
     cap:    { kind: 'keepsake', name: 'a bottle cap', weight: 5 },
     pebble: { kind: 'keepsake', name: 'a shiny pebble', weight: 5 },
     seed:   { kind: 'seed', name: 'a seed', weight: 3 },
-    ribbon: { kind: 'wear', slot: 'neck', name: 'a ribbon', weight: 1 },
+    bandana: { kind: 'wear', slot: 'neck', name: 'a bandana', weight: 1 },
     beanie: { kind: 'wear', slot: 'head', name: 'a beanie', weight: 1 },
     scarf:  { kind: 'wear', slot: 'neck', name: 'a scarf', weight: 1 },
+    bow:    { kind: 'wear', slot: 'neck', name: 'a bow tie', weight: 1 },
 };
+export const SLOTS = ['head', 'neck', 'back'];
 export const WEARABLES = {
-    straw:  { slot: 'head', name: 'a straw hat' },
-    beanie: { slot: 'head', name: 'a beanie' },
-    crown:  { slot: 'head', name: 'a tiny crown' },
-    bell:   { slot: 'neck', name: 'a bell collar' },
-    ribbon: { slot: 'neck', name: 'a ribbon' },
-    scarf:  { slot: 'neck', name: 'a scarf' },
+    straw:   { slot: 'head', name: 'a straw hat', how: 'Keep a 5-day meal streak' },
+    beanie:  { slot: 'head', name: 'a beanie', how: 'Turns up when digging' },
+    crown:   { slot: 'head', name: 'a tiny crown', how: 'Keep a 14-day meal streak' },
+    party:   { slot: 'head', name: 'a party hat', how: 'Pet it 100 times' },
+    bell:    { slot: 'neck', name: 'a bell collar', how: 'Keep a 7-day meal streak' },
+    scarf:   { slot: 'neck', name: 'a scarf', how: 'Turns up when digging' },
+    bandana: { slot: 'neck', name: 'a bandana', how: 'Turns up when digging' },
+    bow:     { slot: 'neck', name: 'a bow tie', how: 'Turns up when digging' },
+    cape:    { slot: 'back', name: 'a cape', how: 'Finish 10 focus sessions' },
 };
+
+// The house the companion lives in; null in a save means "its own default".
+export const HOUSE_STYLES = ['burrow', 'basket', 'den', 'hutch', 'tent', 'mushroom', 'box'];
+export const HOUSE_DEFAULT = { rabbit: 'burrow', cat: 'basket', fox: 'den' };
+export const cleanHouse = v => (HOUSE_STYLES.includes(v) ? v : null);
 export const DIG_FIND_CHANCE = 0.2;
 
 // A dig's find, or null. rand in [0,1): the first fifth finds something.
@@ -430,8 +440,13 @@ export function digFind(rand) {
 }
 
 // Earned finds from living: a treat per finished focus, a seed per closed
-// Claude session, a straw hat at a 5-day meal streak, the bell at 7, the crown at 14.
+// Claude session, a straw hat at a 5-day meal streak, the bell at 7, the crown at 14,
+// the cape at 10 focus sessions, the party hat at 100 pets. `streakDays` is the count.
 export function earned(event, streakDays) {
+    if (event === 'focuscount' && streakDays >= 10)
+        return 'cape';
+    if (event === 'pets' && streakDays >= 100)
+        return 'party';
     if (event === 'focusdone')
         return 'treat';
     if (event === 'finished')

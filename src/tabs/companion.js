@@ -22,7 +22,7 @@ import { VERTICAL, HORIZONTAL } from '../helpers/compat.js';
 
 // The rows of the Needs card, in order (the ones with two actions first).
 const NEEDS = [['hunger', 'Food'], ['mood', 'Mood'], ['clean', 'Clean'], ['energy', 'Energy']];
-const SLOTS = [['head', 'Head'], ['neck', 'Neck']];
+const SLOTS = [['head', 'Head'], ['neck', 'Neck'], ['back', 'Back']];
 const cap = s => s[0].toUpperCase() + s.slice(1);
 const BACK_MS = 5 * 60 * 1000;   // how long "happy you're back" stays after you return
 
@@ -94,7 +94,7 @@ export function installCompanion(proto) {
                     this._pillRabbit.react('finished');   // a happy jump for a find
                 break;
             }
-            case 'pet': st.event('pet', 'got a pet'); break;
+            case 'pet': st.event('pet', 'got a pet'); st.petted(this._config.companion.pets); break;
             case 'groom': st.event('groom'); break;
             case 'play': st.event('play'); break;
             case 'napEnd': st.event('napEnd', 'woke from a deep nap'); break;

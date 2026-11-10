@@ -246,7 +246,7 @@ print(`companion-check: ${n} checks passed`);
 
 // ---- needs
 {
-    const { freshNeeds, progressNeeds, applyNeed, thought, needAct, digFind, earned, FINDS, WEARABLES, NEED_KEYS, waitTick, MISSED_MS } =
+    const { freshNeeds, progressNeeds, applyNeed, thought, needAct, digFind, earned, FINDS, WEARABLES, SLOTS, HOUSE_DEFAULT, cleanHouse, NEED_KEYS, waitTick, MISSED_MS } =
         await import('../src/helpers/companion-brain.js');
     let t0 = 1_000_000_000_000;
     let f = freshNeeds(t0);
@@ -289,14 +289,23 @@ print(`companion-check: ${n} checks passed`);
     let found = {};
     for (let i = 0; i < 1000; i++) { let r = digFind(i / 1000); if (r) found[r] = (found[r] || 0) + 1; }
     ok(Math.abs(Object.values(found).reduce((a, b) => a + b, 0) - 200) <= 2, 'one dig in five finds something');
-    ok(found.treat > found.beanie && found.ribbon > 0 && found.scarf > 0, 'treats are common, wearables rare');
+    ok(found.treat > found.beanie && found.bandana > 0 && found.scarf > 0, 'treats are common, wearables rare');
     for (let id of Object.keys(found))
         ok(FINDS[id], `${id} is a find`);
     eq(earned('focusdone'), 'treat', 'a finished focus earns a treat');
     eq(earned('finished'), 'seed', 'a closed Claude session earns a seed');
     eq([earned('streak', 5), earned('streak', 7), earned('streak', 6), earned('streak', 14)], ['straw', 'bell', null, 'crown'], 'streak hats');
-    for (let w of ['straw', 'bell', 'beanie', 'ribbon', 'crown', 'scarf'])
+    for (let w of ['straw', 'bell', 'beanie', 'bandana', 'crown', 'scarf'])
         ok(WEARABLES[w], `${w} is wearable`);
+    eq(SLOTS, ['head', 'neck', 'back'], 'three slots');
+    eq(Object.keys(WEARABLES).sort(), ['bandana', 'beanie', 'bell', 'bow', 'cape', 'crown', 'party', 'scarf', 'straw'], 'the wardrobe');
+    ok(Object.values(WEARABLES).every(w => SLOTS.includes(w.slot) && w.name && w.how), 'every item: slot, name, how it is earned');
+    eq([WEARABLES.cape.slot, WEARABLES.party.slot, WEARABLES.bow.slot, WEARABLES.bandana.slot], ['back', 'head', 'neck', 'neck'], 'new items sit in their slots');
+    ok(!FINDS.ribbon && FINDS.bandana.slot === 'neck' && FINDS.bow.slot === 'neck', 'the bandana took the ribbon\'s place; the bow tie is a find');
+    eq([earned('focuscount', 9), earned('focuscount', 10), earned('focuscount', 11)], [null, 'cape', 'cape'], 'the cape at ten focus sessions');
+    eq([earned('pets', 99), earned('pets', 100), earned('pets', 250)], [null, 'party', 'party'], 'the party hat at 100 pets or more');
+    eq([cleanHouse('tent'), cleanHouse('castle'), cleanHouse(null)], ['tent', null, null], 'house styles');
+    eq(HOUSE_DEFAULT, { rabbit: 'burrow', cat: 'basket', fox: 'den' }, 'default houses');
     print(`companion-check (needs): ok`);
 }
 
@@ -355,8 +364,23 @@ print(`companion-check: ${n} checks passed`);
     st.flush();
     let again = new CompanionStore({ dataDir: dir, now });
     eq(again.state.needs.mood, m, 'reloaded from disk');
-    eq(again.state.worn, { head: null, neck: null }, 'worn survives (nothing worn now)');
+    eq(again.state.worn, { head: null, neck: null, back: null }, 'worn survives (nothing worn now)');
     ok(again.state.items.includes('bell'), 'items survive');
     GLib.spawn_command_line_sync(`rm -rf ${dir}`);
+    // a save file from before
+    let odir = GLib.Dir.make_tmp('nnx-old-XXXXXX');
+    GLib.file_set_contents(`${odir}/companion.json`, JSON.stringify({ items: ['ribbon', 'straw', 'pebble'], worn: { head: 'straw', neck: 'ribbon' } }));
+    let old = new CompanionStore({ dataDir: odir, now });
+    eq([old.state.items, old.state.worn, old.state.focusDone, old.state.house], [['bandana', 'straw', 'pebble'], { head: 'straw', neck: 'bandana', back: null }, 0, null], 'an old save is brought forward');
+    for (let i = 0; i < 9; i++) old.focusDone();
+    ok(!old.state.items.includes('cape'), 'nine sessions: no cape yet');
+    old.focusDone();
+    ok(old.state.items.includes('cape') && old.state.diary.at(-1).what === 'earned a cape for 10 focus sessions', 'the tenth earns the cape');
+    ok(!old.earnOnce('cape', 'again') && old.earnOnce('party', 'first'), 'earnOnce: only the first time');
+    let lines = old.state.diary.length; old.petted(100);
+    eq(old.state.diary.length, lines, 'already owned: no second line');
+    ok(old.wear('cape') && old.state.worn.back === 'cape', 'the back slot');
+    ok(old.setHouse('tent') && old.state.house === 'tent' && !old.setHouse('castle') && old.setHouse(null) && old.state.house === null, 'the house choice');
+    GLib.spawn_command_line_sync(`rm -rf ${odir}`);
     print('companion-check (store): ok');
 }
