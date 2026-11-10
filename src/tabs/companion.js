@@ -16,7 +16,7 @@ import St from 'gi://St';
 
 import { Companion } from '../helpers/companion.js';
 import { CompanionStore, diaryDays } from '../helpers/companion-store.js';
-import { WEARABLES, FINDS, thought, restAct } from '../helpers/companion-brain.js';
+import { WEARABLES, FINDS, HOUSE_STYLES, HOUSE_DEFAULT, thought, restAct } from '../helpers/companion-brain.js';
 import { accentHex } from '../helpers/widgets.js';
 import { addPressFeedback } from '../helpers/motion.js';
 import { VERTICAL, HORIZONTAL } from '../helpers/compat.js';
@@ -236,6 +236,8 @@ export function installCompanion(proto) {
             // ---- what it wears (one per slot), its pockets, its diary
             let wardrobe = new St.BoxLayout({ ...VERTICAL, x_expand: true });
             card('WARDROBE').add_child(wardrobe);
+            let houses = new St.BoxLayout({ style_class: 'nook-chip-row', x_expand: true });
+            card('HOUSE').add_child(houses);
             let pocketsCard = card('POCKETS');
             let pockets = new St.BoxLayout({ style_class: 'nook-chip-row', x_expand: true });
             let keepsakes = label('', 'nook-card-meta');
@@ -265,6 +267,8 @@ export function installCompanion(proto) {
                 let streak = st.streakDays(), pets = this._config.companion.pets;
                 statsLabel.set_text(`${streak ? `${streak}-day meal streak` : 'No meal streak yet'} · petted ${pets} ${pets === 1 ? 'time' : 'times'}`);
                 yard.setFlowers(s.flowers);
+                let house = s.house ?? HOUSE_DEFAULT[pill.species];
+                yard.setHouse(house);
 
                 for (let [k] of NEEDS) {
                     let v = k === 'hunger' ? 100 - needs.hunger : needs[k];   // the Food bar shows how full it is
@@ -309,6 +313,18 @@ export function installCompanion(proto) {
                     }
                     row.add_child(tiles);
                     wardrobe.add_child(row);
+                }
+
+                // where it sleeps: one tile per house, the one it has outlined in the accent
+                houses.destroy_all_children();
+                for (let style of HOUSE_STYLES) {
+                    let on = style === house;
+                    let t = new St.Button({ style_class: `nn-pet-house-tile${on ? ' nn-pet-house-tile-on' : ''}`, can_focus: true, accessible_name: cap(style) });
+                    t.set_style(`success-color: ${accentHex()};${on ? ` border-color: ${accentHex()};` : ''}`);
+                    t.set_child(new St.Icon({ gicon: new Gio.FileIcon({ file: ITEMS_ROOT.get_child(`houses/house-${style}-icon-symbolic.svg`) }), icon_size: 40 }));
+                    t.connect('clicked', () => st.setHouse(style));
+                    addPressFeedback(t);
+                    houses.add_child(t);
                 }
 
                 pockets.destroy_all_children();

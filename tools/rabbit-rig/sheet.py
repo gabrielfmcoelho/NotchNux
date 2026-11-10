@@ -38,7 +38,7 @@ def draw(cr, svg, x, y, size, body=BODY, alpha=1):
     cr.paint_with_alpha(alpha)
 
 
-HOUSE = "#48474c"     # .nn-pet-house (#bfbdcc at 0.34) over the dark background, opaque: the front really hides what it covers
+HOUSE = "#48474c"     # .nn-pet-house: opaque, so the front really hides what it covers
 
 
 def houses(out):

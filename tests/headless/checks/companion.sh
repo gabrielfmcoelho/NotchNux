@@ -104,7 +104,7 @@ nnx_eval "$NNX.expand(), true" >/dev/null; sleep 1
 nnx_eval "$NNX._switchTab('companion'), true" >/dev/null; sleep 1.5
 nnx_check pet-tab-open "$NNX._activeTab === 'companion' && !!$NNX._petUi" true
 nnx_check pet-store "(() => { let st = $NNX._petStore; return [st.state.pantry.food >= 1, Object.keys(st.state.needs).length]; })()" '[true,5]'
-nnx_check pet-yard-mirrors "(() => { let r = $R; let y = r._mirrors[0]; return [!!y, y && y._k === 2, y && y.species === r.species, y && y._house.visible]; })()" '[true,true,true,true]'
+nnx_check pet-yard-mirrors "(() => { let r = $R; let y = r._mirrors[0]; return [!!y, y && y._k === 2, y && y.species === r.species, y && y._houseBack.visible]; })()" '[true,true,true,true]'
 nnx_check pet-yard-follows "(() => { let r = $R; let y = r._mirrors[0]; r._play('hop'); return [r._act?.name, y._act?.name]; })()" '["hop","hop"]'
 sleep 1.2
 nnx_shot pet-tab 560 40 800 420
@@ -137,9 +137,13 @@ nnx_check pet-wardrobe "(() => { let st = $NNX._petStore; let find = (a, f, out 
 nnx_shot pet-wardrobe 560 40 800 700
 # asleep: the z's tick with the world timer, the yard's animal is inside its house
 nnx_check pet-sleep "(() => { let r = $R; r._away = true; r.update(); return r._worldId > 0; })()" true
-sleep 1.6   # a mirrored act in flight finishes first, then the yard settles into the house
-nnx_check pet-in-house "(() => { let y = $R._mirrors[0]; return y._act === null && y._inHouse && y._sprite.opacity === 0; })()" true
+sleep 4   # a mirrored act in flight finishes first, then the yard hops to its door and lies down inside
+nnx_check pet-in-house "(() => { let y = $R._mirrors[0]; return [y._act === null, y._inHouse, y._sprite.opacity, y._houseLight.opacity, Math.abs(y._sprite.translation_x - y._doorX) <= 1]; })()" '[true,true,255,255,true]'
+nnx_shot pet-in-house 560 40 800 200
 nnx_shot pet-asleep 560 40 800 420
+# the house is a choice: the store's, else the animal's own
+nnx_check pet-house-choice "(() => { let st = $NNX._petStore; st.setHouse('tent'); let y = $R._mirrors[0]; return [st.state.house, y._houseStyle]; })()" '["tent","tent"]'
+nnx_check pet-house-default "(() => { let st = $NNX._petStore; st.setHouse(null); return $R._mirrors[0]._houseStyle; })()" '"burrow"'
 nnx_check pet-wake "(() => { let r = $R; r._away = false; r.update(); let y = r._mirrors[0]; return [r._act?.name, y._sprite.opacity]; })()" '["stretch",255]'
 sleep 1.2
 nnx_eval "$NNX.collapse(), true" >/dev/null; sleep 1

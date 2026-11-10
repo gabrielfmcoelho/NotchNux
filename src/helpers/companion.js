@@ -17,7 +17,7 @@ import St from 'gi://St';
 
 import {
     diffEvents, strongest, restAct, ambient, breathing, rank, REACTION_ACT, meadow, wantsMushroom, sheltering, facing,
-    isIdle, cleanSpecies, napLength, NAPS, waitTick, splitHops,
+    isIdle, cleanSpecies, napLength, NAPS, waitTick, splitHops, HOUSE_DEFAULT,
 } from './companion-brain.js';
 import { CACHE_ROOT, ensureOutfit, outfitKey } from './companion-outfit.js';
 import { accentHex } from './widgets.js';
@@ -40,6 +40,14 @@ const HOP_MAX = BASE.wide - BASE.sprite;               // the pill's longest hop
 const FADE_MS = 250;                                   // leaving the pill, arriving in the yard
 const SWAP_POLL_MS = 20;                               // a new outfit's frames: are they loaded yet?
 const SWAP_MAX_MS = 5000;                              // frames that never load: give up on them
+// The yard's houses: back, front and door light per style, in a 150-unit box whose
+// units are the frames' (135-unit box); ground at y = 100 in both. houses.json:
+// door = the x where the lying frame's centre goes, roof = the y of the roof's top.
+const HOUSE_DIR = ROOT.get_child('houses');
+const HOUSES = JSON.parse(new TextDecoder().decode(HOUSE_DIR.get_child('houses.json').load_contents(null)[1]));
+const [HBX, HBY, HBW] = HOUSES.box;
+const FRAME = { x: -20, y: -31, w: 135, mid: 47.5 };   // the rig's frame box and the animal's centre
+const Z_ROOM = 20;                                     // the yard's grass reaches this far above it: z's over a tall roof
 
 function rgb(hex) {
     let m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex) ?? ['', 'aa', 'aa', 'ff'];
@@ -76,6 +84,9 @@ class Companion extends St.Widget {
         let w = mirror?._worn ?? worn;
         this._worn = { head: w?.head ?? null, neck: w?.neck ?? null, back: w?.back ?? null };
         this._minX = 0;            // the yard's house takes the left end
+        this._houseStyle = null;   // the yard's house on show
+        this._inHouse = false;     // lying in its doorway, the door lit
+        this._houseId = 0;         // the walk to the door, after the settle that asked for it
         this._claude = { mood: 'idle', fresh: 0, color: null };
         this._away = false;
         this._state = null;
@@ -115,16 +126,23 @@ class Companion extends St.Widget {
         this.add_child(this._props);
         this._propShown = null;
 
-        // the yard's house: where it sleeps (out of sight inside it). Added before the
-        // sprite so its icon loads ahead of the animal's hundreds of frames.
-        // 1.5 prop boxes: big enough to hold the animal, small enough not to crowd the yard
-        this._houseSize = Math.round(this._p * 1.5);
-        this._house = new St.Icon({ style_class: 'nn-pet-house', icon_size: this._houseSize, visible: scale > 1, opacity: 0 });
-        this._house.set_position(2 * scale, this._g - this._houseSize + Math.round(this._houseSize / 12));
-        this.add_child(this._house);
+        // the yard's house (the yard only): the back under the animal, the front and
+        // the door light over it, sized so a house unit is a frame unit; grounds aligned.
+        // Added before the sprite so it loads ahead of the animal's hundreds of frames.
+        let spriteY = this._g - this._s + 3;
+        if (scale > 1) {
+            this._houseSize = Math.round(this._s * HBW / FRAME.w);
+            this._houseU = this._houseSize / HBW;   // px per house unit
+            [this._houseBack, this._houseFront, this._houseLight] = ['back', 'front', 'light'].map(part => {
+                let icon = new St.Icon({ style_class: part === 'light' ? '' : 'nn-pet-house', icon_size: this._houseSize, opacity: part === 'light' ? 0 : 255 });
+                icon.set_position(2 * scale, spriteY - Math.round((FRAME.y - HBY) * this._houseU));
+                return icon;
+            });
+            this.add_child(this._houseBack);
+        }
 
         this._sprite = new St.Widget({ style_class: 'nn-pill-rabbit', width: this._s, height: this._s });
-        this._sprite.set_position(0, this._g - this._s + 3);
+        this._sprite.set_position(0, spriteY);
         this._sprite.set_pivot_point(0.5, 1);                 // turns about its feet
         this._sprite.translation_x = (this._cw - this._s) / 2;  // where it sits in the meadow
         this.add_child(this._sprite);
@@ -132,8 +150,12 @@ class Companion extends St.Widget {
         this._propIcons = new Map();
         // in the yard the house takes the left end: the animal lives (and lands) to its right
         this._minX = scale > 1 ? this._houseSize + 6 * scale : 0;
-        if (scale > 1)
+        if (scale > 1) {
+            this.add_child(this._houseFront);
+            this.add_child(this._houseLight);
             this._sprite.translation_x = Math.round((this._minX + this._cw - this._s) / 2);
+            this.setHouse(HOUSE_DEFAULT[cleanSpecies(species)]);
+        }
         this._loadSpecies(cleanSpecies(species));
 
         // Away = no input for 10 minutes (sleeps); input again wakes it. (The yard follows the pill's.)
@@ -168,10 +190,10 @@ class Companion extends St.Widget {
             this._gone = true;
             this._cut();
             this._clearAmbient();
-            for (let id of [this._narrowId, this._worldId, this._napId, this._swapId])
+            for (let id of [this._narrowId, this._worldId, this._napId, this._swapId, this._houseId])
                 if (id)
                     GLib.source_remove(id);
-            this._narrowId = this._worldId = this._napId = this._swapId = 0;
+            this._narrowId = this._worldId = this._napId = this._swapId = this._houseId = 0;
             for (let id of [this._idleWatch, this._activeWatch])
                 if (id)
                     this._idleMon.remove_watch(id);
@@ -233,7 +255,6 @@ class Companion extends St.Widget {
             p.destroy();
         this._propIcons.clear();
         this._propShown = null;
-        this._house.gicon = new Gio.FileIcon({ file: dir.get_child('prop-house-symbolic.svg') });
         for (let n of [...PROPS.map(p => `prop-${p}`), ...FOODS.map(f => `food-${f}`)]) {
             let icon = new St.Icon({ gicon: new Gio.FileIcon({ file: dir.get_child(`${n}-symbolic.svg`) }), icon_size: this._p, opacity: 0 });
             this._propIcons.set(n, icon);
@@ -329,7 +350,7 @@ class Companion extends St.Widget {
             this._play([{ act: 'hop', to: 0 }], rank('wake'));
             this._sprite.ease({ opacity: 0, duration: FADE_MS, delay: FADE_MS / 2, mode: Clutter.AnimationMode.EASE_OUT_QUAD });
             for (let m of this._mirrors) {
-                m._sprite.translation_x = m._house.x + (m._houseSize - m._s) / 2;
+                m._sprite.translation_x = m._doorX;
                 m._play([{ act: 'hop', to: m._minX + m._s }], rank('wake'));
                 m._sprite.opacity = 0;   // (after _play: its settle shows the sprite)
                 m._sprite.ease({ opacity: 255, duration: FADE_MS, mode: Clutter.AnimationMode.EASE_OUT_QUAD });
@@ -363,9 +384,8 @@ class Companion extends St.Widget {
         if (this._k <= 1)
             return;
         this._cw = this._ww = box.get_width();
-        let grass = new Clutter.ActorBox();
-        grass.set_size(box.get_width(), this._h);
-        this._grass.allocate(grass);
+        let room = Z_ROOM * this._k;
+        this._grass.allocate(new Clutter.ActorBox({ x1: 0, y1: -room, x2: box.get_width(), y2: this._h }));
     }
 
     // Away in the yard, the pill shows no act's prop (food, the chased bit, the
@@ -555,7 +575,8 @@ class Companion extends St.Widget {
 
     // Play an act: a frame act name, a composite ('wander', 'turn', 'twostep',
     // 'chase', 'eat', 'snack'), or a list of items { act, to?, onStart? }.
-    _play(what, r = Infinity, onDone = null) {
+    // min: the leftmost spot it may land (the yard's door is left of _minX).
+    _play(what, r = Infinity, onDone = null, min = this._minX) {
         this._cut();
         this._clearAmbient();
         if (!this._canMove()) {
@@ -566,7 +587,8 @@ class Companion extends St.Widget {
             m._play(what, r);
         this._playing = typeof what === 'string' ? what.split(':')[0] : null;
         let items = Array.isArray(what) ? what.flatMap(i => (typeof i === 'string' ? this._expand(i) : [i])) : this._expand(what);
-        items = splitHops(items, this._sprite.translation_x, this._minX, this._mw - this._s, HOP_MAX * this._k);
+        this._floor = min;
+        items = splitHops(items, this._sprite.translation_x, min, this._mw - this._s, HOP_MAX * this._k);
         if (!items.length) {
             this._scheduleAmbient();
             return;
@@ -658,14 +680,14 @@ class Companion extends St.Widget {
             return;
         }
         this._act = { name: item.act, rank: this._act?.rank ?? Infinity };
-        if (this._inHouse) {
+        if (this._inHouse) {   // up and out: the light goes off
             this._inHouse = false;
-            this._sprite.opacity = 255;
+            this._houseLight.opacity = 0;
         }
         item.onStart?.();
         let dx = 0;
         if (item.to !== undefined) {
-            this._xTarget = Math.max(this._minX, Math.min(this._mw - this._s, Math.round(item.to)));
+            this._xTarget = Math.max(this._floor, Math.min(this._mw - this._s, Math.round(item.to)));
             dx = this._xTarget - this._sprite.translation_x;
             if (dx)
                 this._face(Math.sign(dx));
@@ -855,18 +877,40 @@ class Companion extends St.Widget {
         });
     }
 
-    // In the yard it sleeps inside its house: it moves there and the house draws over it.
+    // The yard's house: one of HOUSE_STYLES. Its door is where the lying animal goes.
+    setHouse(style) {
+        if (this._k <= 1 || style === this._houseStyle || !HOUSES.styles[style])
+            return;
+        this._houseStyle = style;
+        for (let [icon, part] of [[this._houseBack, 'back'], [this._houseFront, 'front'], [this._houseLight, 'light']])
+            icon.gicon = new Gio.FileIcon({ file: HOUSE_DIR.get_child(`house-${style}-${part}-symbolic.svg`) });
+        this._doorX = Math.round(this._houseBack.x + (HOUSES.styles[style].door - HBX) * this._houseU - (FRAME.mid - FRAME.x) * this._s / FRAME.w);
+        if (this._inHouse)
+            this._sprite.translation_x = this._doorX;
+        this._grass.queue_repaint();   // the z's rise from its roof
+    }
+
+    // In the yard it sleeps in its house: it hops to the doorway first, then lies
+    // there between the back and the front, the door lit. (The hop is started from
+    // an idle callback: this runs inside _play's own settle.)
     _syncHouse(rest) {
         if (this._k <= 1)
             return;
-        this._inHouse = rest === 'sleep';
-        this._house.opacity = 255;
-        if (this._inHouse) {   // it went in: out of sight until it wakes
-            this._sprite.remove_transition('translation_x');
-            this._sprite.translation_x = this._house.x + this._houseSize / 2 - this._s / 2;
-            this._sprite.opacity = 0;
-        } else {
-            this._sprite.opacity = 255;
+        let lying = rest === 'sleep';
+        let door = Math.abs(this._sprite.translation_x - this._doorX) <= 1;
+        if (lying && !door && !this._canMove()) {
+            this._sprite.translation_x = this._doorX;   // nothing plays: it is just there
+            door = true;
+        }
+        this._inHouse = lying && door;
+        this._houseLight.opacity = this._inHouse ? 255 : 0;
+        if (lying && !door && !this._houseId) {
+            this._houseId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
+                this._houseId = 0;
+                if (!this._act && restAct(this._state ?? {}) === 'sleep')
+                    this._play([{ act: 'hop', to: this._doorX }], rank('wake'), null, this._doorX);
+                return GLib.SOURCE_REMOVE;
+            });
         }
     }
 
@@ -954,6 +998,8 @@ class Companion extends St.Widget {
         let feet = this._sprite.translation_x + this._s / 2;
         let wind = (st.wind ?? 0) > 20 ? 1 : 0;
         let k = this._k;
+        if (k > 1)
+            cr.translate(0, Z_ROOM * k);   // (the yard's grass starts above the zone)
         for (let x = 1; x < w; x += 3 * k) {
             let xx = x - (s % 3);
             let y = this._g + 0.5 + 0.8 * k * Math.sin(xx / (5 * k) + s / 4);
@@ -993,9 +1039,9 @@ class Companion extends St.Widget {
             let k = this._k, n = rest === 'doze' ? 1 : 2;
             let hx = this._sprite.translation_x + this._s * (this._facing > 0 ? 0.62 : 0.38);
             let hy = this._g - this._s * 0.55;
-            if (this._inHouse) {   // from the roof
-                hx = this._house.x + this._houseSize * 0.6;
-                hy = this._house.y + this._houseSize * 0.15;
+            if (this._inHouse) {   // from the top of the roof, above the house's middle
+                hx = this._houseBack.x + (HBW / 2) * this._houseU;
+                hy = this._houseBack.y + (HOUSES.styles[this._houseStyle].roof - HBY) * this._houseU - 2 * k;
             }
             cr.setSourceRGBA(0.75, 0.74, 0.8, 0.75);
             cr.setLineWidth(k);

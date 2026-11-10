@@ -219,15 +219,6 @@ def fill(d, cls=None):
     return f'<path fill="#bebebe" fill-rule="evenodd" d="{d}"/>'
 
 
-# Houses: the mouth is a hole in the same path (even-odd), so the pill shows through it.
-HOUSES = {
-    "rabbit": [fill(ellipse(12, 15, 11.5, 7.5) + " " + ellipse(12, 16.5, 5, 4.6)),                                    # a burrow mound with a dark mouth
-               fill(ellipse(5, 9.5, 1.4, 1.4, 0, 10), "success")],                                                 # a glow at its door
-    "cat":    [fill(poly([(2, 11), (22, 11), (20.5, 22), (3.5, 22)]) + " " + poly([(5, 13), (19, 13), (18, 20), (6, 20)])),   # a basket, open
-               fill(arc_band(12, 11, 6.5, 8.5, 10, 170)), fill(ellipse(12, 19.5, 6, 2), "success")],              # handle, accent cushion
-    "fox":    [fill(poly([(0.5, 22), (12, 5), (23.5, 22)]) + " " + poly([(7, 22), (12, 13), (17, 22)])),              # a den with a dark mouth
-               fill(ellipse(12, 9, 1.4, 1.4, 0, 10), "success")],
-}
 SPECIES_NAME = os.environ.get("COMPANION", "rabbit")
 SHAPES, NODES, PHONES, J, EYE_AT = (SPECIES[SPECIES_NAME][k] for k in ("SHAPES", "NODES", "PHONES", "J", "EYE"))
 # what wear.py's items draw against, for the current animal
@@ -443,8 +434,6 @@ def write_props(out):
     for state, shapes in FOOD[SPECIES_NAME].items():
         open(os.path.join(out, f"food-{state}-symbolic.svg"), "w").write(
             f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{PROP_BOX}">{"".join(shapes)}</svg>\n')
-    open(os.path.join(out, "prop-house-symbolic.svg"), "w").write(
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{PROP_BOX}">{"".join(HOUSES[SPECIES_NAME])}</svg>\n')
 
 
 def write_wear(out):

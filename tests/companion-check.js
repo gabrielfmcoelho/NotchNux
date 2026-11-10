@@ -227,7 +227,7 @@ for (let sp of SPECIES) {
         for (let f of a.frames)
             ok(dir.get_child(f).query_exists(null), `${sp}/${act}: ${f} exists`);
     }
-    for (let f of ['food-whole', 'food-half', 'food-stub', 'prop-mushroom', 'prop-bit', 'prop-flower-bud', 'prop-flower', 'prop-leaf', 'prop-drop', 'prop-flake', 'prop-house'])
+    for (let f of ['food-whole', 'food-half', 'food-stub', 'prop-mushroom', 'prop-bit', 'prop-flower-bud', 'prop-flower', 'prop-leaf', 'prop-drop', 'prop-flake'])
         ok(dir.get_child(`${f}-symbolic.svg`).query_exists(null), `${sp}: ${f} shipped`);
     let bases = new Set(Object.values(spec.acts).flatMap(a => a.frames));
     // frames carry empty slots and ear wrappers; wear.json is the item library that fills them

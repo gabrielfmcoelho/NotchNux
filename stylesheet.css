@@ -2828,8 +2828,10 @@
 
 /* ---- Pet tab: the companion up close ---- */
 .nn-pet-yard { padding: 8px 0 2px; spacing: 4px; }
-/* the house is scenery, in the grass's tone, not a white shape */
-.nn-pet-house { color: rgba(191, 189, 204, 0.34); }
+/* the yard's house is dim scenery: the grass's tone (#bfbdcc at 0.34) as it sits on the
+ * black notch, but opaque, so the front really hides the animal behind it and the back
+ * and front overlapping read as one shape */
+.nn-pet-house { color: rgb(72, 71, 76); }
 .nn-pet-name-row { spacing: 4px; }
 .nn-pet-name { padding: 1px 4px; border-radius: 6px; font-size: 13px; font-weight: bold; color: #ffffff; }
 .nn-pet-name:hover, .nn-pet-name:focus { background-color: rgba(255, 255, 255, 0.10); }
@@ -2845,10 +2847,11 @@
 .nn-pet-bar { height: 6px; border-radius: 3px; background-color: rgba(255, 255, 255, 0.10); }
 .nn-pet-bar-fill { height: 6px; border-radius: 3px; }
 .nn-pet-chips { padding-top: 4px; }
-.nn-pet-item { width: 40px; height: 40px; border-radius: 10px; background-color: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.85); -st-icon-style: symbolic; border: 2px solid transparent; }
-.nn-pet-item:hover { background-color: rgba(255, 255, 255, 0.14); }
-.nn-pet-item:focus { border-color: rgba(255, 255, 255, 0.55); }
-.nn-pet-item-on, .nn-pet-item-on:hover { background-color: rgba(255, 255, 255, 0.30); }
+.nn-pet-item, .nn-pet-house-tile { width: 40px; height: 40px; border-radius: 10px; background-color: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.85); -st-icon-style: symbolic; border: 2px solid transparent; }
+.nn-pet-house-tile { width: 48px; height: 48px; }
+.nn-pet-item:hover, .nn-pet-house-tile:hover { background-color: rgba(255, 255, 255, 0.14); }
+.nn-pet-item:focus, .nn-pet-house-tile:focus { border-color: rgba(255, 255, 255, 0.55); }
+.nn-pet-item-on, .nn-pet-item-on:hover, .nn-pet-house-tile-on, .nn-pet-house-tile-on:hover { background-color: rgba(255, 255, 255, 0.30); }
 .nn-pet-item-locked { background-color: rgba(255, 255, 255, 0.03); }
 .nook-chip-active { background-color: rgba(255, 255, 255, 0.22); }
 .nn-pet-diary-time { width: 44px; font-size: 11px; color: rgba(255, 255, 255, 0.45); font-feature-settings: "tnum"; }
