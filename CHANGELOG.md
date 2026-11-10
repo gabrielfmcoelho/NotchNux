@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — a wardrobe that fits, and houses to choose
+- **Clothes drawn at the animal's own scale**: hats, scarves and the rest now
+  sit right on the animal instead of floating near it. Three slots: head,
+  neck and back, so one item of each can be worn together.
+- **New items**: a **cape** (back) for 10 completed focus sessions, a
+  **party hat** (head) for 100 pets, a **bow tie** (neck) that only a rare
+  dig find turns up, and a **bandana** (neck). The straw hat, bell and crown
+  still come from 5, 7 and 14-day meal streaks.
+- **A picture wardrobe**: the Pet tab shows each item as a tile; a locked
+  one says how to earn it when you hover it.
+- **Seven houses to choose from** in a new House card: burrow, basket, den,
+  hutch, tent, mushroom and box. Each has a little light in the door.
+- **The animal walks into its house** to sleep and hops out when it wakes.
+
+### Changed
+- The ribbon is now a bandana; saves that owned or wore the ribbon keep it.
+
 ### Added — Google Tasks & Calendar (optional, off by default)
 - **Google Tasks in the Tasks tab**: pick one of your Google task lists in
   Preferences; the Tasks tab, the Home card and the `t` command then add,
