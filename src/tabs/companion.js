@@ -296,7 +296,7 @@ export function installCompanion(proto) {
                         let have = s.items.includes(id);
                         let t = new St.Button({ style_class: `nn-pet-item ${have ? (s.worn[slot] === id ? 'nn-pet-item-on' : '') : 'nn-pet-item-locked'}`,
                             can_focus: have, reactive: have });
-                        t.set_style(`success-color: ${accentHex()};`);   // the item's accent part, as on the pill
+                        t.set_style(`success-color: ${accentHex()};${have && s.worn[slot] === id ? ` border-color: ${accentHex()};` : ''}`);   // the item's accent part, as on the pill
                         t.opacity = have ? 255 : 110;
                         t.set_child(new St.Icon({ gicon: new Gio.FileIcon({ file: dir.get_child(`item-${id}-symbolic.svg`) }), icon_size: 32 }));
                         if (have) {

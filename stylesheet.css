@@ -2845,9 +2845,10 @@
 .nn-pet-bar { height: 6px; border-radius: 3px; background-color: rgba(255, 255, 255, 0.10); }
 .nn-pet-bar-fill { height: 6px; border-radius: 3px; }
 .nn-pet-chips { padding-top: 4px; }
-.nn-pet-item { width: 40px; height: 40px; border-radius: 10px; background-color: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.85); -st-icon-style: symbolic; }
+.nn-pet-item { width: 40px; height: 40px; border-radius: 10px; background-color: rgba(255, 255, 255, 0.07); color: rgba(255, 255, 255, 0.85); -st-icon-style: symbolic; border: 2px solid transparent; }
 .nn-pet-item:hover { background-color: rgba(255, 255, 255, 0.14); }
-.nn-pet-item-on { background-color: rgba(255, 255, 255, 0.22); }
+.nn-pet-item:focus { border-color: rgba(255, 255, 255, 0.55); }
+.nn-pet-item-on, .nn-pet-item-on:hover { background-color: rgba(255, 255, 255, 0.30); }
 .nn-pet-item-locked { background-color: rgba(255, 255, 255, 0.03); }
 .nook-chip-active { background-color: rgba(255, 255, 255, 0.22); }
 .nn-pet-diary-time { width: 44px; font-size: 11px; color: rgba(255, 255, 255, 0.45); font-feature-settings: "tnum"; }
