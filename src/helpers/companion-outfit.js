@@ -44,6 +44,10 @@ function usedAt(info) {
 
 function rmTree(path) {
     let dir = Gio.File.new_for_path(path);
+    if (dir.query_file_type(Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null) !== Gio.FileType.DIRECTORY) {
+        dir.delete(null);
+        return;
+    }
     let en = dir.enumerate_children('standard::name,standard::type', Gio.FileQueryInfoFlags.NOFOLLOW_SYMLINKS, null), fi;
     while ((fi = en.next_file(null))) {
         let child = `${path}/${fi.get_name()}`;
@@ -56,6 +60,26 @@ function rmTree(path) {
     dir.delete(null);
 }
 
+// Leftovers, then all but the `keep` most recently used; a failure leaves the outfit worn.
+function prune(cacheRoot, key, keep) {
+    try {
+        let old = [], en = Gio.File.new_for_path(cacheRoot).enumerate_children('standard::name,time::modified,time::modified-usec', 0, null), fi;
+        while ((fi = en.next_file(null))) {
+            let n = fi.get_name();
+            if (n.endsWith('.tmp'))
+                rmTree(`${cacheRoot}/${n}`);
+            else if (n !== key)
+                old.push({ n, t: usedAt(fi) });
+        }
+        en.close(null);
+        old.sort((a, b) => b.t - a.t);
+        for (let { n } of old.slice(Math.max(keep - 1, 0)))
+            rmTree(`${cacheRoot}/${n}`);
+    } catch (e) {
+        console.warn(`NotchNux: companion outfit cache not pruned: ${e.message}`);
+    }
+}
+
 // Never rewrite a folder: Shell keeps one texture per path until logout.
 export function ensureOutfit({ srcDir, cacheRoot, species, worn, spec, lib, keep = OUTFIT_KEEP }) {
     try {
@@ -65,9 +89,13 @@ export function ensureOutfit({ srcDir, cacheRoot, species, worn, spec, lib, keep
         let dest = `${cacheRoot}/${key}`;
         GLib.mkdir_with_parents(cacheRoot, 0o700);
         if (GLib.file_test(dest, GLib.FileTest.IS_DIR)) {
-            let now = new Gio.FileInfo();
-            now.set_modification_date_time(GLib.DateTime.new_now_utc());
-            Gio.File.new_for_path(dest).set_attributes_from_info(now, Gio.FileQueryInfoFlags.NONE, null);
+            try {   // marks it recently used; a failure only risks an early prune
+                let now = new Gio.FileInfo();
+                now.set_modification_date_time(GLib.DateTime.new_now_utc());
+                Gio.File.new_for_path(dest).set_attributes_from_info(now, Gio.FileQueryInfoFlags.NONE, null);
+            } catch (e) {
+                console.warn(`NotchNux: companion outfit not marked used: ${e.message}`);
+            }
         } else {
             let tmp = `${dest}.tmp`;
             if (GLib.file_test(tmp, GLib.FileTest.EXISTS))
@@ -85,19 +113,7 @@ export function ensureOutfit({ srcDir, cacheRoot, species, worn, spec, lib, keep
             if (GLib.rename(tmp, dest) !== 0)
                 throw new Error(`cannot rename ${tmp}`);
         }
-        // Prune: leftovers, then all but the `keep` most recently used.
-        let old = [], en = Gio.File.new_for_path(cacheRoot).enumerate_children('standard::name,time::modified,time::modified-usec', 0, null), fi;
-        while ((fi = en.next_file(null))) {
-            let n = fi.get_name();
-            if (n.endsWith('.tmp'))
-                rmTree(`${cacheRoot}/${n}`);
-            else if (n !== key)
-                old.push({ n, t: usedAt(fi) });
-        }
-        en.close(null);
-        old.sort((a, b) => b.t - a.t);
-        for (let { n } of old.slice(Math.max(keep - 1, 0)))
-            rmTree(`${cacheRoot}/${n}`);
+        prune(cacheRoot, key, keep);
         return dest;
     } catch (e) {
         console.warn(`NotchNux: companion outfit not composed: ${e.message}`);
