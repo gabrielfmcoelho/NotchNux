@@ -5,7 +5,7 @@ import Gio from 'gi://Gio';
 import {
     diffEvents, strongest, restAct, ambient, breathing, rank, REACTION_ACT, meadow, wantsLunch, wantsMushroom,
     sheltering, facing, weatherKind, isNight, cleanSpecies, SPECIES, isIdle, napLength, NAPS,
-    ROUTINES, WANDER_STYLES, period, pickRoutine, wantsRoutine, splitHops, WEARABLES,
+    ROUTINES, WANDER_STYLES, period, pickRoutine, wantsRoutine, splitHops, WEARABLES, HOUSE_STYLES,
 } from '../src/helpers/companion-brain.js';
 
 let n = 0;
@@ -252,6 +252,19 @@ for (let sp of SPECIES) {
         ok(dir.get_child(`item-${id}-symbolic.svg`).query_exists(null), `${sp}: ${id} has a picture`);
     }
     eq(Object.keys(lib.items).sort(), Object.keys(WEARABLES).sort(), `${sp}: nothing drawn that cannot be worn`);
+}
+
+// houses: every style, in a back and a front layer with a door light, on one shared view box
+{
+    let hdir = root.get_child('houses');
+    let houses = JSON.parse(new TextDecoder().decode(hdir.get_child('houses.json').load_contents(null)[1]));
+    eq(Object.keys(houses.styles).sort(), [...HOUSE_STYLES].sort(), 'every house style is drawn');
+    eq(houses.box, [-10, -50, 150, 150], 'the houses\' view box');
+    for (let s of HOUSE_STYLES) {
+        ok(typeof houses.styles[s].door === 'number', `${s}: a door`);
+        for (let part of ['back', 'front', 'light', 'icon'])
+            ok(hdir.get_child(`house-${s}-${part}-symbolic.svg`).query_exists(null), `${s}: ${part}`);
+    }
 }
 
 print(`companion-check: ${n} checks passed`);

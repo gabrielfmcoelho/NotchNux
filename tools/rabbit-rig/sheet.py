@@ -1,9 +1,12 @@
 """Contact sheet of the shipped companion art with items worn, composed the way the shell composes it.
 
     python3 tools/rabbit-rig/sheet.py <out.png> [--items a,b,...]
+    python3 tools/rabbit-rig/sheet.py <out.png> --houses
 
 Per animal: a bare column, then each item, on the sitting, mid-leap, sleeping and sitting-with-the-earpiece
 frames, each at 4x (128 px), yard size (64 px) and pill size (32 px) side by side. Reads src/companions.
+--houses: per house style its icon, then per animal the house with the animal sitting beside it and lying inside
+it (back, animal, front, door light), at yard size and at twice that.
 """
 import json, os, sys
 import gi
@@ -25,11 +28,75 @@ def compose(template, layers, ears):
     return template
 
 
-def draw(cr, svg, x, y, size):
-    h = Rsvg.Handle.new_from_data(svg.replace("#bebebe", BODY).replace("#73d216", ACCENT).encode())
+def draw(cr, svg, x, y, size, body=BODY, alpha=1):
+    h = Rsvg.Handle.new_from_data(svg.replace("#bebebe", body).replace("#73d216", ACCENT).encode())
     r = Rsvg.Rectangle()
     r.x, r.y, r.width, r.height = x, y, size, size
+    cr.push_group()
     h.render_document(cr, r)
+    cr.pop_group_to_source()
+    cr.paint_with_alpha(alpha)
+
+
+HOUSE, HOUSE_A = "#bfbdcc", 0.34          # the yard's .nn-pet-house colour, each layer its own actor
+
+
+def houses(out):
+    hd = os.path.join(ROOT, "houses")
+    meta = json.load(open(os.path.join(hd, "houses.json")))
+    bx, by, bw, _ = meta["box"]
+    part = lambda st, p: open(os.path.join(hd, f"house-{st}-{p}-symbolic.svg")).read()
+    animals = ("rabbit", "cat", "fox")
+    frames = {}
+    for sp in animals:
+        spec = json.load(open(os.path.join(ROOT, sp, "acts.json")))
+        frames[sp] = [open(os.path.join(ROOT, sp, spec["acts"][a]["frames"][i])).read() for a, i in (("sit", 0), ("sleep", -1))]
+
+    def cell(cr, st, sp, x, y, S, inside):
+        """The house at (x, y), its box drawn at round(S * 150 / 135) px, with the animal's S px frame in the same units."""
+        hp = round(S * bw / 135)
+        k = hp / bw
+        draw(cr, part(st, "back"), x, y, hp, HOUSE, HOUSE_A)
+        fx = (-20 + meta["styles"][st]["door"] - 47.5 - bx) if inside else 140     # frame left edge, in house units from bx
+        if inside:
+            draw(cr, frames[sp][1], x + fx * k, y + (-31 - by) * k, S)
+        draw(cr, part(st, "front"), x, y, hp, HOUSE, HOUSE_A)
+        if inside:
+            draw(cr, part(st, "light"), x, y, hp)
+        else:
+            draw(cr, frames[sp][0], x + fx * k, y + (-31 - by) * k, S)
+        return hp
+
+    yard = 2 * (71 + 6) + 66                 # per animal: beside (house + animal), inside
+    big = 142 + 8
+    W = 80 + 56 + len(animals) * yard + len(animals) * big
+    rowh = 142 + 26
+    H = 16 + rowh * len(meta["styles"])
+    surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
+    cr = cairo.Context(surf)
+    cr.set_source_rgb(*BG)
+    cr.paint()
+    cr.set_font_size(11)
+    for r, st in enumerate(meta["styles"]):
+        oy = 16 + r * rowh
+        cr.set_source_rgb(*INK)
+        cr.move_to(4, oy + 70)
+        cr.show_text(st)
+        draw(cr, part(st, "icon"), 80, oy + 94, 48)                                  # the House card's picture
+        for a, sp in enumerate(animals):
+            ox = 80 + 56 + a * yard
+            cr.set_source_rgb(*INK)
+            cr.move_to(ox, oy + 10)
+            cr.show_text(f"{sp} (yard)")
+            cell(cr, st, sp, ox, oy + 142 - 71, 64, False)
+            cell(cr, st, sp, ox + 71 + 66 + 6, oy + 142 - 71, 64, True)
+            bx2 = 80 + 56 + len(animals) * yard + a * big
+            cr.set_source_rgb(*INK)
+            cr.move_to(bx2, oy + 10)
+            cr.show_text(f"{sp} (2x)")
+            cell(cr, st, sp, bx2, oy + 14, 128, True)
+    surf.write_to_png(out)
+    print(out, W, H)
 
 
 def main(out, items):
@@ -79,6 +146,8 @@ def main(out, items):
 if __name__ == "__main__":
     args = sys.argv[1:]
     out = args[0]
+    if "--houses" in args:
+        sys.exit(houses(out))
     lib0 = json.load(open(os.path.join(ROOT, "rabbit", "wear.json")))
     items = args[args.index("--items") + 1].split(",") if "--items" in args else list(lib0["items"])
     main(out, items)

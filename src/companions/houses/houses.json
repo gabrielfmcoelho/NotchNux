@@ -1,0 +1,31 @@
+{
+ "box": [
+  -10,
+  -50,
+  150,
+  150
+ ],
+ "styles": {
+  "burrow": {
+   "door": 62
+  },
+  "basket": {
+   "door": 62
+  },
+  "den": {
+   "door": 62
+  },
+  "hutch": {
+   "door": 62
+  },
+  "tent": {
+   "door": 62
+  },
+  "mushroom": {
+   "door": 62
+  },
+  "box": {
+   "door": 62
+  }
+ }
+}
