@@ -38,7 +38,7 @@ def draw(cr, svg, x, y, size, body=BODY, alpha=1):
     cr.paint_with_alpha(alpha)
 
 
-HOUSE, HOUSE_A = "#bfbdcc", 0.34          # the yard's .nn-pet-house colour, each layer its own actor
+HOUSE = "#48474c"     # .nn-pet-house (#bfbdcc at 0.34) over the dark background, opaque: the front really hides what it covers
 
 
 def houses(out):
@@ -56,11 +56,11 @@ def houses(out):
         """The house at (x, y), its box drawn at round(S * 150 / 135) px, with the animal's S px frame in the same units."""
         hp = round(S * bw / 135)
         k = hp / bw
-        draw(cr, part(st, "back"), x, y, hp, HOUSE, HOUSE_A)
+        draw(cr, part(st, "back"), x, y, hp, HOUSE)
         fx = (-20 + meta["styles"][st]["door"] - 47.5 - bx) if inside else 140     # frame left edge, in house units from bx
         if inside:
             draw(cr, frames[sp][1], x + fx * k, y + (-31 - by) * k, S)
-        draw(cr, part(st, "front"), x, y, hp, HOUSE, HOUSE_A)
+        draw(cr, part(st, "front"), x, y, hp, HOUSE)
         if inside:
             draw(cr, part(st, "light"), x, y, hp)
         else:

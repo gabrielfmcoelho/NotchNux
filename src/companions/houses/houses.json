@@ -7,25 +7,32 @@
  ],
  "styles": {
   "burrow": {
-   "door": 62
+   "door": 74,
+   "roof": -14.9
   },
   "basket": {
-   "door": 62
+   "door": 74,
+   "roof": 19.0
   },
   "den": {
-   "door": 62
+   "door": 74,
+   "roof": -10.0
   },
   "hutch": {
-   "door": 62
+   "door": 74,
+   "roof": -48.5
   },
   "tent": {
-   "door": 62
+   "door": 74,
+   "roof": -49.6
   },
   "mushroom": {
-   "door": 62
+   "door": 74,
+   "roof": -48.0
   },
   "box": {
-   "door": 62
+   "door": 74,
+   "roof": -11.0
   }
  }
 }

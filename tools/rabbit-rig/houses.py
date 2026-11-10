@@ -5,8 +5,10 @@
 Per style four symbolic SVGs on one view box (BOX, wider than a frame so a house can be bigger than its
 animal): `back` (behind the animal: bedding, the far wall), `front` (in front of it, the doorway cut out),
 `light` (accent shapes at the door, shown while the animal sleeps inside) and `icon` (back and front
-flattened, for the House card). houses.json gives the box and, per style, `door`: the x of the doorway's
-centre. The lying animal goes there: its frame's centre (x = 47.5 in frame units) at `door`.
+flattened, for the House card). houses.json gives the box and, per style, `door` and `roof`. `door` is where the
+lying animal goes: its frame's centre (x = 47.5 in frame units) at `door`. The three lying animals together
+span -65.5..+41 about that point (the fox's tail reaches far left), so at door = 74 they are centred on the
+doorways, which are drawn about C = 62. `roof` is the y of the roof's top above the house's centre (for the z's).
 Two tones: the body grey, or the accent. Details are holes in the same path (even-odd), so they read in
 one tone. Any animal can use any style.
 """
@@ -15,7 +17,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # -I leaves the
 from rig import fill, poly, ellipse, rbar, arc_band, leaf, GROUND
 
 BOX = [-10, -50, 150, 150]
-D = 62     # every style's doorway centre; the doorways are ~118 wide so the fox's tail is seen too
+C = 62      # the houses' and doorways' centre
+DOOR = 74   # where the lying frame's centre goes: the animals' combined body is then centred on C
 
 
 def lit(d):
@@ -71,26 +74,26 @@ def burrow():
     # a grassy hill: its foot flares out (a hill, not an arch), grass on top, roots hanging in the mouth
     hill = lambda x: GROUND - 106 * max(0, 1 - ((x - 64) / 74) ** 2) ** 0.75
     outline = [(-10 + 148 * i / 60, hill(-10 + 148 * i / 60)) for i in range(61)]
-    door = arch(D, 58, 23, GROUND)
+    door = arch(C, 58, 23, 62)
     pebbles = [ellipse(36, 8, 3.4, 2.3, 0, 12), ellipse(86, 5, 3.6, 2.4, 0, 12), ellipse(122, 52, 3, 2.1, 0, 12),
                ellipse(1, 56, 3, 2.1, 0, 12), ellipse(60, -1, 2.4, 1.7, 0, 12), ellipse(128, 80, 2.4, 1.7, 0, 12)]
     tufts = [leaf(x + dx, hill(x) + 4, x + dx * 1.8 + lean, hill(x) + 4 - h, 5)
              for x, lean in ((24, -2), (52, 0), (80, 1), (106, 3)) for dx, h in ((-3.5, 10), (0, 15), (3.5, 11))]
-    roots = [band([(34, 29), (33, 34), (35, 39)], 1.8), band([(41, 26), (42, 31)], 1.8), band([(88, 28), (89, 33)], 1.8)]
-    tunnel = [(D - 50 * math.cos(math.pi * i / 24), GROUND - 68 * math.sin(math.pi * i / 24)) for i in range(3, 22)]
+    roots = [band([(34, 26), (33, 32), (35, 37)], 1.8), band([(41, 24), (42, 30)], 1.8), band([(94, 28), (95, 33)], 1.8)]
+    tunnel = [(C - 50 * math.cos(math.pi * i / 24), GROUND - 68 * math.sin(math.pi * i / 24)) for i in range(3, 22)]
     return {"back": [fill(band(tunnel, 2.6)), bedding(6, 118)],
             "front": [fill(cut(outline, door) + " " + " ".join(pebbles)), fill(" ".join(tufts)), fill(" ".join(roots))],
             "light": [lantern(24, 41)]}
 
 
 def basket():
-    weave = " ".join(rbar(x + (7 if row else 0), y, x + 6 + (7 if row else 0), y, 1.4)
-                     for row, y in enumerate((88.5, 94.5)) for x in range(6, 112, 14))
-    body = poly([(-4, 80), (128, 80), (121, GROUND), (3, GROUND)])
-    far = [(D - 64 * math.cos(math.pi * i / 24), 75 - 17 * math.sin(math.pi * i / 24)) for i in range(25)]
-    return {"back": [fill(poly(far) + " " + " ".join(rbar(x, 68, x + 7, 68, 1.3) for x in range(16, 106, 14)))],
-            "front": [fill(body + " " + weave), fill(rbar(-5, 79, 129, 79, 4)), fill(arc_band(D, 79, 60, 65, 9, 171))],
-            "light": [lantern(104, 79 - math.sqrt(60 ** 2 - 42 ** 2))]}
+    # a low wicker basket with a braided rim and a tall handle; no holes in its front, which would show the animal as dashes
+    braid = [(x + 3.5 * math.cos(math.pi * i / 6), 84 - 3.6 * math.sin(math.pi * i / 6)) for x in range(-2, 127, 7) for i in range(6, -1, -1)]
+    body = poly([(3, GROUND), (-5.5, 86)] + braid + [(127.5, 86), (121, GROUND)])     # the braided rim is its scalloped top edge
+    far = [(C - 64 * math.cos(math.pi * i / 24), 81 - 19 * math.sin(math.pi * i / 24)) for i in range(25)]
+    return {"back": [fill(poly(far) + " " + " ".join(rbar(x, 72, x + 7, 72, 1.3) for x in range(16, 106, 14)))],
+            "front": [fill(body), fill(arc_band(C, 84, 60, 65, 9, 171))],
+            "light": [lantern(22, 84 - math.sqrt(60 ** 2 - 40 ** 2))]}
 
 
 def den():
@@ -98,7 +101,7 @@ def den():
     top = [(2, -12), (6, -28), (12, -20), (20, -46), (27, -24), (34, -16), (46, -12), (58, -6), (72, -10), (86, -2), (100, -6),
            (112, 1), (122, -1)]
     outline = [(-10, GROUND), (-9, 95), (-4, 82), (-1, 62), (1, 30)] + top + [(124, 30), (126, 56), (130, 78), (136, 92), (140, GROUND)]
-    door = arch(D, 56, 24, 58)
+    door = arch(C, 56, 24, 58)
     bark = [rbar(x, y0, x, y1, 1.1) for x, y0, y1 in ((12, -8, 14), (20, -28, -6), (30, -6, 14), (96, 4, 16), (108, 6, 18))]
     knot = ellipse(62, 4, 4, 5.5, 0, 16)
     return {"back": [bedding(8, 116)],
@@ -110,28 +113,29 @@ def den():
 def hutch():
     door = [(4, GROUND)] + [(4 + 14 - 14 * math.cos(math.pi / 2 * i / 8), 36 - 14 * math.sin(math.pi / 2 * i / 8)) for i in range(9)] \
         + [(106 + 14 * math.sin(math.pi / 2 * i / 8), 22 + 14 - 14 * math.cos(math.pi / 2 * i / 8)) for i in range(9)] + [(120, GROUND)]
-    wall = [(-4, GROUND), (-4, 12), (D, -36), (128, 12), (128, GROUND)]
+    wall = [(-4, GROUND), (-4, 12), (C, -36), (128, 12), (128, GROUND)]
     mesh = [poly([(x, y), (x + 5.4, y), (x + 5.4, y + 5), (x, y + 5)]) for x in (52.4, 59.3, 66.2) for y in (-16, -9.3, -2.6)]
     planks = [rbar(2, 16, 118, 16, 0.8), rbar(14, 4, 44, 4, 0.8), rbar(80, 4, 110, 4, 0.8)]
     return {"back": [bedding(8, 116)],
             "front": [fill(cut(wall, door) + " " + " ".join(mesh + planks)),
-                      fill(rbar(-5, 14, D, -44, 4.5)), fill(rbar(D, -44, 129, 14, 4.5)),             # the roof, overhanging
+                      fill(rbar(-5, 14, C, -44, 4.5)), fill(rbar(C, -44, 129, 14, 4.5)),             # the roof, overhanging
                       fill(poly([(-4, 96.5), (128, 96.5), (128, GROUND), (-4, GROUND)]))],          # the sill
             "light": [lit(" ".join(mesh)), lantern(28, 22)]}
 
 
 def tent():
-    door = [(3, GROUND), (D, -18), (121, GROUND)]
-    flap = lambda s: band([(D + s * 2, -10), (D + s * 21, 34), (D + s * 34, 52), (D + s * 52, 82), (D + s * 60, 96)], 2.2)
-    return {"back": [fill(rbar(D, -12, D, 92, 1.3)), bedding(8, 116)],
-            "front": [fill(cut([(-8, GROUND), (D, -40), (132, GROUND)], door) + " " + flap(-1) + " " + flap(1)),
-                      fill(rbar(D, -48, D, -34, 1.6)), fill(poly([(D + 1, -49), (D + 15, -45), (D + 1, -41)])),  # pole and pennant
-                      fill(ellipse(D - 33, 50, 3.2, 3.2, 0, 14)), fill(ellipse(D + 33, 50, 3.2, 3.2, 0, 14))],          # the flaps' ties
-            "light": [lantern(D, -2)]}
+    # an A-frame, its fabric spreading at the foot; the opening follows the lying animals: narrow up left, wide low for the tail
+    outer = [(-10, GROUND), (-2, 76), (8, 58), (64, -48), (138, GROUND)]
+    door = [(3, GROUND), (4, 82), (9, 68), (20, 56), (40, 30), (C, -14), (80, 10), (92, 30), (104, 44), (110, 56), (116, 72),
+            (120, GROUND)]
+    return {"back": [fill(rbar(C, -8, C, 92, 1.3)), bedding(8, 116)],
+            "front": [fill(cut(outer, door) + " " + rbar(64, -38, 63, -20, 1.1)),
+                      fill(rbar(64, -48, 64, -36, 1.6)), fill(poly([(65, -49), (79, -45), (65, -41)]))],   # pole and pennant
+            "light": [lantern(C, -2)]}
 
 
 def mushroom():
-    door = arch(D, 57, 26, 60)
+    door = arch(C, 57, 26, 60)
     stem = [(-6, GROUND), (-2, 60), (2, 12), (122, 12), (126, 60), (130, GROUND)]
     cap = [(65 - 75 * math.cos(math.pi * i / 40), 12 - 60 * math.sin(math.pi * i / 40)) for i in range(41)] \
         + [(65 + 75 * math.cos(math.pi * i / 20), 12 - 7 * math.sin(math.pi * i / 20)) for i in range(21)]
@@ -145,7 +149,7 @@ def mushroom():
 def box():
     # a cardboard box standing open: flaps splayed at the top, taped, a doorway cut in its side
     face = [(-4, GROUND), (-4, 8), (128, 8), (128, GROUND)]
-    door = arch(D, 56, 26, 58)
+    door = arch(C, 56, 26, 58)
     crease = rbar(-2, 8, 126, 8, 1)                                                 # where the flaps fold
     tape = poly([(56, 9.5), (68, 9.5), (68, 20), (56, 20)])
     arrows = " ".join(poly([(x - 1.2, 2), (x + 1.2, 2), (x + 1.2, -6), (x + 3.6, -6), (x, -11), (x - 3.6, -6), (x - 1.2, -6)])
@@ -176,6 +180,7 @@ if __name__ == "__main__":
                 assert BOX[0] <= float(x) <= BOX[0] + BOX[2] and BOX[1] <= float(y) <= BOX[1] + BOX[3], f"{name}/{part} leaves the box ({x}, {y})"
             open(os.path.join(out, f"house-{name}-{part}-symbolic.svg"), "w").write(svg(shapes))
         open(os.path.join(out, f"house-{name}-icon-symbolic.svg"), "w").write(svg(h["back"] + h["front"]))
-        styles[name] = {"door": D}
+        top = [float(y) for x, y in re.findall(r"(-?[\d.]+) (-?[\d.]+)", "".join(h["back"] + h["front"])) if abs(float(x) - C) <= 12]
+        styles[name] = {"door": DOOR, "roof": round(min(top), 1)}
     json.dump({"box": BOX, "styles": styles}, open(os.path.join(out, "houses.json"), "w"), indent=1)
     print(len(styles), "houses")
