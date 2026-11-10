@@ -240,6 +240,23 @@ for (let sp of SPECIES) {
     }
     for (let f of bases)
         ok(spec.anchors?.[f]?.neck, `${sp}: ${f} has a neck anchor`);
+    // frames carry empty slots and ear wrappers; wear.json is the item library that fills them
+    const SLOT_NAMES = ['back', 'neck', 'head0', 'head1', 'head2'];
+    let lib = JSON.parse(new TextDecoder().decode(dir.get_child('wear.json').load_contents(null)[1]));
+    ok(Number.isInteger(lib.version) && lib.version >= 1, `${sp}: the library has a version`);
+    for (let f of bases) {
+        let text = new TextDecoder().decode(dir.get_child(f).load_contents(null)[1]);
+        for (let s of SLOT_NAMES)
+            ok(text.split(`<!--${s}-->`).length === 2, `${sp}: ${f} has the ${s} slot once`);
+        ok(/data-ear="far" transform="rotate\(0 [\d.]+ [\d.]+\)"/.test(text) && /data-ear="near" transform="rotate\(0 [\d.]+ [\d.]+\)"/.test(text), `${sp}: ${f} has both ear wrappers`);
+    }
+    ok(Array.isArray(spec.stream) && spec.stream.length > 0 && spec.stream.every(f => bases.has(f)), `${sp}: streaming frames are real frames`);
+    for (let [id, it] of Object.entries(lib.items)) {
+        ok(['head', 'neck', 'back'].includes(it.slot) && Object.keys(it.rest).length > 0, `${sp}: ${id} has a slot and shapes`);
+        for (let k of [...Object.keys(it.rest), ...Object.keys(it.stream ?? {})])
+            ok(SLOT_NAMES.includes(k), `${sp}: ${id} draws into a known layer (${k})`);
+    }
+    ok(lib.items.scarf?.slot === 'neck' && lib.items.scarf.stream?.neck, `${sp}: the scarf, with a streaming end`);
 }
 
 print(`companion-check: ${n} checks passed`);

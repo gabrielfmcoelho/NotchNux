@@ -704,6 +704,17 @@
    ]
   }
  },
+ "stream": [
+  "rabbit-22-symbolic.svg",
+  "rabbit-23-symbolic.svg",
+  "rabbit-28-symbolic.svg",
+  "rabbit-29-symbolic.svg",
+  "rabbit-30-symbolic.svg",
+  "rabbit-31-symbolic.svg",
+  "rabbit-54-symbolic.svg",
+  "rabbit-120-symbolic.svg",
+  "rabbit-121-symbolic.svg"
+ ],
  "anchors": {
   "rabbit-00-symbolic.svg": {
    "hat": [

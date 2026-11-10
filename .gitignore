@@ -21,3 +21,4 @@ schemas/gschemas.compiled
 
 # Rabbit rig previews and caches
 tools/rabbit-rig/out/
+tools/rabbit-rig/__pycache__/

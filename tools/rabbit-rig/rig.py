@@ -13,7 +13,7 @@ head @neck > {ear_far, ear_near}}. Pose values: root (dx, dy, rot, sx, sy); ever
 Every frame is grounded: shifted so its lowest point touches the grass.
 Hop arcs are not baked in: acts.json has per-frame y offsets the shell tweens.
 """
-import json, math, os, subprocess, sys, tempfile
+import json, math, os, re, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, "out")
@@ -152,19 +152,21 @@ def species(skull, eye, ears, body, hind, arm, tail, nodes, phones, joints, snou
     """Shapes + joints for one companion. `nodes` are accent dots (~2 px) on the tips of its
     longest feature: the logo's line-ending-in-a-node, carried by the body itself."""
     extra = snout.split(" | ") if snout else []
+    skull_d = ellipse(*skull)
     return {
         "SHAPES": {
             "body": [body],
             "tail": [tail],
             "hind": hind,
             "arm": arm,
-            "head_open": [skull + " " + eye_open(*eye)] + extra,
-            "head_closed": [skull + " " + eye_closed(*eye)] + extra,
+            "head_open": [skull_d + " " + eye_open(*eye)] + extra,
+            "head_closed": [skull_d + " " + eye_closed(*eye)] + extra,
             "ear_far": [ears[0]],
             "ear_near": [ears[1]],
         },
         "NODES": nodes,        # {bone: [accent shapes]}
         "EYE": eye,
+        "SKULL": skull,        # (cx, cy, rx, ry): where wearables sit on the head
         "PHONES": phones,
         "J": joints,
     }
@@ -175,7 +177,7 @@ def species(skull, eye, ears, body, hind, arm, tail, nodes, phones, joints, snou
 # identify the animal are exaggerated so the black silhouette alone names it.
 SPECIES = {
     "rabbit": species(
-        skull=ellipse(66, 58, 16, 14.5), snout=ellipse(77, 64, 8, 6.5),      # round head + cheek
+        skull=(66, 58, 16, 14.5), snout=ellipse(77, 64, 8, 6.5),      # round head + cheek
         eye=(72, 55),
         ears=(leaf(58, 46, 47, 6, 14), leaf(66, 45, 65, 3, 15)),
         body=ellipse(42, 82, 23, 16, -8),
@@ -187,7 +189,7 @@ SPECIES = {
         joints={"root": (44, 100), "hip": (31, 86), "shoulder": (58, 80), "neck": (60, 68),
                 "ear_far": (58, 46), "ear_near": (66, 45), "tail": (19, 80)}),
     "cat": species(
-        skull=ellipse(60, 53, 15.5, 13.5), eye=(66, 50),
+        skull=(60, 53, 15.5, 13.5), eye=(66, 50),
         snout=ellipse(69, 60, 7, 5),
         ears=(tri_ear(51, 41, 44, 24, 19, 4), tri_ear(67, 40, 73, 23, 19, 4)),
         body=ellipse(44, 79, 19, 19, -35),
@@ -199,7 +201,7 @@ SPECIES = {
         joints={"root": (42, 100), "hip": (36, 87), "shoulder": (53, 72), "neck": (54, 62),
                 "ear_far": (51, 41), "ear_near": (67, 40), "tail": (26, 93)}),
     "fox": species(
-        skull=ellipse(61, 56, 14.5, 12.5), eye=(66, 53),
+        skull=(61, 56, 14.5, 12.5), eye=(66, 53),
         snout=poly([(68, 53), (83, 61), (82.5, 66), (67, 66.5)]) + " | " + ellipse(83.5, 63.5, 2.6, 2.6, 0, 12),
         ears=(tri_ear(53, 45, 49, 25, 18, 4), tri_ear(66, 43, 71, 24, 18, 4)),
         body=ellipse(42, 82, 24, 15, -10),
@@ -270,6 +272,8 @@ EAR_UNDER_HAT = {
 
 SPECIES_NAME = os.environ.get("COMPANION", "rabbit")
 SHAPES, NODES, PHONES, J, EYE_AT = (SPECIES[SPECIES_NAME][k] for k in ("SHAPES", "NODES", "PHONES", "J", "EYE"))
+# what wear.py's items draw against, for the current animal
+GEO = {"species": SPECIES_NAME, "neck": J["neck"], "skull": SPECIES[SPECIES_NAME]["SKULL"], "long_ears": SPECIES_NAME == "rabbit"}
 
 # Frame box (units): the ~93-unit rabbit is ~22 px tall in a 32 px icon; room for ears and squash.
 FX, FY, FW, FH = -20, -31, 135, 135
@@ -298,15 +302,20 @@ def svg_body(p):
     hat = p.get("hat")
     hs = hat_shapes(hat, *ANCHORS[SPECIES_NAME]["hat"]) if hat else {"under": [], "over": []}
     ear_far_rot, ear_near_rot = EAR_UNDER_HAT[SPECIES_NAME].get(hat, (0, 0))
+    # base frames carry empty slots and ear wrappers that the shell's outfit composer fills
+    # (an item's layer replaces <!--slot-->, its ear turn replaces "rotate(0 "); hat frames stay as they were
+    slot = (lambda s: f"<!--{s}-->") if not hat else (lambda s: "")
+    ear = lambda e, inner: f'<g data-ear="{e}" transform="rotate(0 {J["ear_" + e][0]} {J["ear_" + e][1]})">{inner}</g>' if not hat else inner
     head = bone(p, "head", "neck",
-                bone(p, "ear_far", "ear_far", shapes("ear_far") + nodes("ear_far"), ear_far_rot)
+                slot("head0")
+                + bone(p, "ear_far", "ear_far", ear("far", shapes("ear_far") + nodes("ear_far")), ear_far_rot)
                 + shapes("head_open" if p["eye"] == "open" else "head_closed")
                 + ("".join(fill(d, "success") for d in eye_accent(*EYE_AT, p.get("gaze", 0))) if p["eye"] == "open" else "") + phones
-                + "".join(hs["under"])
-                + bone(p, "ear_near", "ear_near", shapes("ear_near") + nodes("ear_near"), ear_near_rot)
-                + "".join(hs["over"]))
+                + "".join(hs["under"]) + slot("head1")
+                + bone(p, "ear_near", "ear_near", ear("near", shapes("ear_near") + nodes("ear_near")), ear_near_rot)
+                + "".join(hs["over"]) + slot("head2"))
     body = (bone(p, "tail", "tail", shapes("tail") + nodes("tail")) + bone(p, "hind", "hip", shapes("hind")) + shapes("body")
-            + bone(p, "arm", "shoulder", shapes("arm")) + head)
+            + slot("back") + bone(p, "arm", "shoulder", shapes("arm")) + slot("neck") + head)
     return (f'<g transform="translate({rdx} {rdy}) translate({px} {py}) rotate({rrot}) scale({sx} {sy}) '
             f'translate({-px} {-py})">{body}</g>')
 
@@ -545,6 +554,25 @@ if __name__ == "__main__":
                 open(os.path.join(OUT, seen[svg]), "w").write(svg)
             m[base] = seen[svg]
         hats[hat] = m
+    # stretched out mid-leap: cloth streams behind
+    stream = [n for n in names if base_of[n]["root"][3] > 1.08]
     # anchors are in viewBox units; the player maps them with its icon size / FW
-    json.dump({"fps": 12, "box": [FX, FY, FW, FH], "acts": acts, "anchors": anchors, "hats": hats}, open(ACTS, "w"), indent=1)
-    print(len(names), "frames,", len(acts), "acts")
+    json.dump({"fps": 12, "box": [FX, FY, FW, FH], "acts": acts, "stream": stream, "anchors": anchors, "hats": hats}, open(ACTS, "w"), indent=1)
+    # the item library: per item, the SVG text of each layer it draws into
+    sys.path.insert(0, HERE)                              # -I leaves the script's folder off the path
+    sys.modules.setdefault("rig", sys.modules[__name__])  # wear.py's `import rig` gets this module, not a second copy
+    import wear
+    items = {}
+    for iid, make in wear.ITEMS.items():
+        it = make(GEO)
+        out = {"slot": it["slot"], "rest": {k: "".join(v) for k, v in it["rest"].items()}}
+        if "stream" in it:
+            out["stream"] = {k: "".join(v) for k, v in it["stream"].items()}
+        if "ears" in it:
+            out["ears"] = list(it["ears"])
+        # rest pose has identity bones, so the item's own coordinates are frame units: nothing below the feet
+        ys = [float(y) for svg in out["rest"].values() for d in re.findall(r' d="([^"]*)"', svg) for y in re.findall(r"-?[\d.]+ (-?[\d.]+)", d)]
+        assert max(ys) <= GROUND, f"{iid} reaches below the feet ({max(ys)})"
+        items[iid] = out
+    json.dump({"version": wear.ART_VERSION, "items": items}, open(os.path.join(OUT, "wear.json"), "w"), indent=1)
+    print(len(names), "frames,", len(acts), "acts,", len(items), "items")
