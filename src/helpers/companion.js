@@ -48,6 +48,7 @@ const HOUSES = JSON.parse(new TextDecoder().decode(HOUSE_DIR.get_child('houses.j
 const [HBX, HBY, HBW] = HOUSES.box;
 const FRAME = { x: -20, y: -31, w: 135, mid: 47.5 };   // the rig's frame box and the animal's centre
 const Z_ROOM = 20;                                     // the yard's grass reaches this far above it: z's over a tall roof
+const Z_TOP = -14;                                     // the z's highest pixel in the yard: under the tab row above it
 
 function rgb(hex) {
     let m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex) ?? ['', 'aa', 'aa', 'ff'];
@@ -451,7 +452,7 @@ class Companion extends St.Widget {
             return;
         this._propIcons.get(name).opacity = 255;
         if (x !== null)
-            this._props.set_x(Math.max(0, Math.min(this._mw - this._p, Math.round(x))));
+            this._props.set_x(Math.max(this._k > 1 ? this._minX : 0, Math.min(this._mw - this._p, Math.round(x))));   // (never behind the yard's house)
     }
 
     // From the Claude sync: mood (idle/working/waiting), how many sessions
@@ -891,24 +892,34 @@ class Companion extends St.Widget {
     }
 
     // In the yard it sleeps in its house: it hops to the doorway first, then lies
-    // there between the back and the front, the door lit. (The hop is started from
-    // an idle callback: this runs inside _play's own settle.)
+    // there between the back and the front, the door lit. Awake, it hops back out
+    // to the right of the house. (The hops are started from an idle callback: this
+    // runs inside _play's own settle.)
     _syncHouse(rest) {
         if (this._k <= 1)
             return;
         let lying = rest === 'sleep';
         let door = Math.abs(this._sprite.translation_x - this._doorX) <= 1;
-        if (lying && !door && !this._canMove()) {
-            this._sprite.translation_x = this._doorX;   // nothing plays: it is just there
-            door = true;
+        let inside = !lying && this._sprite.translation_x < this._minX;
+        if (!this._canMove() && ((lying && !door) || inside)) {   // nothing plays: it is just there
+            this._sprite.translation_x = lying ? this._doorX : this._minX;
+            door = lying;
+            inside = false;
         }
         this._inHouse = lying && door;
         this._houseLight.opacity = this._inHouse ? 255 : 0;
-        if (lying && !door && !this._houseId) {
+        if (((lying && !door) || inside) && !this._houseId) {
             this._houseId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
                 this._houseId = 0;
-                if (!this._act && restAct(this._state ?? {}) === 'sleep')
-                    this._play([{ act: 'hop', to: this._doorX }], rank('wake'), null, this._doorX);
+                let x = this._sprite.translation_x;
+                if (this._act)
+                    return GLib.SOURCE_REMOVE;   // its settle asks again
+                if (restAct(this._state ?? {}) === 'sleep') {
+                    if (Math.abs(x - this._doorX) > 1)
+                        this._play([{ act: 'hop', to: this._doorX }], rank('wake'), null, this._doorX);
+                } else if (x < this._minX) {
+                    this._play([{ act: 'hop', to: this._minX + this._s }], rank('wake'));   // out, as on arrival
+                }
                 return GLib.SOURCE_REMOVE;
             });
         }
@@ -988,6 +999,26 @@ class Companion extends St.Widget {
         this._grass.queue_repaint();
     }
 
+    // The z's while asleep (one for a doze), rising with the world tick's phase:
+    // [x, y, size] each. In the house they rise beside its roof, from the roof's
+    // height (the grass is under the house), kept under the tab row (Z_TOP).
+    _zMarks(phase = this._zPhase) {
+        let rest = restAct(this._state ?? {});
+        if (this._out || (rest !== 'sleep' && rest !== 'doze'))
+            return [];
+        let k = this._k;
+        let hx = this._sprite.translation_x + this._s * (this._facing > 0 ? 0.62 : 0.38);
+        let hy = this._g - this._s * 0.55;
+        if (this._inHouse) {
+            hx = this._houseBack.x + this._houseSize + 2 * k;
+            hy = Math.max(this._houseBack.y + (HOUSES.styles[this._houseStyle].roof - HBY) * this._houseU - 2 * k, (Z_TOP + 8.5) * k);
+        }
+        return (rest === 'doze' ? [0] : [0, 1]).map(i => {
+            let ph = (phase + i) % 3;
+            return [hx + i * 4 * k + ph * k, hy - ph * 2 * k - i * 4 * k, (2 + i) * k];
+        });
+    }
+
     // Dot grass in the wallpaper's style, with short blades; night dims it,
     // wind and landings lean it, rain and snow fall through it.
     _drawGrass(area) {
@@ -1033,21 +1064,11 @@ class Companion extends St.Widget {
                 cr.fill();
             }
         }
-        // z's over its head while asleep (one for a doze), rising with the world tick
-        let rest = restAct(st);
-        if (!this._out && (rest === 'sleep' || rest === 'doze')) {
-            let k = this._k, n = rest === 'doze' ? 1 : 2;
-            let hx = this._sprite.translation_x + this._s * (this._facing > 0 ? 0.62 : 0.38);
-            let hy = this._g - this._s * 0.55;
-            if (this._inHouse) {   // from the top of the roof, above the house's middle
-                hx = this._houseBack.x + (HBW / 2) * this._houseU;
-                hy = this._houseBack.y + (HOUSES.styles[this._houseStyle].roof - HBY) * this._houseU - 2 * k;
-            }
+        let marks = this._zMarks();
+        if (marks.length) {
             cr.setSourceRGBA(0.75, 0.74, 0.8, 0.75);
             cr.setLineWidth(k);
-            for (let i = 0; i < n; i++) {
-                let ph = (this._zPhase + i) % 3;
-                let zx = hx + i * 4 * k + ph * k, zy = hy - ph * 2 * k - i * 4 * k, zs = (2 + i) * k;
+            for (let [zx, zy, zs] of marks) {
                 cr.moveTo(zx, zy); cr.lineTo(zx + zs, zy); cr.lineTo(zx, zy + zs); cr.lineTo(zx + zs, zy + zs);
                 cr.stroke();
             }

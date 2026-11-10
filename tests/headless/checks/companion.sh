@@ -141,11 +141,16 @@ sleep 4   # a mirrored act in flight finishes first, then the yard hops to its d
 nnx_check pet-in-house "(() => { let y = $R._mirrors[0]; return [y._act === null, y._inHouse, y._sprite.opacity, y._houseLight.opacity, Math.abs(y._sprite.translation_x - y._doorX) <= 1]; })()" '[true,true,255,255,true]'
 nnx_shot pet-in-house 560 40 800 200
 nnx_shot pet-asleep 560 40 800 420
+# the z's rise beside the roof: in every house, at every phase, their highest pixel stays under the tab row
+nnx_check pet-z-under-tabs "(() => { let st = $NNX._petStore, y = $R._mirrors[0], n = $NNX; let row = Math.max(...Object.values(n._tabButtons).map(b => b.get_transformed_position()[1] + b.get_transformed_size()[1])); let oy = y.get_transformed_position()[1], bad = []; for (let s of ['burrow', 'basket', 'den', 'hutch', 'tent', 'mushroom', 'box']) { st.setHouse(s); for (let p of [0, 1, 2]) { let m = y._zMarks(p); if (!y._inHouse || m.length !== 2 || oy + Math.min(...m.map(z => z[1])) - y._k / 2 <= row) bad.push(s + p); } } st.setHouse('tent'); y._zPhase = 1; y._grass.queue_repaint(); return bad; })()" '[]'
+nnx_shot pet-z-tent-tallest 560 40 800 200
+nnx_eval "$NNX._petStore.setHouse(null), true" >/dev/null
 # the house is a choice: the store's, else the animal's own
 nnx_check pet-house-choice "(() => { let st = $NNX._petStore; st.setHouse('tent'); let y = $R._mirrors[0]; return [st.state.house, y._houseStyle]; })()" '["tent","tent"]'
 nnx_check pet-house-default "(() => { let st = $NNX._petStore; st.setHouse(null); return $R._mirrors[0]._houseStyle; })()" '"burrow"'
-nnx_check pet-wake "(() => { let r = $R; r._away = false; r.update(); let y = r._mirrors[0]; return [r._act?.name, y._sprite.opacity]; })()" '["stretch",255]'
-sleep 1.2
+nnx_check pet-wake "(() => { let r = $R; r._away = false; r.update(); let y = r._mirrors[0]; return [r._act?.name, y._houseLight.opacity, y._inHouse]; })()" '["stretch",0,false]'
+sleep 2.5   # the stretch in the doorway, then it hops out of the house
+nnx_check pet-woke-out "(() => { let y = $R._mirrors[0]; return [y._act === null || y._act.name === 'hop', y._sprite.translation_x >= y._minX]; })()" '[true,true]'
 nnx_eval "$NNX.collapse(), true" >/dev/null; sleep 1
 nnx_check pet-yard-gone "$R._mirrors.length <= 1" true
 # the first frames of a fresh yard with clothes on: no animal yet, or the animal in its scarf
