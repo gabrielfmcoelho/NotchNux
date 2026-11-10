@@ -5,7 +5,7 @@ import Gio from 'gi://Gio';
 import {
     diffEvents, strongest, restAct, ambient, breathing, rank, REACTION_ACT, meadow, wantsLunch, wantsMushroom,
     sheltering, facing, weatherKind, isNight, cleanSpecies, SPECIES, isIdle, napLength, NAPS,
-    ROUTINES, WANDER_STYLES, period, pickRoutine, wantsRoutine, splitHops,
+    ROUTINES, WANDER_STYLES, period, pickRoutine, wantsRoutine, splitHops, WEARABLES,
 } from '../src/helpers/companion-brain.js';
 
 let n = 0;
@@ -247,6 +247,11 @@ for (let sp of SPECIES) {
             ok(SLOT_NAMES.includes(k), `${sp}: ${id} draws into a known layer (${k})`);
     }
     ok(lib.items.scarf?.slot === 'neck' && lib.items.scarf.stream?.neck, `${sp}: the scarf, with a streaming end`);
+    for (let [id, w] of Object.entries(WEARABLES)) {
+        ok(lib.items[id]?.slot === w.slot, `${sp}: ${id} is drawn, in its slot`);
+        ok(dir.get_child(`item-${id}-symbolic.svg`).query_exists(null), `${sp}: ${id} has a picture`);
+    }
+    eq(Object.keys(lib.items).sort(), Object.keys(WEARABLES).sort(), `${sp}: nothing drawn that cannot be worn`);
 }
 
 print(`companion-check: ${n} checks passed`);

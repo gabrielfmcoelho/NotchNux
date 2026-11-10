@@ -231,7 +231,8 @@ HOUSES = {
 SPECIES_NAME = os.environ.get("COMPANION", "rabbit")
 SHAPES, NODES, PHONES, J, EYE_AT = (SPECIES[SPECIES_NAME][k] for k in ("SHAPES", "NODES", "PHONES", "J", "EYE"))
 # what wear.py's items draw against, for the current animal
-GEO = {"species": SPECIES_NAME, "neck": J["neck"], "skull": SPECIES[SPECIES_NAME]["SKULL"], "long_ears": SPECIES_NAME == "rabbit"}
+GEO = {"species": SPECIES_NAME, "neck": J["neck"], "skull": SPECIES[SPECIES_NAME]["SKULL"], "long_ears": SPECIES_NAME == "rabbit",
+       "eye": EYE_AT, "ears": (J["ear_far"], J["ear_near"])}
 
 # Frame box (units): the ~93-unit rabbit is ~22 px tall in a 32 px icon; room for ears and squash.
 FX, FY, FW, FH = -20, -31, 135, 135
@@ -446,6 +447,36 @@ def write_props(out):
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{PROP_BOX}">{"".join(HOUSES[SPECIES_NAME])}</svg>\n')
 
 
+def write_wear(out):
+    """The item library (per item, the SVG text of each layer it draws into) and a 24x24 picture of each item."""
+    sys.path.insert(0, HERE)                              # -I leaves the script's folder off the path
+    sys.modules.setdefault("rig", sys.modules[__name__])  # wear.py's `import rig` gets this module, not a second copy
+    import wear
+    items = {}
+    for iid, make in wear.ITEMS.items():
+        it = make(GEO)
+        out_it = {"slot": it["slot"], "rest": {k: "".join(v) for k, v in it["rest"].items()}}
+        if "stream" in it:
+            out_it["stream"] = {k: "".join(v) for k, v in it["stream"].items()}
+        if "ears" in it:
+            out_it["ears"] = list(it["ears"])
+        # rest pose has identity bones, so the item's own coordinates are frame units: nothing below the feet
+        pts = [(float(x), float(y)) for svg in out_it["rest"].values() for d in re.findall(r' d="([^"]*)"', svg)
+               for x, y in re.findall(r"(-?[\d.]+) (-?[\d.]+)", d)]
+        assert max(y for _, y in pts) <= GROUND, f"{iid} reaches below the feet ({max(y for _, y in pts)})"
+        items[iid] = out_it
+        # the picture: the rest shapes alone, in drawing order, centred and scaled to fill 22 of 24 units
+        x0, x1 = min(x for x, _ in pts), max(x for x, _ in pts)
+        y0, y1 = min(y for _, y in pts), max(y for _, y in pts)
+        k = 22 / max(x1 - x0, y1 - y0)
+        art = "".join(out_it["rest"].get(s, "") for s in ("back", "neck", "head0", "head1", "head2"))
+        open(os.path.join(out, f"item-{iid}-symbolic.svg"), "w").write(
+            f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g transform="translate(12 12) scale({k:.4f}) '
+            f'translate({-(x0 + x1) / 2:.2f} {-(y0 + y1) / 2:.2f})">{art}</g></svg>\n')
+    json.dump({"version": wear.ART_VERSION, "items": items}, open(os.path.join(out, "wear.json"), "w"), indent=1)
+    return len(items)
+
+
 if __name__ == "__main__":
     OUT, ACTS = sys.argv[1], sys.argv[2]
     os.makedirs(OUT, exist_ok=True)
@@ -467,21 +498,4 @@ if __name__ == "__main__":
     # stretched out mid-leap: cloth streams behind
     stream = [n for n in names if base_of[n]["root"][3] > 1.08]
     json.dump({"fps": 12, "box": [FX, FY, FW, FH], "acts": acts, "stream": stream}, open(ACTS, "w"), indent=1)
-    # the item library: per item, the SVG text of each layer it draws into
-    sys.path.insert(0, HERE)                              # -I leaves the script's folder off the path
-    sys.modules.setdefault("rig", sys.modules[__name__])  # wear.py's `import rig` gets this module, not a second copy
-    import wear
-    items = {}
-    for iid, make in wear.ITEMS.items():
-        it = make(GEO)
-        out = {"slot": it["slot"], "rest": {k: "".join(v) for k, v in it["rest"].items()}}
-        if "stream" in it:
-            out["stream"] = {k: "".join(v) for k, v in it["stream"].items()}
-        if "ears" in it:
-            out["ears"] = list(it["ears"])
-        # rest pose has identity bones, so the item's own coordinates are frame units: nothing below the feet
-        ys = [float(y) for svg in out["rest"].values() for d in re.findall(r' d="([^"]*)"', svg) for y in re.findall(r"-?[\d.]+ (-?[\d.]+)", d)]
-        assert max(ys) <= GROUND, f"{iid} reaches below the feet ({max(ys)})"
-        items[iid] = out
-    json.dump({"version": wear.ART_VERSION, "items": items}, open(os.path.join(OUT, "wear.json"), "w"), indent=1)
-    print(len(names), "frames,", len(acts), "acts,", len(items), "items")
+    print(len(names), "frames,", len(acts), "acts,", write_wear(OUT), "items")

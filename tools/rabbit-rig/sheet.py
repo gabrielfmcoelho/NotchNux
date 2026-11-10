@@ -2,8 +2,8 @@
 
     python3 tools/rabbit-rig/sheet.py <out.png> [--items a,b,...]
 
-Per animal: a bare column, then each item, on the sitting, mid-leap and sleeping frames, each at
-4x (128 px), yard size (64 px) and pill size (32 px) side by side. Reads src/companions.
+Per animal: a bare column, then each item, on the sitting, mid-leap, sleeping and sitting-with-the-earpiece
+frames, each at 4x (128 px), yard size (64 px) and pill size (32 px) side by side. Reads src/companions.
 """
 import json, os, sys
 import gi
@@ -37,7 +37,7 @@ def main(out, items):
     CW = S + 4 + 64 + 4 + 32 + 12          # each pose at 4x, yard and pill size side by side
     animals = ("rabbit", "cat", "fox")
     cols = [None] + items
-    block = 3 * S + 8                      # three poses
+    block = 4 * S + 8                      # four poses
     W, H = 70 + CW * len(cols), 16 + block * len(animals)
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
     cr = cairo.Context(surf)
@@ -53,7 +53,8 @@ def main(out, items):
         spec = json.load(open(os.path.join(d, "acts.json")))
         lib = json.load(open(os.path.join(d, "wear.json")))
         leap = next(f for f in spec["acts"]["hop"]["frames"] if f in spec["stream"])
-        poses = [("sit", spec["acts"]["sit"]["frames"][0]), ("leap", leap), ("sleep", spec["acts"]["sleep"]["frames"][0])]
+        poses = [("sit", spec["acts"]["sit"]["frames"][0]), ("leap", leap), ("sleep", spec["acts"]["sleep"]["frames"][0]),
+                 ("music", spec["acts"]["sit@music"]["frames"][0])]     # a hat and the earpiece can be on together
         oy = 16 + a * block
         cr.set_source_rgb(*INK)
         for j, (label, _) in enumerate(poses):
@@ -65,7 +66,7 @@ def main(out, items):
                 sys.exit(f"{sp}: no item {iid} in wear.json")
             ox = 70 + i * CW
             for j, (_, f) in enumerate(poses):
-                layers = (it.get("stream", it["rest"]) if f in spec["stream"] else it["rest"]) if it else {}
+                layers = ({**it["rest"], **it.get("stream", {})} if f in spec["stream"] else it["rest"]) if it else {}   # as the shell merges them
                 svg = compose(open(os.path.join(d, f)).read(), layers, it.get("ears", (0, 0)) if it else (0, 0))
                 y = oy + j * S
                 draw(cr, svg, ox, y, S)
