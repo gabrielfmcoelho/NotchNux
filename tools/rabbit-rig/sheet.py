@@ -2,8 +2,8 @@
 
     python3 tools/rabbit-rig/sheet.py <out.png> [--items a,b,...]
 
-Per animal: a bare column, then each item, on the sitting, mid-leap and sleeping frames at 4x,
-then sitting at yard size (64 px) and pill size (32 px). Reads src/companions.
+Per animal: a bare column, then each item, on the sitting, mid-leap and sleeping frames, each at
+4x (128 px), yard size (64 px) and pill size (32 px) side by side. Reads src/companions.
 """
 import json, os, sys
 import gi
@@ -34,10 +34,10 @@ def draw(cr, svg, x, y, size):
 
 def main(out, items):
     S = 128                                # 4x the 32 px icon
-    CW = S + 8
+    CW = S + 4 + 64 + 4 + 32 + 12          # each pose at 4x, yard and pill size side by side
     animals = ("rabbit", "cat", "fox")
     cols = [None] + items
-    block = 3 * S + 64 + 12                # three poses, then the yard and pill sizes side by side
+    block = 3 * S + 8                      # three poses
     W, H = 70 + CW * len(cols), 16 + block * len(animals)
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, W, H)
     cr = cairo.Context(surf)
@@ -67,10 +67,10 @@ def main(out, items):
             for j, (_, f) in enumerate(poses):
                 layers = (it.get("stream", it["rest"]) if f in spec["stream"] else it["rest"]) if it else {}
                 svg = compose(open(os.path.join(d, f)).read(), layers, it.get("ears", (0, 0)) if it else (0, 0))
-                draw(cr, svg, ox, oy + j * S, S)
-                if j == 0:
-                    draw(cr, svg, ox + 8, oy + 3 * S + 4, 64)          # yard size
-                    draw(cr, svg, ox + 8 + 64 + 12, oy + 3 * S + 4 + 32, 32)   # pill size
+                y = oy + j * S
+                draw(cr, svg, ox, y, S)
+                draw(cr, svg, ox + S + 4, y + S - 64, 64)              # yard size, on the same ground line
+                draw(cr, svg, ox + S + 4 + 64 + 4, y + S - 32, 32)     # pill size
     surf.write_to_png(out)
     print(out, W, H)
 
