@@ -18,7 +18,7 @@ import St from 'gi://St';
 
 import {
     diffEvents, strongest, restAct, ambient, breathing, rank, REACTION_ACT, meadow, wantsMushroom, sheltering, facing,
-    isIdle, cleanSpecies, napLength, NAPS, waitTick, splitHops, HOUSE_DEFAULT, skyBody,
+    isIdle, cleanSpecies, napLength, NAPS, waitTick, splitHops, HOUSE_DEFAULT, skyBody, napHeld,
 } from './companion-brain.js';
 import { CACHE_ROOT, ensureOutfit, outfitKey } from './companion-outfit.js';
 import { accentHex } from './widgets.js';
@@ -114,6 +114,7 @@ class Companion extends St.Widget {
         this._out = false;         // away in the Pet tab's yard: unseen on the pill
         this._waitSince = 0;       // a Claude wait being timed (see waitTick)
         this._nap = false;         // a lively short sleep
+        this._napAsked = false;    // the current nap was asked for (the Pet tab's Nap button)
         this._napId = 0;
         this._swapId = 0;          // a new outfit's frames loading behind the shown ones
         this._next = null;         // those frames (a Map like _frames)
@@ -331,6 +332,13 @@ class Companion extends St.Widget {
             f.destroy();
     }
 
+    // The Pet tab's Nap button: a nap that holds through Claude working, a
+    // focus session and Normal activity (its own naps only come when lively and idle).
+    requestNap() {
+        this._napAsked = true;
+        this._play('nap:nap');
+    }
+
     // How many planted flowers the yard shows.
     setFlowers(n) {
         if (n === this._flowers)
@@ -473,9 +481,11 @@ class Companion extends St.Widget {
             this._away = this._mirror._away;
         for (let m of this._mirrors)
             m.update();
-        let next = { ...this._getState(), mood: this._claude.mood, fresh: this._claude.fresh, away: this._away, nap: this._nap };
-        if (this._nap && (!isIdle(next) || !next.lively))
-            this._endNap(false);   // something came up: wake without the stretch
+        let next = { ...this._getState(), mood: this._claude.mood, fresh: this._claude.fresh, away: this._away, nap: this._nap,
+            napAsked: (this._mirror ?? this)._napAsked };   // (the yard follows the pill's)
+        // something came up: wake without the stretch (a nap you asked for only gives way to Claude needing you)
+        if (this._nap && (next.napAsked ? !napHeld(next) : (!isIdle(next) || !next.lively)))
+            this._endNap(false);
         next.nap = this._nap;
         let prev = this._state ?? next;
         this._state = next;
@@ -631,11 +641,12 @@ class Companion extends St.Widget {
             // a doze (sitting, eyes shut), a nap or a deep sleep (lying down, fireflies);
             // then it stretches awake. Anything that needs it cuts the nap short.
             this._nap = param in NAPS ? param : 'nap';
-            this._napId = GLib.timeout_add(GLib.PRIORITY_LOW, napLength(this._nap, Math.random()), () => {
-                this._napId = 0;
-                this._endNap(true);
-                return GLib.SOURCE_REMOVE;
-            });
+            if (!this._mirror)   // the yard sleeps as long as the pill: the pill ends its nap (_endNap)
+                this._napId = GLib.timeout_add(GLib.PRIORITY_LOW, napLength(this._nap, Math.random()), () => {
+                    this._napId = 0;
+                    this._endNap(true);
+                    return GLib.SOURCE_REMOVE;
+                });
             this.update();
             return [];
         case 'seek':   // hungry: hops to the far side and sniffs around for food
@@ -763,11 +774,14 @@ class Companion extends St.Widget {
             return;
         let was = this._nap;
         this._nap = false;
+        this._napAsked = false;
         if (this._state)
             this._state.nap = false;
         this._syncWorld();
         if (was === 'deep' && !this._mirror)
             this._onEvent?.('napEnd');
+        for (let m of this._mirrors)   // the yard wakes with it (and stretches with it: _play mirrors)
+            m._endNap(false);
         if (stretch && this._canMove())
             this._play('stretch');
         else

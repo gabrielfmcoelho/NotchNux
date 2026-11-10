@@ -91,10 +91,16 @@ export function sheltering(s) {
 }
 
 // The pose held between acts.
+// A nap you asked for (the Pet tab's Nap button) holds through Claude working
+// and a focus session; only Claude needing you wakes it.
+export function napHeld(s) {
+    return !!s.nap && !!s.napAsked && s.mood !== 'waiting';
+}
+
 export function restAct(s) {
     if (s.focus === 'break')
         return 'flop';
-    if (s.mood !== 'idle' || s.focus === 'focus')
+    if ((s.mood !== 'idle' || s.focus === 'focus') && !napHeld(s))
         return 'sit';
     if (s.nap === 'doze')
         return 'doze';
@@ -233,7 +239,7 @@ export function breathing(s) {
 export function ambient(s, rand) {
     if (s.mood === 'waiting')
         return { act: 'thump', delay: 3000 };
-    if (s.mood === 'working')
+    if (s.mood === 'working' && !napHeld(s))
         return { act: 'run', delay: 3000 };
     let need = needAct(s, (rand * 104729) % 1);   // hungry, scruffy or exhausted comes first
     if (need)

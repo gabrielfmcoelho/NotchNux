@@ -230,7 +230,7 @@ export function installCompanion(proto) {
             let bath = btn('clean', 'Bath', () => { if (st.bath()) pill._play('shake'); });
             let nap = btn('energy', 'Nap', () => {
                 if (st.state.needs.energy <= 80)
-                    act(() => pill._play('nap:nap'), 'napEnd');
+                    act(() => pill.requestNap(), 'napEnd');
             });
 
             // ---- what it wears (one per slot), its pockets, its diary

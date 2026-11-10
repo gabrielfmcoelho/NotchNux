@@ -117,6 +117,15 @@ nnx_check pet-fed "(() => { let st = $NNX._petStore; return [st.state.pantry.foo
 nnx_check pet-pet "(() => { let st = $NNX._petStore; let m0 = st.state.needs.mood; $R._lastPet = 0; $R._onPress(1); return m0; })()" "$(nnx_eval "$NNX._petStore.state.needs.mood")"
 sleep 1.4
 nnx_check pet-mood-up "(() => { let st = $NNX._petStore; return st.state.diary.at(-1)?.what === 'got a pet' && st.state.needs.mood > 0; })()" true
+# the Nap button: a nap you ask for holds while Claude works and in Normal activity; Claude needing you wakes it
+NAPBTN="let find = (a, f) => { if (f(a)) return a; for (let c of a.get_children()) { let r = find(c, f); if (r) return r; } return null; }; let nap = find($NNX, a => a instanceof imports.gi.St.Button && (a.get_child()?.text ?? '').startsWith('Nap')); $NNX._petStore.state.needs.energy = 50; nap.emit('clicked', 0);"
+nnx_check pet-nap-working "(() => { let r = $R; r._endNap(false); r.setClaude('working', 0, null); $NAPBTN return [r._nap, r._state.napAsked, r._mirrors[0]._nap]; })()" '["nap",true,"nap"]'
+sleep 0.5
+nnx_check pet-nap-together "(() => { let r = $R, y = r._mirrors[0]; let own = y._napId; r._endNap(true); let out = [own, r._nap, y._nap]; r.requestNap(); return out; })()" '[0,false,false]'
+nnx_check pet-nap-holds "(() => { let r = $R; r.update(); return [r._nap, r._ambientId === 0 || r._act?.name !== 'run']; })()" '["nap",true]'
+nnx_check pet-nap-waiting "(() => { let r = $R; r.setClaude('waiting', 0, null); return [r._nap, r._napAsked]; })()" '[false,false]'
+nnx_check pet-nap-normal "(() => { let r = $R; r.setClaude('idle', 0, null); $NNX._config.setFeatureEnabled('rabbitLively', false); r.update(); $NAPBTN r.update(); let out = [r._nap, r._state.lively]; r._endNap(false); $NNX._config.setFeatureEnabled('rabbitLively', true); r.update(); return out; })()" '["nap",false]'
+sleep 1.5
 # an outfit: one frame set, composed in the cache, the same on the pill and in the yard, never a blank
 nnx_check pet-outfit "(() => { let st = $NNX._petStore, r = $R; st.gain('scarf', 't'); st.wear('scarf'); return [st.state.worn.neck, r._frames.get(r._shown).opacity]; })()" '["scarf",255]'
 nnx_wait "(() => { let r = $R; return !r._next && !r._mirrors[0]._next; })()" 6

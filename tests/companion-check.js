@@ -89,6 +89,13 @@ eq(restAct(s({ night: true })), 'sleep', 'night sleeps');
 eq(restAct(s({ night: true, mood: 'working' })), 'sit', 'never sleeps while Claude works');
 eq(restAct(s({ away: true, focus: 'focus' })), 'sit', 'never sleeps during focus');
 eq(restAct(s({ focus: 'break' })), 'flop', 'break flops');
+// a nap you asked for (the Pet tab's Nap button) holds through Claude working and a focus session; Claude needing you wakes it
+eq(restAct(s({ nap: 'nap', napAsked: true, mood: 'working' })), 'sleep', 'an asked nap sleeps while Claude works');
+eq(restAct(s({ nap: 'nap', napAsked: true, focus: 'focus' })), 'sleep', 'an asked nap sleeps during focus');
+eq(restAct(s({ nap: 'nap', napAsked: true, mood: 'waiting' })), 'sit', 'Claude needing you wakes an asked nap');
+eq(restAct(s({ nap: 'nap', mood: 'working' })), 'sit', 'its own nap still gives way to Claude working');
+eq(ambient(s({ nap: 'nap', napAsked: true, mood: 'working' }), 0.5), null, 'no running while it naps on request');
+eq(ambient(s({ nap: 'nap', napAsked: true, mood: 'waiting' }), 0.5).act, 'thump', 'but it still thumps when Claude needs you');
 eq(restAct(s({ low: true })), 'tired', 'low battery');
 eq(restAct(s({ low: true, charging: true })), 'sit', 'charging is not tired');
 
